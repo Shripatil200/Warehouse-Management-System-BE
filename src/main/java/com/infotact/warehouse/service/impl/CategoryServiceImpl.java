@@ -8,12 +8,10 @@ import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.service.CategoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.stream.Collectors;
-
 
 @Slf4j
 @Service
@@ -22,41 +20,36 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final ProductCategoryRepository categoryRepository;
 
+    @Override
     @Transactional
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
+        log.info("Adding new category: {}", request.getName());
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
 
-        // Handle Parent Category association
         if (request.getParentCategoryId() != null) {
             ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
             category.setParentCategory(parent);
         }
 
-        ProductCategory savedCategory = categoryRepository.save(category);
-        return mapToResponse(savedCategory);
+        return mapToResponse(categoryRepository.save(category));
     }
 
-    //Get Single Category by id
+    @Override
     @Transactional(readOnly = true)
     public ProductCategoryResponse getCategory(String id) {
-        ProductCategory category = categoryRepository.findById(id)
+        return categoryRepository.findById(id)
+                .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
-        return mapToResponse(category);
     }
 
-
-    // get all categories as list.
+    @Override
     @Transactional(readOnly = true)
-    public List<ProductCategoryResponse> getAllCategories() {
-        List<ProductCategory> allCategories = categoryRepository.findAll();
-
-        // Map everything to DTOs first
-        return allCategories.stream()
-                .filter(cat -> cat.getParentCategory() == null) // Start from Root categories
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+    public Page<ProductCategoryResponse> getAllCategories(Pageable pageable) {
+        log.debug("Fetching paginated categories");
+        return categoryRepository.findAll(pageable)
+                .map(this::mapToResponse);
     }
 
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
@@ -67,15 +60,6 @@ public class CategoryServiceImpl implements CategoryService {
         if (entity.getParentCategory() != null) {
             response.setParentCategoryName(entity.getParentCategory().getName());
         }
-
-        // Recursively map children if they exist
-        if (entity.getProducts() != null) { // Assuming you want sub-categories
-            // Note: You'll need a List<ProductCategory> subCategories field in your Entity
-            // if you want to navigate down easily, otherwise filter from 'allCategories'
-        }
-
         return response;
     }
-
-
 }

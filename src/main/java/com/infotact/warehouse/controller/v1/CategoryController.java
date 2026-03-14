@@ -5,6 +5,9 @@ import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
 import com.infotact.warehouse.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,5 +27,11 @@ public class CategoryController {
     @GetMapping("/{id}")
     public ResponseEntity<ProductCategoryResponse> getCategory(@PathVariable String id) {
         return ResponseEntity.ok(categoryService.getCategory(id));
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<ProductCategoryResponse>> getAllCategories(
+            @PageableDefault(size = 10, sort = "name") Pageable pageable) {
+        return ResponseEntity.ok(categoryService.getAllCategories(pageable));
     }
 }

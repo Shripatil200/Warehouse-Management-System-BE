@@ -34,4 +34,11 @@ public class CategoryController {
             @PageableDefault(size = 10, sort = "name") Pageable pageable) {
         return ResponseEntity.ok(categoryService.getAllCategories(pageable));
     }
+
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCategory(@PathVariable String id) {
+        categoryService.deleteCategory(id);
+        return ResponseEntity.noContent().build();
+    }
 }

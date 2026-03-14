@@ -22,3 +22,9 @@ Content-Type: application/json
 
 ### Get Specific Category by ID
 GET http://localhost:8080/api/v1/categories/4c94aef4-244a-4f78-aeb0-8eff5fea9270
+
+
+### Delete Specific Category by ID
+DELETE http://localhost:8080/api/v1/categories/4c94aef4-244a-4f78-aeb0-8eff5fea9270
+
+

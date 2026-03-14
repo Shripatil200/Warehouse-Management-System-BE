@@ -18,4 +18,6 @@ public interface CategoryService {
 
     Page<ProductCategoryResponse> getAllCategories(Pageable pageable);
 
+    void deleteCategory(String id);
+
 }

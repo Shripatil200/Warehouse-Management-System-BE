@@ -25,15 +25,19 @@ public class ProductCategory {
     @Column(unique = true, nullable = false)
     private String name;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_category_id")
     private ProductCategory parentCategory;
+
+    // This allows us to check if a category has children before deleting
+    @OneToMany(mappedBy = "parentCategory")
+    private List<ProductCategory> subCategories;
 
     @OneToMany(mappedBy = "category")
     private List<Product> products;
 
-
-    public ProductCategory( String name,ProductCategory parentCategory) {
-        this.parentCategory = parentCategory;
+    public ProductCategory(String name, ProductCategory parentCategory) {
         this.name = name;
+        this.parentCategory = parentCategory;
     }
 }

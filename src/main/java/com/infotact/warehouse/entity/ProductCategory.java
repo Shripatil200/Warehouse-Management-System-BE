@@ -22,6 +22,7 @@ public class ProductCategory {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
+    @Column(unique = true, nullable = false)
     private String name;
 
     @ManyToOne

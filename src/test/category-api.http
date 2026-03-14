@@ -1,0 +1,24 @@
+### Get First Page of Categories
+GET http://localhost:8080/api/v1/categories?page=0&size=5&sort=name,asc
+Accept: application/json
+
+### Add a New Root Category
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Electronics",
+  "parentCategoryId": null
+}
+
+### Add a Sub-category (Update ID from response above)
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Television",
+  "parentCategoryId": "4c94aef4-244a-4f78-aeb0-8eff5fea9270"
+}
+
+### Get Specific Category by ID
+GET http://localhost:8080/api/v1/categories/4c94aef4-244a-4f78-aeb0-8eff5fea9270

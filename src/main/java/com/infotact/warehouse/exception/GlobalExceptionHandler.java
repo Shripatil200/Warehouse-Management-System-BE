@@ -40,4 +40,14 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @ExceptionHandler(AlreadyExistsException.class)
+    public ResponseEntity<Object> handleAlreadyExistsException(AlreadyExistsException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", HttpStatus.CONFLICT.value());
+        body.put("error", "Conflict");
+        body.put("message", ex.getMessage());
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
+    }
 }

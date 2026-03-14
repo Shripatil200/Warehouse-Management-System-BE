@@ -3,6 +3,7 @@ package com.infotact.warehouse.service.impl;
 import com.infotact.warehouse.dto.v1.request.ProductCategoryRequest;
 import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
 import com.infotact.warehouse.entity.ProductCategory;
+import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.service.CategoryService;
@@ -24,6 +25,12 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
         log.info("Adding new category: {}", request.getName());
+
+        // 1. Check for duplicates (Case-insensitive check is industry standard)
+        if (categoryRepository.existsByNameIgnoreCase(request.getName())) {
+            throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
+        }
+
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
 

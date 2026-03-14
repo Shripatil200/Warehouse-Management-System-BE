@@ -29,4 +29,10 @@ public class ProductCategory {
 
     @OneToMany(mappedBy = "category")
     private List<Product> products;
+
+
+    public ProductCategory( String name,ProductCategory parentCategory) {
+        this.parentCategory = parentCategory;
+        this.name = name;
+    }
 }

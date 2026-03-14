@@ -81,6 +81,40 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
 
+    @Override
+    @Transactional
+    public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request) {
+        log.info("Updating category with id: {}", id);
+
+        ProductCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        // 1. If name is changing, check for duplicates
+        if (!category.getName().equalsIgnoreCase(request.getName()) &&
+                categoryRepository.existsByNameIgnoreCase(request.getName())) {
+            throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
+        }
+
+        // 2. Prevent self-parenting
+        if (id.equals(request.getParentCategoryId())) {
+            throw new IllegalOperationException("A category cannot be its own parent.");
+        }
+
+        category.setName(request.getName());
+
+        // 3. Handle Parent update
+        if (request.getParentCategoryId() != null) {
+            ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
+            category.setParentCategory(parent);
+        } else {
+            category.setParentCategory(null);
+        }
+
+        return mapToResponse(categoryRepository.save(category));
+    }
+
+
 
 
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {

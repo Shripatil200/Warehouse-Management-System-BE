@@ -20,4 +20,6 @@ public interface CategoryService {
 
     void deleteCategory(String id);
 
+    public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request);
+
 }

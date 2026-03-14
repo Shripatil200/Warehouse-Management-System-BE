@@ -5,6 +5,7 @@ import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
 import com.infotact.warehouse.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/categories")
 @RequiredArgsConstructor
@@ -40,5 +42,14 @@ public class CategoryController {
     public ResponseEntity<Void> deleteCategory(@PathVariable String id) {
         categoryService.deleteCategory(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ProductCategoryResponse> updateCategory(
+            @PathVariable String id,
+            @Valid @RequestBody ProductCategoryRequest request) {
+
+        log.info("REST request to update category: {}", id);
+        return ResponseEntity.ok(categoryService.updateCategory(id, request));
     }
 }

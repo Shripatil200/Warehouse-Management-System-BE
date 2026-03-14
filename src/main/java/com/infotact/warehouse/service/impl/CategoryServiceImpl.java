@@ -11,6 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 
 @Slf4j
 @Service
@@ -35,6 +38,7 @@ public class CategoryServiceImpl implements CategoryService {
         return mapToResponse(savedCategory);
     }
 
+    //Get Single Category by id
     @Transactional(readOnly = true)
     public ProductCategoryResponse getCategory(String id) {
         ProductCategory category = categoryRepository.findById(id)
@@ -42,14 +46,34 @@ public class CategoryServiceImpl implements CategoryService {
         return mapToResponse(category);
     }
 
-    // Manual mapping (Cleaner and faster than reflection-based mappers for simple cases)
+
+    // get all categories as list.
+    @Transactional(readOnly = true)
+    public List<ProductCategoryResponse> getAllCategories() {
+        List<ProductCategory> allCategories = categoryRepository.findAll();
+
+        // Map everything to DTOs first
+        return allCategories.stream()
+                .filter(cat -> cat.getParentCategory() == null) // Start from Root categories
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
         ProductCategoryResponse response = new ProductCategoryResponse();
         response.setId(entity.getId());
         response.setName(entity.getName());
+
         if (entity.getParentCategory() != null) {
             response.setParentCategoryName(entity.getParentCategory().getName());
         }
+
+        // Recursively map children if they exist
+        if (entity.getProducts() != null) { // Assuming you want sub-categories
+            // Note: You'll need a List<ProductCategory> subCategories field in your Entity
+            // if you want to navigate down easily, otherwise filter from 'allCategories'
+        }
+
         return response;
     }
 

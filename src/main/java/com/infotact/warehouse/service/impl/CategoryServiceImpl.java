@@ -2,7 +2,6 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ProductCategoryRequest;
 import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
-import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.IllegalOperationException;

@@ -2,6 +2,7 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ProductCategoryRequest;
 import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
+import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.IllegalOperationException;
@@ -47,17 +48,28 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional(readOnly = true)
     public ProductCategoryResponse getCategory(String id) {
-        return categoryRepository.findById(id)
-                .map(this::mapToResponse)
+        // Find by ID regardless of status; logic below handles access control
+        ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
+
+        return mapToResponse(category);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProductCategoryResponse> getAllCategories(Pageable pageable) {
-        log.debug("Fetching paginated categories");
-        return categoryRepository.findAll(pageable)
-                .map(this::mapToResponse);
+    public Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive) {
+        log.debug("Fetching categories. Include Inactive: {}", includeInactive);
+
+        Page<ProductCategory> categories;
+        if (includeInactive) {
+            // Admin View: See everything for auditing [cite: 139-145]
+            categories = categoryRepository.findAll(pageable);
+        } else {
+            // Operations View: Only active categories [cite: 161]
+            categories = categoryRepository.findAllByActiveTrue(pageable);
+        }
+
+        return categories.map(this::mapToResponse);
     }
 
     @Override
@@ -121,12 +133,51 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategoryResponse response = new ProductCategoryResponse();
         response.setId(entity.getId());
         response.setName(entity.getName());
-        // Initialize as empty list instead of null to be Frontend-Friendly
+        response.setActive(entity.isActive());
+
+        // These will now resolve correctly
+        response.setCreatedAt(entity.getCreatedAt());
+        response.setUpdatedAt(entity.getUpdatedAt());
+
         response.setChildren(new java.util.ArrayList<>());
 
         if (entity.getParentCategory() != null) {
             response.setParentCategoryName(entity.getParentCategory().getName());
         }
         return response;
+    }
+
+
+    @Override
+    @Transactional
+    public ProductCategoryResponse activateCategory(String id) {
+        log.info("Activating category: {}", id);
+
+        ProductCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        category.setActive(true);
+
+        // 1. Save and capture the updated entity
+        ProductCategory updatedCategory = categoryRepository.save(category);
+
+        // 2. Map the entity to your Response DTO and return it
+        // Replace 'categoryMapper' with whatever name you've given your mapper bean
+        return mapToResponse(updatedCategory);
+    }
+
+
+    @Override
+    @Transactional
+    public ProductCategoryResponse deactivateCategory(String id) {
+        ProductCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        category.setActive(false);
+        // The save method returns the updated entity
+        ProductCategory updatedCategory = categoryRepository.save(category);
+
+        // Convert entity to Response DTO and return it
+        return mapToResponse(updatedCategory);
     }
 }

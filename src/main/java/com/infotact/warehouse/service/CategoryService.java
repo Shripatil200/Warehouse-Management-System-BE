@@ -16,10 +16,14 @@ public interface CategoryService {
 
     public ProductCategoryResponse getCategory(String id);
 
-    Page<ProductCategoryResponse> getAllCategories(Pageable pageable);
+    Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive);
 
     void deleteCategory(String id);
 
     public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request);
+
+    ProductCategoryResponse deactivateCategory(String id);
+
+    ProductCategoryResponse activateCategory(String id);
 
 }

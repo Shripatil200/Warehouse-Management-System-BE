@@ -1,0 +1,22 @@
+### case 1 add product
+POST http://localhost:8080/api/v1/products
+Content-Type: application/json
+
+{
+    "name": "Sony WH-1000XM5 Wireless Headphones",
+    "sku": "SONY-WH1000-A",
+    "description": "Industry-leading noise canceling headphones with 30-hour battery life.",
+    "price": 349.99,
+    "weight": 0.25,
+    "barcode": "4548736132566",
+    "categoryId": "d1bbd1b4-db95-4bc8-a741-334083fa2a2c"
+}
+
+
+### case 2 get product by product id
+GET  http://localhost:8080/api/v1/products/2c8f2ce6-208d-494e-acad-cf19d835a7d1
+Content-Type: application/json
+
+### case 3 get product by sku id
+GET http://localhost:8080/api/v1/products/sku/SONY-WH1000-A
+Content-Type: application/json

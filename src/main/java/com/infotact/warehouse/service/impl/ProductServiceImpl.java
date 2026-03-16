@@ -11,8 +11,12 @@ import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -40,6 +44,25 @@ public class ProductServiceImpl implements ProductService {
         product.setActive(true);
         return mapToResponse(productRepository.save(product));
     }
+
+
+    @Override
+    public ProductResponse getProductById(String id) {
+
+        return productRepository.findById(id)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+    }
+
+    @Override
+    public ProductResponse getProductBySku(String sku) {
+        return productRepository.findBySkuAndActiveTrue(sku)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new ResourceNotFoundException("Product with SKU: " + sku + "not found"));
+    }
+
+
+
 
     // Helper to keep code DRY (Don't Repeat Yourself)
     private void updateProductFields(Product product, ProductRequest request) {

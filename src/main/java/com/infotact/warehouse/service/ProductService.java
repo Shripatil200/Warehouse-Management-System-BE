@@ -8,5 +8,11 @@ import org.springframework.data.domain.Pageable;
 public interface ProductService {
     ProductResponse addProduct(ProductRequest request);
 
+    ProductResponse getProductById(String id);
+
+    ProductResponse getProductBySku(String sku);
+
+
+
 
 }

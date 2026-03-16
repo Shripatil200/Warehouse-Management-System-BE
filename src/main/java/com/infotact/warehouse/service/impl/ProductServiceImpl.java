@@ -62,7 +62,6 @@ public class ProductServiceImpl implements ProductService {
     }
 
 
-
     @Override
     @Transactional
     public ProductResponse updateProduct(String id, ProductRequest request) {
@@ -91,20 +90,41 @@ public class ProductServiceImpl implements ProductService {
     }
 
 
-
     @Override
     public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
+        log.info("getAllProducts include inactive: {}", includeInactive);
         Page<Product> product;
 
-        if(includeInactive){
+        if (includeInactive) {
             // Admin View: See everything for auditing
             product = productRepository.findAllByActiveTrue(pageable);
-        }else{
+        } else {
             //  Operations View: Only active Products
             product = productRepository.findAll(pageable);
         }
 
         return product.map(this::mapToResponse);
+    }
+
+    @Override
+    @Transactional
+    public void deleteProduct(String id) {
+        log.info("Executing Soft Delete for product ID: {}", id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product Not found"));
+
+        product.setActive(false);
+        productRepository.save(product);
+    }
+
+    @Override
+    @Transactional
+    public void activateProduct(String id) {
+        log.info("Executing Activate for product ID: {}", id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        product.setActive(true);
+        productRepository.save(product);
     }
 
 

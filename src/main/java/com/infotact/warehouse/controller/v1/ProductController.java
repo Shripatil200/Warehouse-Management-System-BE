@@ -6,6 +6,9 @@ import com.infotact.warehouse.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +48,23 @@ public class ProductController {
         return ResponseEntity.ok(productService.updateProduct(id, request));
     }
 
+    @GetMapping
+    public ResponseEntity<Page<ProductResponse>> getAllProducts(
+            @ParameterObject Pageable pageable,
+            @RequestParam(defaultValue = "false") boolean includeInactive){
 
+        return ResponseEntity.ok(productService.getAllProducts(pageable, includeInactive));
+    }
+
+    @DeleteMapping(path = "/{id}")
+    public ResponseEntity<ProductResponse> deleteProduct(@PathVariable String id){
+        return ResponseEntity.ok(productService.deleteProduct(id));
+    }
+
+    @PatchMapping(path="/{id}/activate")
+    public ResponseEntity<ProductResponse> activateProduct(@PathVariable String id){
+        return ResponseEntity.ok(productService.activateProduct(id));
+    }
 
 
 }

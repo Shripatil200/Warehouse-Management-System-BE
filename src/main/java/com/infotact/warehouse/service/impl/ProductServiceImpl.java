@@ -108,23 +108,27 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
-    public void deleteProduct(String id) {
+    public ProductResponse deleteProduct(String id) {
         log.info("Executing Soft Delete for product ID: {}", id);
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product Not found"));
 
         product.setActive(false);
-        productRepository.save(product);
+        Product updatedProduct = productRepository.save(product);
+        return mapToResponse(updatedProduct);
+
     }
 
     @Override
     @Transactional
-    public void activateProduct(String id) {
+    public ProductResponse activateProduct(String id) {
         log.info("Executing Activate for product ID: {}", id);
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
         product.setActive(true);
-        productRepository.save(product);
+        Product updatedProduct = productRepository.save(product);
+
+        return mapToResponse(updatedProduct);
     }
 
 

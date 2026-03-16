@@ -15,8 +15,60 @@ Content-Type: application/json
 
 ### case 2 get product by product id
 GET  http://localhost:8080/api/v1/products/2c8f2ce6-208d-494e-acad-cf19d835a7d1
-Content-Type: application/json
+
 
 ### case 3 get product by sku id
 GET http://localhost:8080/api/v1/products/sku/SONY-WH1000-A
+
+
+### case 4 update product with id (success) with same sku and existing product
+PUT http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
+Content-Type: application/json
+
+{
+    "name": "Nothing WH-1000XM5 Wired Headphones",
+    "sku": "SONY-WH1000-A",
+    "description": "Industry-leading noise canceling headphones with 80-hour battery life.",
+    "price": 1299.99,
+    "weight": 0.20,
+    "barcode": "4548736132566",
+    "categoryId": "d1bbd1b4-db95-4bc8-a741-334083fa2a2c"
+}
+
+### case 5 update products sku with existing sku (should return 409)
+PUT http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
+Content-Type: application/json
+
+{
+    "name": "Nothing WH-1000XM5 Wired Headphones",
+    "sku": "SONY-WH1000-B",
+    "description": "Industry-leading noise canceling headphones with 80-hour battery life.",
+    "price": 1299.99,
+    "weight": 0.20,
+    "barcode": "4548736132566",
+    "categoryId": "d1bbd1b4-db95-4bc8-a741-334083fa2a2c"
+}
+
+
+### case 6 update products category with not existing category (should return 404)
+PUT http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
+Content-Type: application/json
+
+{
+    "name": "Nothing WH-1000XM5 Wired Headphones",
+    "sku": "SONY-WH1000-A",
+    "description": "Industry-leading noise canceling headphones with 80-hour battery life.",
+    "price": 1299.99,
+    "weight": 0.20,
+    "barcode": "4548736132566",
+    "categoryId": "d1bbd1b4-db95-4bc8-a741-334083fa2akdj"
+}
+
+
+### case 7 soft delete product
+DELETE http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
+
+
+### case 8 Activate product
+PATCH http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402/activate
 Content-Type: application/json

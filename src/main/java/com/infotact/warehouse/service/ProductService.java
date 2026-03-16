@@ -17,7 +17,7 @@ public interface ProductService {
 
     Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive);
 
-    void deleteProduct(String id); // This will be a Soft Delete
+    ProductResponse deleteProduct(String id); // This will be a Soft Delete
 
-    void activateProduct(String id);
+    ProductResponse activateProduct(String id);
 }

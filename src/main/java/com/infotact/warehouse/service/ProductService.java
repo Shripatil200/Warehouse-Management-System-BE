@@ -15,5 +15,6 @@ public interface ProductService {
     ProductResponse updateProduct(String id, ProductRequest request);
 
 
+    Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive);
 
 }

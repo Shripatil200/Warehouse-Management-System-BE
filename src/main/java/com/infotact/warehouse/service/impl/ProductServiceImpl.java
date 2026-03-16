@@ -92,6 +92,22 @@ public class ProductServiceImpl implements ProductService {
 
 
 
+    @Override
+    public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
+        Page<Product> product;
+
+        if(includeInactive){
+            // Admin View: See everything for auditing
+            product = productRepository.findAllByActiveTrue(pageable);
+        }else{
+            //  Operations View: Only active Products
+            product = productRepository.findAll(pageable);
+        }
+
+        return product.map(this::mapToResponse);
+    }
+
+
     // Helper to keep code DRY (Don't Repeat Yourself)
     private void updateProductFields(Product product, ProductRequest request) {
         product.setName(request.getName());

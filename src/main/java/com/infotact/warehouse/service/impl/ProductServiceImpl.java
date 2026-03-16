@@ -63,6 +63,34 @@ public class ProductServiceImpl implements ProductService {
 
 
 
+    @Override
+    @Transactional
+    public ProductResponse updateProduct(String id, ProductRequest request) {
+        log.info("Updating product with ID: {}", id);
+
+        // 1. Find the existing product
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
+
+        // 2. Check if SKU is being changed and if the new SKU already exists
+        if (!product.getSku().equalsIgnoreCase(request.getSku()) &&
+                productRepository.existsBySkuIgnoreCase(request.getSku())) {
+            throw new AlreadyExistsException("Product with SKU " + request.getSku() + " already exists");
+        }
+
+        // 3. Verify the new category exists and is active
+        ProductCategory category = categoryRepository.findByIdAndActiveTrue(request.getCategoryId())
+                .orElseThrow(() -> new ResourceNotFoundException("Active Category not found"));
+
+        // 4. Update the fields using your helper
+        updateProductFields(product, request);
+        product.setCategory(category);
+
+        // 5. Save and map to response
+        return mapToResponse(productRepository.save(product));
+    }
+
+
 
     // Helper to keep code DRY (Don't Repeat Yourself)
     private void updateProductFields(Product product, ProductRequest request) {

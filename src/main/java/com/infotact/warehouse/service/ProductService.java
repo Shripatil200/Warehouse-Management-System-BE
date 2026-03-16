@@ -12,6 +12,7 @@ public interface ProductService {
 
     ProductResponse getProductBySku(String sku);
 
+    ProductResponse updateProduct(String id, ProductRequest request);
 
 
 

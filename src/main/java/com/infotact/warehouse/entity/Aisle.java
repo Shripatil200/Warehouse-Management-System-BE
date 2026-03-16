@@ -1,8 +1,10 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
@@ -16,17 +18,19 @@ import java.util.List;
 @AllArgsConstructor
 @Entity
 @Table(name = "aisles")
-public class Aisle {
-
+@EqualsAndHashCode(callSuper = true)
+public class Aisle extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    private String code;
+    @Column(nullable = false)
+    private String code; // e.g., "A-01"
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "zone_id")
     private Zone zone;
 
-    @OneToMany(mappedBy = "aisle")
+    @OneToMany(mappedBy = "aisle", cascade = CascadeType.ALL)
     private List<StorageBin> bins;
 }

@@ -15,11 +15,11 @@ Content-Type: application/json
 
 ### case 2 get product by product id
 GET  http://localhost:8080/api/v1/products/2c8f2ce6-208d-494e-acad-cf19d835a7d1
-
+Content-Type: application/json
 
 ### case 3 get product by sku id
 GET http://localhost:8080/api/v1/products/sku/SONY-WH1000-A
-
+Content-Type: application/json
 
 ### case 4 update product with id (success) with same sku and existing product
 PUT http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
@@ -67,7 +67,7 @@ Content-Type: application/json
 
 ### case 7 soft delete product
 DELETE http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
-
+Content-Type: application/json
 
 ### case 8 Activate product
 PATCH http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402/activate

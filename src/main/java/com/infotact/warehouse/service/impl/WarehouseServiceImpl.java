@@ -72,8 +72,20 @@ public class WarehouseServiceImpl implements WarehouseService {
     }
 
     @Override
+    @Transactional
     public void activateWarehouse(String id) {
+        // Find the warehouse by ID
+        Warehouse warehouse = warehouseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
 
+        // Business Logic: Only save if there is a change
+        if (!warehouse.isActive()) {
+            warehouse.setActive(true);
+            warehouseRepository.save(warehouse);
+            log.info("feat: reactivated warehouse ID: {}", id); // Semantic logging for audit trail
+        } else {
+            log.warn("Warehouse with ID: {} is already active", id);
+        }
     }
 
     @Override

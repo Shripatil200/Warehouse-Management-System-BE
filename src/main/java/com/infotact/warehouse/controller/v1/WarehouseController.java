@@ -59,8 +59,4 @@ public class WarehouseController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{id}/layout")
-    public ResponseEntity<WarehouseLayoutResponse> getFullLayout(@PathVariable String id) {
-        return ResponseEntity.ok(warehouseService.getWarehouseLayout(id));
-    }
 }

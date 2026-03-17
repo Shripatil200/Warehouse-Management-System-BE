@@ -21,4 +21,6 @@ public interface WarehouseService {
     WarehouseLayoutResponse getWarehouseLayout(String id);
 
     WarehouseResponse createWarehouse(@Valid WarehouseRequest request);
+
+    Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable);
 }

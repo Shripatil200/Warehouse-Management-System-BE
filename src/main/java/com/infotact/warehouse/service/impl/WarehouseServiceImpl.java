@@ -82,21 +82,29 @@ public class WarehouseServiceImpl implements WarehouseService {
         if (!warehouse.isActive()) {
             warehouse.setActive(true);
             warehouseRepository.save(warehouse);
-            log.info("feat: reactivated warehouse ID: {}", id); // Semantic logging for audit trail
+            log.info("reactivated warehouse ID: {}", id); // Semantic logging for audit trail
         } else {
             log.warn("Warehouse with ID: {} is already active", id);
         }
     }
-
     @Override
+    @Transactional
     public void deactivateWarehouse(String id) {
+        // 1. Fetch the warehouse or throw exception
+        Warehouse warehouse = warehouseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
 
+        // 2. If it IS active, then set it to false
+        if (warehouse.isActive()) {
+            warehouse.setActive(false);
+            warehouseRepository.save(warehouse);
+
+            log.info("deactivated warehouse ID: {}", id);
+        } else {
+            log.warn("Warehouse with ID: {} is already deactivated", id);
+        }
     }
 
-    @Override
-    public WarehouseLayoutResponse getWarehouseLayout(String id) {
-        return null;
-    }
 
     @Override
     @Transactional
@@ -120,6 +128,21 @@ public class WarehouseServiceImpl implements WarehouseService {
         log.info("feat: created new warehouse facility: {}", savedWarehouse.getName());
 
         return mapToResponse(savedWarehouse);
+    }
+
+
+
+
+    @Override
+    public Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable) {
+        return null;
+    }
+
+
+
+    @Override
+    public WarehouseLayoutResponse getWarehouseLayout(String id) {
+        return null;
     }
 
 

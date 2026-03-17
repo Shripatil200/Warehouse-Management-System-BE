@@ -136,62 +136,6 @@ public class WarehouseServiceImpl implements WarehouseService {
 
 
 
-
-    @Override
-    @Transactional(readOnly = true)
-    public WarehouseLayoutResponse getWarehouseLayout(String id) {
-        Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
-
-        WarehouseLayoutResponse response = new WarehouseLayoutResponse();
-        response.setId(warehouse.getId());
-        response.setName(warehouse.getName());
-
-        // Map Zones -> Aisles -> Bins (Hierarchical Catalog)
-        if (warehouse.getZones() != null) {
-            response.setZones(warehouse.getZones().stream().map(zone -> {
-                var zoneDto = new WarehouseLayoutResponse.ZoneSummary();
-                zoneDto.setId(zone.getId());
-                zoneDto.setName(zone.getName());
-
-                if (zone.getAisles() != null) {
-                    zoneDto.setAisles(zone.getAisles().stream().map(aisle -> {
-                        var aisleDto = new WarehouseLayoutResponse.AisleSummary();
-                        aisleDto.setId(aisle.getId());
-                        aisleDto.setCode(aisle.getCode());
-
-                        if (aisle.getBins() != null) {
-                            aisleDto.setBins(aisle.getBins().stream().map(bin -> {
-                                var binDto = new WarehouseLayoutResponse.BinSummary();
-                                binDto.setId(bin.getId());
-                                binDto.setBinCode(bin.getBinCode());
-                                binDto.setCapacity(bin.getCapacity());
-                                return binDto;
-                            }).toList());
-                        }
-                        return aisleDto;
-                    }).toList());
-                }
-                return zoneDto;
-            }).toList());
-        }
-        return response;
-    }
-
-    @Override
-    public Page<BinSummary> getBinsByAisle(String aisleId, Pageable pageable) {
-        // 1. Call the REPOSITORY to get the Entities
-        return binRepository.findByAisleId(aisleId, pageable)
-                // 2. Map those Entities to your DTO (BinSummary)
-                .map(bin -> BinSummary.builder()
-                        .id(bin.getId())
-                        .binCode(bin.getBinCode())
-                        .capacity(bin.getCapacity())
-                        .build());
-    }
-
-
-
     private WarehouseResponse mapToResponse(Warehouse entity) {
 
         return WarehouseResponse.builder()

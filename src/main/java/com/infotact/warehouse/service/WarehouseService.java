@@ -20,9 +20,7 @@ public interface WarehouseService {
 
     void deactivateWarehouse(String id);
 
-    WarehouseLayoutResponse getWarehouseLayout(String id);
-
     WarehouseResponse createWarehouse(@Valid WarehouseRequest request);
 
-    Page<BinSummary> getBinsByAisle(String aisleId, Pageable pageable);
+
 }

@@ -92,18 +92,17 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
-        log.info("getAllProducts include inactive: {}", includeInactive);
-        Page<Product> product;
+        Page<Product> products;
 
         if (includeInactive) {
-            // Admin View: See everything for auditing
-            product = productRepository.findAllByActiveTrue(pageable);
+            // Admin View: See EVERYTHING (Active + Inactive)
+            products = productRepository.findAll(pageable);
         } else {
-            //  Operations View: Only active Products
-            product = productRepository.findAll(pageable);
+            // Operations View: Only show Active products to prevent selling/moving deleted stock
+            products = productRepository.findAllByActiveTrue(pageable);
         }
 
-        return product.map(this::mapToResponse);
+        return products.map(this::mapToResponse);
     }
 
     @Override

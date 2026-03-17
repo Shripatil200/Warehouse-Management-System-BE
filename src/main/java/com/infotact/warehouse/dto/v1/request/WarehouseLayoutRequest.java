@@ -22,12 +22,22 @@ public class WarehouseLayoutRequest {
             String code,
 
             @NotBlank(message = "Zone ID is required")
-            String zoneId
+            String zoneId,
+
+            @NotBlank(message = "Warehouse ID is required")
+            String warehouseId
     ) {
     }
 
 
     public record BulkBinRequest(
+
+            @NotBlank(message = "Warehouse ID is required")
+            String warehouseId,
+
+            @NotBlank(message = "Zone ID is required")
+            String zoneId,
+
             @NotBlank(message = "Aisle ID is required")
             String aisleId,
 

@@ -1,9 +1,16 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest;
+import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.ZoneRequest;
+import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.AisleRequest;
+import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.BulkBinRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
-import com.infotact.warehouse.entity.Warehouse;
+import com.infotact.warehouse.entity.*;
+import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
+import com.infotact.warehouse.repository.AisleRepository;
+import com.infotact.warehouse.repository.BinRepository;
+import com.infotact.warehouse.repository.WarehouseRepository;
+import com.infotact.warehouse.repository.ZoneRepository;
 import com.infotact.warehouse.service.LayoutService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,27 +19,105 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LayoutServiceImpl implements LayoutService {
-    @Override
-    public void addZoneToWarehouse(WarehouseLayoutRequest.ZoneRequest request) {
 
+    private final BinRepository binRepository;
+
+    private final ZoneRepository zoneRepository;
+
+    private final AisleRepository aisleRepository;
+
+    private final WarehouseRepository warehouseRepository;
+
+
+    @Override
+    public void addZoneToWarehouse(ZoneRequest request) {
+        Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id" + request.warehouseId() + " not found"));
+
+        Zone zone = new Zone();
+        zone.setName(request.name());
+        zone.setWarehouse(warehouse);
+        zoneRepository.save(zone);
+        log.info("feat: added new zone {} to warehouse {}", request.name(), request.warehouseId());
     }
 
     @Override
-    public void addAisleToZone(WarehouseLayoutRequest.AisleRequest request) {
+    public void addAisleToZone(AisleRequest request) {
+        Zone zone = zoneRepository.findById(request.zoneId())
+                .orElseThrow(() -> new ResourceNotFoundException("Zone with id: " + request.zoneId() + " not fount"));
 
+        if(!zone.getWarehouse().getId().equals(request.warehouseId())){
+            throw new BadRequestException("Security Breach/Data Mismatch: Zone " + request.zoneId() +
+                    " does not belong to Warehouse " + request.warehouseId());
+        }
+
+        // 3. If valid, proceed with creation
+        Aisle aisle = new Aisle();
+        aisle.setCode(request.code());
+        aisle.setZone(zone);
+
+        aisleRepository.save(aisle);
     }
 
     @Override
-    public void bulkCreateBins(WarehouseLayoutRequest.BulkBinRequest request) {
+    @Transactional
+    public void bulkCreateBins(BulkBinRequest request) {
+        log.info("Initiating industry-level bulk bin creation: {} bins for Aisle ID: {}",
+                request.quantity(), request.aisleId());
 
+        // 1. Fetch the Aisle and validate the hierarchy
+        // We fetch the Aisle, which also gives us access to its Parent Zone
+        Aisle aisle = aisleRepository.findById(request.aisleId())
+                .orElseThrow(() -> new ResourceNotFoundException("Aisle with id: " + request.aisleId() + " not found"));
+
+        // 2. SECURITY CHAIN VALIDATION
+        // Ensure the aisle belongs to the specified Zone and Warehouse provided in the request
+        // This prevents accidental data corruption or cross-warehouse ID injections
+        if (!aisle.getZone().getId().equals(request.zoneId())) {
+            throw new BadRequestException("Data Mismatch: Aisle " + request.aisleId() +
+                    " does not belong to Zone " + request.zoneId());
+        }
+
+        if (!aisle.getZone().getWarehouse().getId().equals(request.warehouseId())) {
+            throw new BadRequestException("Security Breach: Zone/Aisle hierarchy does not match Warehouse " +
+                    request.warehouseId());
+        }
+
+        // 3. GENERATE BINS IN MEMORY
+        List<StorageBin> bins = new ArrayList<>();
+
+        for (int i = 1; i <= request.quantity(); i++) {
+            // Generate a padded bin code (e.g., PREFIX-001, PREFIX-002)
+            String generatedCode = String.format("%s-%03d", request.prefix(), i);
+
+            StorageBin bin = StorageBin.builder()
+                    .binCode(generatedCode)
+                    .capacity(request.defaultCapacity())
+                    .aisle(aisle)
+                    .status(BinStatus.AVAILABLE) // Mandatory for industry tracking
+                    .currentOccupancy(0)         // Start with empty bin
+                    .active(true)
+                    .build();
+
+            // CRITICAL: Add the built bin to the batch list
+            bins.add(bin);
+        }
+
+        // 4. BATCH PERSISTENCE
+        // saveAll() is highly optimized in Spring Data JPA for bulk inserts
+        binRepository.saveAll(bins);
+
+        log.info("feat: successfully bulk-created {} bins in aisle {} [Warehouse: {}]",
+                bins.size(), aisle.getCode(), request.warehouseId());
     }
-
-
 
 
     @Override
@@ -87,4 +172,6 @@ public class LayoutServiceImpl implements LayoutService {
                         .capacity(bin.getCapacity())
                         .build());
     }
+
+
 }

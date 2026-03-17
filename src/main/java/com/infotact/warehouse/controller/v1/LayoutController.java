@@ -1,12 +1,10 @@
 package com.infotact.warehouse.controller.v1;
 
-import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.ZoneRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.AisleRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.BulkBinRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.service.LayoutService;
-import com.infotact.warehouse.service.WarehouseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;

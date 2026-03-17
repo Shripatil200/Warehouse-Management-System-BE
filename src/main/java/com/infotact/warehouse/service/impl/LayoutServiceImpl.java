@@ -5,6 +5,7 @@ import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.AisleRequest
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.BulkBinRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
+import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.IllegalOperationException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
@@ -44,7 +45,9 @@ public class LayoutServiceImpl implements LayoutService {
         Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id" + request.warehouseId() + " not found"));
 
-
+        if(zoneRepository.existsByNameAndWarehouseId(request.name(), request.warehouseId())){
+            throw new AlreadyExistsException("Zane with name: "+ request.name() + " is already exists");
+        }
 
         Zone zone = new Zone();
         zone.setName(request.name());
@@ -62,6 +65,11 @@ public class LayoutServiceImpl implements LayoutService {
             throw new BadRequestException("Security Breach/Data Mismatch: Zone " + request.zoneId() +
                     " does not belong to Warehouse " + request.warehouseId());
         }
+
+        if (aisleRepository.existsByCodeAndZoneId(request.code(), request.zoneId())){
+            throw new AlreadyExistsException("Aisle with code: "+ request.code()+ " is already exists");
+        }
+
 
         // 3. If valid, proceed with creation
         Aisle aisle = new Aisle();

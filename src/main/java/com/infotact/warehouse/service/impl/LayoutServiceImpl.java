@@ -6,6 +6,7 @@ import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.BulkBinReque
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.exception.BadRequestException;
+import com.infotact.warehouse.exception.IllegalOperationException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.AisleRepository;
 import com.infotact.warehouse.repository.BinRepository;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 
 @Slf4j
@@ -41,6 +43,8 @@ public class LayoutServiceImpl implements LayoutService {
     public void addZoneToWarehouse(ZoneRequest request) {
         Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id" + request.warehouseId() + " not found"));
+
+
 
         Zone zone = new Zone();
         zone.setName(request.name());
@@ -91,32 +95,40 @@ public class LayoutServiceImpl implements LayoutService {
                     request.warehouseId());
         }
 
-        // 3. GENERATE BINS IN MEMORY
+
         List<StorageBin> bins = new ArrayList<>();
+        int sequence = 1;
+        int createdCount = 0;
 
-        for (int i = 1; i <= request.quantity(); i++) {
-            // Generate a padded bin code (e.g., PREFIX-001, PREFIX-002)
-            String generatedCode = String.format("%s-%03d", request.prefix(), i);
+        while (createdCount < request.quantity()) {
+            String generatedCode = String.format("%s-%03d", request.prefix(), sequence);
 
-            StorageBin bin = StorageBin.builder()
-                    .binCode(generatedCode)
-                    .capacity(request.defaultCapacity())
-                    .aisle(aisle)
-                    .status(BinStatus.AVAILABLE) // Mandatory for industry tracking
-                    .currentOccupancy(0)         // Start with empty bin
-                    .active(true)
-                    .build();
+            // INDUSTRY FIX: Check if this code exists ANYWHERE in the database
+            // not just in this specific aisle.
+            if (!binRepository.existsByBinCode(generatedCode)) {
+                StorageBin bin = StorageBin.builder()
+                        .binCode(generatedCode)
+                        .capacity(request.defaultCapacity())
+                        .aisle(aisle)
+                        .status(BinStatus.AVAILABLE)
+                        .currentOccupancy(0)
+                        .active(true)
+                        .build();
 
-            // CRITICAL: Add the built bin to the batch list
-            bins.add(bin);
+                bins.add(bin);
+                createdCount++;
+            }
+
+            sequence++;
+
+            // Safety break: Prevent infinite loop if prefix is bad
+            if (sequence > 999) {
+                throw new IllegalOperationException("Prefix range exceeded or too many duplicates found.");
+            }
         }
 
-        // 4. BATCH PERSISTENCE
-        // saveAll() is highly optimized in Spring Data JPA for bulk inserts
         binRepository.saveAll(bins);
-
-        log.info("feat: successfully bulk-created {} bins in aisle {} [Warehouse: {}]",
-                bins.size(), aisle.getCode(), request.warehouseId());
+        log.info("Successfully bulk-created {} bins", bins.size());
     }
 
 

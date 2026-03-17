@@ -1,0 +1,45 @@
+
+
+### 1. Create Warehouse
+POST http://localhost:8080/api/v1/warehouses
+Content-Type: application/json
+
+{
+    "name": "Pune Hub",
+    "location": "Kondhwa"
+}
+
+### 2. Create Zone (High-Value)
+POST http://localhost:8080/api/v1/layouts/zone
+Content-Type: application/json
+
+{ "name": "Electronics Zone", "warehouseId": "d5994664-3efe-4fa9-a85e-485dcbc294d2" }
+
+### 3. Create Aisle (Row 1)
+POST http://localhost:8080/api/v1/layouts/aisle
+Content-Type: application/json
+
+{ "code": "R5", "zoneId": "de7d88d0-ed19-4ac6-8bf3-c2afdf03cee4", "warehouseId": "d5994664-3efe-4fa9-a85e-485dcbc294d2" }
+
+### 4. Bulk Create Bins (50 units)
+POST http://localhost:8080/api/v1/layouts/storage_bin
+Content-Type: application/json
+
+{
+  "warehouseId": "d5994664-3efe-4fa9-a85e-485dcbc294d2",
+  "zoneId": "581ebb3a-c1b1-4e76-a2f6-b35f45e4f7f3",
+  "aisleId": "d294d4ef-2955-48c5-a077-23add84f8517",
+  "quantity": "50",
+  "prefix": "A1",
+  "defaultCapacity": 50
+}
+
+
+### case 5. Get Warehouse structure
+GET http://localhost:8080/api/v1/layouts/warehouse/d5994664-3efe-4fa9-a85e-485dcbc294d2
+Accept: application/json
+
+
+### case 6. Get Bins for a Specific Aisle (Paginated)
+GET http://localhost:8080/api/v1/layouts/aisle/d294d4ef-2955-48c5-a077-23add84f8517/bins?page=0&size=20&sort=binCode,asc
+Accept: application/json

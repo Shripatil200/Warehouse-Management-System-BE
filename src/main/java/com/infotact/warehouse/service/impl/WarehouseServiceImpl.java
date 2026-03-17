@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 
 @Slf4j
@@ -26,8 +27,10 @@ public class WarehouseServiceImpl implements WarehouseService {
     public Page<WarehouseResponse> getAllWarehouses(Pageable pageable, boolean includeInactive) {
         Page<Warehouse> warehouses;
         if (includeInactive) {
+            // Admin View: See everything for auditing
             warehouses = warehouseRepository.findAll(pageable);
         } else {
+            // Operations View: Only active warehouse
             warehouses = warehouseRepository.findAllByActiveTrue(pageable);
         }
         return warehouses.map(this::mapToResponse);
@@ -44,8 +47,28 @@ public class WarehouseServiceImpl implements WarehouseService {
 
 
     @Override
+    @Transactional // Required for data integrity in updates
     public WarehouseResponse updateWarehouse(String id, WarehouseRequest request) {
-        return null;
+        // 1. Find the warehouse (ensure it is also active)
+        Warehouse warehouse = warehouseRepository.findByIdAndActiveTrue(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Active Warehouse with id: " + id + " not found"));
+
+        // 2. Business Rule: Unique Name Check
+        // If name is changing, ensure new name isn't taken by another warehouse
+        if (!warehouse.getName().equalsIgnoreCase(request.name()) &&
+                warehouseRepository.existsByNameIgnoreCase(request.name())) {
+            throw new AlreadyExistsException("Warehouse with name " + request.name() + " already exists");
+        }
+
+        // 3. Update all fields from the Request Record
+        warehouse.setName(request.name());
+        warehouse.setLocation(request.location());
+
+        // 4. Save and Map
+        Warehouse updatedWarehouse = warehouseRepository.save(warehouse);
+        log.info("refactor: updated warehouse details for ID: {}", id); // Semantic logging
+
+        return mapToResponse(updatedWarehouse);
     }
 
     @Override
@@ -64,9 +87,29 @@ public class WarehouseServiceImpl implements WarehouseService {
     }
 
     @Override
+    @Transactional
     public WarehouseResponse createWarehouse(WarehouseRequest request) {
-        return null;
+        log.info("creating warehouse with name: {}", request.name());
+        // 1. Validation: Prevent duplicate warehouses
+        if (warehouseRepository.existsByNameIgnoreCase(request.name())) {
+            throw new AlreadyExistsException("Warehouse with name: " + request.name() + " already exists");
+        }
+
+        // 2. Mapping: Transform Request Record to Entity
+        Warehouse warehouse = new Warehouse();
+        warehouse.setName(request.name());
+        warehouse.setLocation(request.location());
+        warehouse.setActive(true);
+
+        // 3. Persistence: Save to PostgreSQL
+        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
+
+        // 4. Audit: Log the action for the "immutable ledger" [cite: 155]
+        log.info("feat: created new warehouse facility: {}", savedWarehouse.getName());
+
+        return mapToResponse(savedWarehouse);
     }
+
 
 
     private WarehouseResponse mapToResponse(Warehouse entity) {

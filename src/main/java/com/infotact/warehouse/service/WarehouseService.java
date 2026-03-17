@@ -2,6 +2,8 @@ package com.infotact.warehouse.service;
 
 import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
+import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse.BinSummary;
+
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -22,5 +24,5 @@ public interface WarehouseService {
 
     WarehouseResponse createWarehouse(@Valid WarehouseRequest request);
 
-    Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable);
+    Page<BinSummary> getBinsByAisle(String aisleId, Pageable pageable);
 }

@@ -23,30 +23,32 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
-
+/**
+ * Implementation of {@link LayoutService}.
+ * Ensures structural integrity by validating parent-child relationships
+ * across the Warehouse-Zone-Aisle-Bin hierarchy.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LayoutServiceImpl implements LayoutService {
 
     private final BinRepository binRepository;
-
     private final ZoneRepository zoneRepository;
-
     private final AisleRepository aisleRepository;
-
     private final WarehouseRepository warehouseRepository;
 
-
+    /** {@inheritDoc} */
     @Override
+    @Transactional
     public void addZoneToWarehouse(ZoneRequest request) {
         Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id" + request.warehouseId() + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
 
+        // Rule: Zone names must be unique within a single Warehouse facility
         if(zoneRepository.existsByNameAndWarehouseId(request.name(), request.warehouseId())){
-            throw new AlreadyExistsException("Zane with name: "+ request.name() + " is already exists");
+            throw new AlreadyExistsException("Zone with name: " + request.name() + " already exists");
         }
 
         Zone zone = new Zone();
@@ -56,63 +58,52 @@ public class LayoutServiceImpl implements LayoutService {
         log.info("feat: added new zone {} to warehouse {}", request.name(), request.warehouseId());
     }
 
+    /** {@inheritDoc} */
     @Override
+    @Transactional
     public void addAisleToZone(AisleRequest request) {
         Zone zone = zoneRepository.findById(request.zoneId())
-                .orElseThrow(() -> new ResourceNotFoundException("Zone with id: " + request.zoneId() + " not fount"));
+                .orElseThrow(() -> new ResourceNotFoundException("Zone not found"));
 
+        // Security Validation: Ensure the Zone is physically inside the provided Warehouse
         if(!zone.getWarehouse().getId().equals(request.warehouseId())){
-            throw new BadRequestException("Security Breach/Data Mismatch: Zone " + request.zoneId() +
-                    " does not belong to Warehouse " + request.warehouseId());
+            throw new BadRequestException("Security Breach/Data Mismatch: Zone does not belong to Warehouse");
         }
 
         if (aisleRepository.existsByCodeAndZoneId(request.code(), request.zoneId())){
-            throw new AlreadyExistsException("Aisle with code: "+ request.code()+ " is already exists");
+            throw new AlreadyExistsException("Aisle with code: " + request.code() + " already exists");
         }
 
-
-        // 3. If valid, proceed with creation
         Aisle aisle = new Aisle();
         aisle.setCode(request.code());
         aisle.setZone(zone);
-
         aisleRepository.save(aisle);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void bulkCreateBins(BulkBinRequest request) {
-        log.info("Initiating industry-level bulk bin creation: {} bins for Aisle ID: {}",
-                request.quantity(), request.aisleId());
+        log.info("Initiating bulk bin creation: {} bins for Aisle ID: {}", request.quantity(), request.aisleId());
 
-        // 1. Fetch the Aisle and validate the hierarchy
-        // We fetch the Aisle, which also gives us access to its Parent Zone
         Aisle aisle = aisleRepository.findById(request.aisleId())
-                .orElseThrow(() -> new ResourceNotFoundException("Aisle with id: " + request.aisleId() + " not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
 
-        // 2. SECURITY CHAIN VALIDATION
-        // Ensure the aisle belongs to the specified Zone and Warehouse provided in the request
-        // This prevents accidental data corruption or cross-warehouse ID injections
-        if (!aisle.getZone().getId().equals(request.zoneId())) {
-            throw new BadRequestException("Data Mismatch: Aisle " + request.aisleId() +
-                    " does not belong to Zone " + request.zoneId());
+        // Strict Hierarchy Check: Validate full chain from Aisle up to Warehouse
+        if (!aisle.getZone().getId().equals(request.zoneId()) ||
+                !aisle.getZone().getWarehouse().getId().equals(request.warehouseId())) {
+            throw new BadRequestException("Security Breach: Provided hierarchy IDs do not match database records.");
         }
-
-        if (!aisle.getZone().getWarehouse().getId().equals(request.warehouseId())) {
-            throw new BadRequestException("Security Breach: Zone/Aisle hierarchy does not match Warehouse " +
-                    request.warehouseId());
-        }
-
 
         List<StorageBin> bins = new ArrayList<>();
         int sequence = 1;
         int createdCount = 0;
 
+        // Iterative generation: Finds the next available numeric suffix for the prefix
         while (createdCount < request.quantity()) {
             String generatedCode = String.format("%s-%03d", request.prefix(), sequence);
 
-            // INDUSTRY FIX: Check if this code exists ANYWHERE in the database
-            // not just in this specific aisle.
+            // Global Uniqueness Check: Ensures no duplicate bin codes across the entire facility
             if (!binRepository.existsByBinCode(generatedCode)) {
                 StorageBin bin = StorageBin.builder()
                         .binCode(generatedCode)
@@ -129,9 +120,9 @@ public class LayoutServiceImpl implements LayoutService {
 
             sequence++;
 
-            // Safety break: Prevent infinite loop if prefix is bad
+            // Circuit breaker to prevent infinite loops in case of high collision/bad prefix
             if (sequence > 999) {
-                throw new IllegalOperationException("Prefix range exceeded or too many duplicates found.");
+                throw new IllegalOperationException("Prefix range exceeded (Max 999). Try a different prefix.");
             }
         }
 
@@ -139,18 +130,18 @@ public class LayoutServiceImpl implements LayoutService {
         log.info("Successfully bulk-created {} bins", bins.size());
     }
 
-
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public WarehouseLayoutResponse getWarehouseLayout(String id) {
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
 
+        // Build the hierarchical response DTO manually from the entity graph
         WarehouseLayoutResponse response = new WarehouseLayoutResponse();
         response.setId(warehouse.getId());
         response.setName(warehouse.getName());
 
-        // Map Zones -> Aisles -> Bins (Hierarchical Catalog)
         if (warehouse.getZones() != null) {
             response.setZones(warehouse.getZones().stream().map(zone -> {
                 var zoneDto = new WarehouseLayoutResponse.ZoneSummary();
@@ -181,17 +172,15 @@ public class LayoutServiceImpl implements LayoutService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
+    @Transactional(readOnly = true)
     public Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable) {
-        // 1. Call the REPOSITORY to get the Entities
         return binRepository.findByAisleId(aisleId, pageable)
-                // 2. Map those Entities to your DTO (BinSummary)
                 .map(bin -> WarehouseLayoutResponse.BinSummary.builder()
                         .id(bin.getId())
                         .binCode(bin.getBinCode())
                         .capacity(bin.getCapacity())
                         .build());
     }
-
-
 }

@@ -15,127 +15,128 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
+/**
+ * Implementation of {@link WarehouseService}.
+ * Focuses on facility lifecycle management and ensuring unique naming conventions
+ * for physical warehouse sites.
+ */
 @Slf4j
 @RequiredArgsConstructor
 @Service
 public class WarehouseServiceImpl implements WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
-
     private final BinRepository binRepository;
 
+    /** {@inheritDoc} */
     @Override
+    @Transactional(readOnly = true)
     public Page<WarehouseResponse> getAllWarehouses(Pageable pageable, boolean includeInactive) {
         Page<Warehouse> warehouses;
         if (includeInactive) {
-            // Admin View: See everything for auditing
+            // Administrative view for facility managers and auditors
             warehouses = warehouseRepository.findAll(pageable);
         } else {
-            // Operations View: Only active warehouse
+            // Standard operations view; prevents scheduling stock into disabled facilities
             warehouses = warehouseRepository.findAllByActiveTrue(pageable);
         }
         return warehouses.map(this::mapToResponse);
     }
 
-
+    /** {@inheritDoc} */
     @Override
+    @Transactional(readOnly = true)
     public WarehouseResponse getWarehouse(String id) {
         Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(()-> new ResourceNotFoundException("Warehouse Not Found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse Not Found"));
 
         return mapToResponse(warehouse);
     }
 
-
+    /** {@inheritDoc} */
     @Override
-    @Transactional // Required for data integrity in updates
+    @Transactional
     public WarehouseResponse updateWarehouse(String id, WarehouseRequest request) {
-        // 1. Find the warehouse (ensure it is also active)
+        // Validation: Updates are only permitted on active warehouse records
         Warehouse warehouse = warehouseRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Active Warehouse with id: " + id + " not found"));
 
-        // 2. Business Rule: Unique Name Check
-        // If name is changing, ensure new name isn't taken by another warehouse
+        // Business Rule: Enforce facility name uniqueness during name changes
         if (!warehouse.getName().equalsIgnoreCase(request.name()) &&
                 warehouseRepository.existsByNameIgnoreCase(request.name())) {
             throw new AlreadyExistsException("Warehouse with name " + request.name() + " already exists");
         }
 
-        // 3. Update all fields from the Request Record
         warehouse.setName(request.name());
         warehouse.setLocation(request.location());
 
-        // 4. Save and Map
         Warehouse updatedWarehouse = warehouseRepository.save(warehouse);
-        log.info("refactor: updated warehouse details for ID: {}", id); // Semantic logging
+        log.info("refactor: updated warehouse details for ID: {}", id);
 
         return mapToResponse(updatedWarehouse);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void activateWarehouse(String id) {
-        // Find the warehouse by ID
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
 
-        // Business Logic: Only save if there is a change
+        // Check current state to avoid unnecessary database IO (Idempotency)
         if (!warehouse.isActive()) {
             warehouse.setActive(true);
             warehouseRepository.save(warehouse);
-            log.info("reactivated warehouse ID: {}", id); // Semantic logging for audit trail
+            log.info("reactivated warehouse ID: {}", id);
         } else {
             log.warn("Warehouse with ID: {} is already active", id);
         }
     }
+
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void deactivateWarehouse(String id) {
-        // 1. Fetch the warehouse or throw exception
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
 
-        // 2. If it IS active, then set it to false
+        // Soft-deactivation logic to prevent data loss while removing from operational list
         if (warehouse.isActive()) {
             warehouse.setActive(false);
             warehouseRepository.save(warehouse);
-
             log.info("deactivated warehouse ID: {}", id);
         } else {
             log.warn("Warehouse with ID: {} is already deactivated", id);
         }
     }
 
-
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public WarehouseResponse createWarehouse(WarehouseRequest request) {
         log.info("creating warehouse with name: {}", request.name());
-        // 1. Validation: Prevent duplicate warehouses
+
+        // Prevent duplicate registration of physical sites
         if (warehouseRepository.existsByNameIgnoreCase(request.name())) {
             throw new AlreadyExistsException("Warehouse with name: " + request.name() + " already exists");
         }
 
-        // 2. Mapping: Transform Request Record to Entity
         Warehouse warehouse = new Warehouse();
         warehouse.setName(request.name());
         warehouse.setLocation(request.location());
         warehouse.setActive(true);
 
-        // 3. Persistence: Save to PostgreSQL
         Warehouse savedWarehouse = warehouseRepository.save(warehouse);
-
-        // 4. Audit: Log the action for the "immutable ledger" [cite: 155]
         log.info("feat: created new warehouse facility: {}", savedWarehouse.getName());
 
         return mapToResponse(savedWarehouse);
     }
 
-
-
+    /**
+     * Maps the Warehouse entity to a response DTO.
+     * Includes a calculated 'zoneCount' derived from the child Zones collection.
+     */
     private WarehouseResponse mapToResponse(Warehouse entity) {
-
         return WarehouseResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())

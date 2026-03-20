@@ -15,6 +15,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Implementation of {@link CategoryService}.
+ * Focuses on maintaining data integrity within the warehouse category tree.
+ */
 
 @Slf4j
 @Service
@@ -23,11 +27,15 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final ProductCategoryRepository categoryRepository;
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
         log.info("Adding new category: {}", request.getName());
 
+        // Business Rule: Category names must be unique regardless of letter casing
         if (categoryRepository.existsByNameIgnoreCase(request.getName())) {
             throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
         }
@@ -35,6 +43,7 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
 
+        // Handle hierarchical linking if a parent ID is provided
         if (request.getParentCategoryId() != null) {
             ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
@@ -44,16 +53,22 @@ public class CategoryServiceImpl implements CategoryService {
         return mapToResponse(categoryRepository.save(category));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public ProductCategoryResponse getCategory(String id) {
-        // Find by ID regardless of status; logic below handles access control
+        // Fetching by ID; visibility logic is typically handled at the Controller/Security layer
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
 
         return mapToResponse(category);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive) {
@@ -61,16 +76,19 @@ public class CategoryServiceImpl implements CategoryService {
 
         Page<ProductCategory> categories;
         if (includeInactive) {
-            // Admin View: See everything for auditing [cite: 139-145]
+            // Admin/Audit View: Retrieve all records including disabled ones
             categories = categoryRepository.findAll(pageable);
         } else {
-            // Operations View: Only active categories [cite: 161]
+            // Standard Operational View: Filter out deactivated categories
             categories = categoryRepository.findAllByActiveTrue(pageable);
         }
 
         return categories.map(this::mapToResponse);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     public void deleteCategory(String id) {
@@ -79,11 +97,12 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
 
-        // Industry Best Practice: Check for children and products separately for specific error messages
+        // Referential Integrity: Prevent deleting categories that act as parents to other categories
         if (category.getSubCategories() != null && !category.getSubCategories().isEmpty()) {
             throw new IllegalOperationException("Please delete all sub-categories before deleting this category.");
         }
 
+        // Referential Integrity: Prevent orphaned products by blocking deletion of populated categories
         if (category.getProducts() != null && !category.getProducts().isEmpty()) {
             throw new IllegalOperationException("Cannot delete category as it contains active products.");
         }
@@ -91,7 +110,9 @@ public class CategoryServiceImpl implements CategoryService {
         categoryRepository.delete(category);
     }
 
-
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request) {
@@ -100,20 +121,20 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
-        // 1. If name is changing, check for duplicates
+        // Only check name uniqueness if the name is actually being modified
         if (!category.getName().equalsIgnoreCase(request.getName()) &&
                 categoryRepository.existsByNameIgnoreCase(request.getName())) {
             throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
         }
 
-        // 2. Prevent self-parenting
+        // Prevent Tree Inconsistency: A node cannot be its own parent
         if (id.equals(request.getParentCategoryId())) {
             throw new IllegalOperationException("A category cannot be its own parent.");
         }
 
         category.setName(request.getName());
 
-        // 3. Handle Parent update
+        // Update parent reference; null indicates a top-level root category
         if (request.getParentCategoryId() != null) {
             ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
@@ -126,18 +147,39 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public ProductCategoryResponse activateCategory(String id) {
+        log.info("Activating category: {}", id);
+        return updateStatus(id, true);
+    }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public ProductCategoryResponse deactivateCategory(String id) {
+        log.info("Deactivating category: {}", id);
+        return updateStatus(id, false);
+    }
 
+    /**
+     * Internal utility to map Entity state to a Response DTO.
+     * Includes basic relationship resolution for the parent name.
+     */
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
         ProductCategoryResponse response = new ProductCategoryResponse();
         response.setId(entity.getId());
         response.setName(entity.getName());
         response.setActive(entity.isActive());
-
-        // These will now resolve correctly
         response.setCreatedAt(entity.getCreatedAt());
         response.setUpdatedAt(entity.getUpdatedAt());
 
+        // Initialize empty list to avoid null pointers in UI/Frontend mapping
         response.setChildren(new java.util.ArrayList<>());
 
         if (entity.getParentCategory() != null) {
@@ -146,37 +188,14 @@ public class CategoryServiceImpl implements CategoryService {
         return response;
     }
 
-
-    @Override
-    @Transactional
-    public ProductCategoryResponse activateCategory(String id) {
-        log.info("Activating category: {}", id);
-
+    /**
+     * Common logic for status toggling to avoid code duplication.
+     */
+    private ProductCategoryResponse updateStatus(String id, boolean status) {
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
-        category.setActive(true);
-
-        // 1. Save and capture the updated entity
-        ProductCategory updatedCategory = categoryRepository.save(category);
-
-        // 2. Map the entity to your Response DTO and return it
-        // Replace 'categoryMapper' with whatever name you've given your mapper bean
-        return mapToResponse(updatedCategory);
-    }
-
-
-    @Override
-    @Transactional
-    public ProductCategoryResponse deactivateCategory(String id) {
-        ProductCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
-
-        category.setActive(false);
-        // The save method returns the updated entity
-        ProductCategory updatedCategory = categoryRepository.save(category);
-
-        // Convert entity to Response DTO and return it
-        return mapToResponse(updatedCategory);
+        category.setActive(status);
+        return mapToResponse(categoryRepository.save(category));
     }
 }

@@ -1,0 +1,74 @@
+### case 1 add product
+POST http://localhost:8080/api/v1/products
+Content-Type: application/json
+
+{
+  "name": "Nike Air Zoom Pegasus 40 Running Shoes",
+  "sku": "NIKE-PEG40-RUN",
+  "description": "Lightweight and responsive running shoes designed for everyday training with breathable mesh and Zoom Air cushioning.",
+  "price": 129.99,
+  "weight": 0.28,
+  "barcode": "196149357892",
+  "categoryId": "a7913525-c02e-4777-bfb7-8bdecdfd5d1e"
+}
+
+
+### case 2 get product by product id
+GET  http://localhost:8080/api/v1/products/b97e8c81-d962-404a-aa9e-00c009b09f35
+Content-Type: application/json
+
+### case 3 get product by sku id
+GET http://localhost:8080/api/v1/products/sku/NIKE-PEG40-RUN
+Content-Type: application/json
+
+### case 4 update product with id (success) with same sku and existing product
+PUT http://localhost:8080/api/v1/products/b97e8c81-d962-404a-aa9e-00c009b09f35
+Content-Type: application/json
+
+{
+  "name": "Sony WH-1000XM5 Wireless Headphones",
+  "sku": "NIKE-PEG40-RUN",
+  "description": "Lightweight and responsive running shoes designed for everyday training with breathable mesh and Zoom Air cushioning.",
+  "price": 129.99,
+  "weight": 0.28,
+  "barcode": "196149357892",
+  "categoryId": "a7913525-c02e-4777-bfb7-8bdecdfd5d1e"
+}
+
+### case 5 update products sku with existing sku (should return 409)
+PUT http://localhost:8080/api/v1/products/b97e8c81-d962-404a-aa9e-00c009b09f35
+Content-Type: application/json
+
+{
+  "name": "Sony WH-1000XM5 Wireless Headphones",
+  "sku": "SONY-WH1000-A",
+  "description": "Lightweight and responsive running shoes designed for everyday training with breathable mesh and Zoom Air cushioning.",
+  "price": 129.99,
+  "weight": 0.28,
+  "barcode": "196149357892",
+  "categoryId": "a7913525-c02e-4777-bfb7-8bdecdfd5d1e"
+}
+
+
+### case 6 update products category with not existing category (should return 404)
+PUT http://localhost:8080/api/v1/products/de7ef3e7-14ed-422a-9fbe-35dd4191a402
+Content-Type: application/json
+
+{
+    "name": "Nothing WH-1000XM5 Wired Headphones",
+    "sku": "SONY-WH1000-A",
+    "description": "Industry-leading noise canceling headphones with 80-hour battery life.",
+    "price": 1299.99,
+    "weight": 0.20,
+    "barcode": "4548736132566",
+    "categoryId": "d1bbd1b4-db95-4bc8-a741-334083fa2akdj"
+}
+
+
+### case 7 soft delete product
+DELETE http://localhost:8080/api/v1/products/b97e8c81-d962-404a-aa9e-00c009b09f35
+Content-Type: application/json
+
+### case 8 Activate product
+PATCH http://localhost:8080/api/v1/products/b97e8c81-d962-404a-aa9e-00c009b09f35/activate
+Content-Type: application/json

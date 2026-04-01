@@ -32,8 +32,10 @@ public class User {
 
     private String password;
 
+    // 🔥 ADD THE ANNOTATION RIGHT HERE:
     @Enumerated(EnumType.STRING)
+    @Column(name = "role")
     private Role role;
 
-    private String Status = "false";
+    private String status = "INACTIVE";
 }

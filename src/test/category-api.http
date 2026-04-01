@@ -1,0 +1,69 @@
+
+### Case 1 Create a New Category (Success)
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Electronics",
+  "parentCategoryId": null
+}
+
+### Case 2 Create Duplicate (Should return 409 Conflict)
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Sports",
+  "parentCategoryId": null
+}
+
+### Case 3 Create subCategory
+POST http://localhost:8080/api/v1/categories
+Content-Type: application/json
+
+{
+  "name": "Headphones",
+  "parentCategoryId": "a6ebd3cf-3480-4f7f-9d22-d821f02beb4c"
+}
+
+
+
+### Case 4 Get All Categories (Page 1, Sorted by Name)
+GET http://localhost:8080/api/v1/categories?page=&size=5&sort=name,asc
+Accept: application/json
+
+
+### Case 5 Update Category Name (Success) Replace ID with a real one from your DB
+
+PUT http://localhost:8080/api/v1/categories/a7913525-c02e-4777-bfb7-8bdecdfd5d1e
+Content-Type: application/json
+
+{
+  "name": "Sports",
+  "parentCategoryId": null
+}
+
+### Case 6 Prevent Self-Parenting (Should return 400 Bad Request)
+PUT http://localhost:8080/api/v1/categories/a7913525-c02e-4777-bfb7-8bdecdfd5d1e
+Content-Type: application/json
+
+{
+  "name": "Sports",
+  "parentCategoryId": "a7913525-c02e-4777-bfb7-8bdecdfd5d1e"
+}
+
+### Case 7 Delete Category with Sub-categories (Should return 400 Bad Request) Try deleting a parent before deleting its children
+DELETE http://localhost:8080/api/v1/categories/a7913525-c02e-4777-bfb7-8bdecdfd5d1e
+Content-Type: application/json
+
+### Case 8 Successful Delete Try deleting a category that has 0 children and 0 products
+DELETE http://localhost:8080/api/v1/categories/8c004a64-2d19-42ab-ae0e-4ab74a7ed804
+Content-Type: application/json
+
+
+### Case 9 Deactivate Category
+PATCH http://localhost:8080/api/v1/categories/0b630118-5046-4d4c-9c3f-994dc1bbaca6/deactivate
+
+
+### Case 10 Activate Category
+PATCH http://localhost:8080/api/v1/categories/0b630118-5046-4d4c-9c3f-994dc1bbaca6/activate

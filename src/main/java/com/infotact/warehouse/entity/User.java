@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 
+import com.infotact.warehouse.entity.enums.Role;
 import jakarta.persistence.*;
 
 import lombok.AllArgsConstructor;

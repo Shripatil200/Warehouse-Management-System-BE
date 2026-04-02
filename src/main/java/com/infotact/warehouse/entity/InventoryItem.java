@@ -1,8 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.InventoryStatus;
-import com.infotact.warehouse.entity.Product;
-import com.infotact.warehouse.entity.StorageBin;
+import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

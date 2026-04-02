@@ -1,7 +1,7 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
-import com.infotact.warehouse.entity.BinStatus;
+import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.entity.InventoryItem;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.StorageBin;

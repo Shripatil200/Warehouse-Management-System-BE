@@ -1,4 +1,4 @@
-package com.infotact.warehouse.entity;
+package com.infotact.warehouse.entity.enums;
 
 public enum OrderStatus {
 

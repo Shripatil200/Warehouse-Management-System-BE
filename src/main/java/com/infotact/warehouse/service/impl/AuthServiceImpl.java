@@ -1,12 +1,11 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.common_wrappers.*;
-import com.infotact.warehouse.config.JWT.JwtFilter;
 import com.infotact.warehouse.config.JWT.JwtUtil;
-import com.infotact.warehouse.config.JWT.UsersDetailsService;
 import com.infotact.warehouse.dto.v1.request.UserRequest;
 import com.infotact.warehouse.dto.v1.response.UserResponse;
 import com.infotact.warehouse.entity.User;
+import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.exception.AccessDeniedException;
 import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
@@ -23,7 +22,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -141,7 +139,7 @@ public class AuthServiceImpl implements AuthService {
         newUser.setName(request.getName());
         newUser.setEmail(request.getEmail());
         newUser.setContactNumber(request.getContactNumber());
-        newUser.setRole(com.infotact.warehouse.entity.Role.EMPLOYEE); // Or request.getRole()
+        newUser.setRole(Role.EMPLOYEE); // Or request.getRole()
         newUser.setStatus("INACTIVE");
 
         // Better fallback for substring to avoid StringIndexOutOfBoundsException

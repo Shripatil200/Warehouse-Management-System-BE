@@ -5,6 +5,7 @@ import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.AisleRequest
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.BulkBinRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
+import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.IllegalOperationException;

@@ -1,6 +1,6 @@
 package com.infotact.warehouse.config;
 
-import com.infotact.warehouse.entity.Role;
+import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.repository.UserRepository;
 import lombok.RequiredArgsConstructor;

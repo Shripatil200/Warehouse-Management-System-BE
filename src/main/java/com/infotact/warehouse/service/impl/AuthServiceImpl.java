@@ -81,28 +81,7 @@ public class AuthServiceImpl implements AuthService {
         throw new BadRequestException("Authentication failed");
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<UserResponse> getAllUser() {
-        if (!hasRole("ADMIN")) {
-            throw new UnauthorizedException("Admin rights required.");
-        }
-        return userRepository.getAllUser();
-    }
 
-    @Override
-    @Transactional
-    public void updateStatus(String userId, Boolean status) {
-        if (!hasRole("ADMIN")) {
-            throw new UnauthorizedException("Admin rights required.");
-        }
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found."));
-
-        String status_ = status ? "ACTIVE": "INACTIVE";
-        user.setStatus(status_);
-        userRepository.save(user); // Standard save is safer than custom update queries
-    }
 
     @Override
     @Transactional
@@ -118,53 +97,6 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
         return "Password updated successfully.";
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Transactional
-    public String createUser(UserRequest request) {
-        // Authorization check using helper
-        if (!hasRole("ADMIN") && !hasRole("MANAGER")) {
-            throw new UnauthorizedException("Access denied.");
-        }
-
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new BadRequestException("Email already registered.");
-        }
-
-        User newUser = new User();
-        newUser.setName(request.getName());
-        newUser.setEmail(request.getEmail());
-        newUser.setContactNumber(request.getContactNumber());
-        newUser.setRole(Role.EMPLOYEE); // Or request.getRole()
-        newUser.setStatus("INACTIVE");
-
-        // Better fallback for substring to avoid StringIndexOutOfBoundsException
-        String phone = request.getContactNumber();
-        String lastFour = (phone.length() >= 4) ? phone.substring(phone.length() - 4) : "1234";
-        String tempPassword = "Welcome@" + lastFour;
-
-        newUser.setPassword(passwordEncoder.encode(tempPassword));
-        userRepository.save(newUser);
-
-        // ... Email logic ...
-        // 5. Notify the employee via email
-        try {
-            emailUtils.passwordUpdatedEmail(
-                    newUser.getEmail(),
-                    "Warehouse Account Created",
-                    "Your account has been created by your manager.\n\n" +
-                            "Username: " + newUser.getEmail() + "\n" +
-                            "Temporary Password: " + tempPassword + "\n\n" +
-                            "Please log in and change your password immediately."
-            );
-        } catch (Exception e) {
-            log.warn("Account created, but failed to send welcome email to {}", newUser.getEmail());
-        }
-        return "User created successfully. Temporary credentials sent to " + newUser.getEmail();
     }
 
 

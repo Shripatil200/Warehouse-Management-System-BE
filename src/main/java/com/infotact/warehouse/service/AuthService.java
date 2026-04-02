@@ -21,18 +21,7 @@ public interface AuthService {
      */
     String login(LoginRequest request);
 
-    /**
-     * Retrieves a list of all users in the system.
-     * Access is restricted to users with ADMIN roles.
-     * * @return a list of UserResponse objects
-     */
-    List<UserResponse> getAllUser();
 
-    /**
-     * Updates the status (enable/disable) of a specific user.
-     * * @param user ID and the new status
-     */
-    void updateStatus(String id, Boolean status);
 
 
     String changePassword(ChangePasswordRequest request);
@@ -41,5 +30,5 @@ public interface AuthService {
 
     String resetPassword(ResetPasswordRequest request);
 
-    String createUser(@Valid UserRequest request);
+
 }

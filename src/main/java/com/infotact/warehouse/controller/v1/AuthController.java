@@ -34,22 +34,7 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
-    /**
-     * Retrieves all users (Admin only).
-     */
-    @GetMapping("/users")
-    public ResponseEntity<List<UserResponse>> getAllUser() {
-        return ResponseEntity.ok(authService.getAllUser());
-    }
 
-    /**
-     * Updates a user's account status (Admin only).
-     */
-    @PatchMapping("/update-status")
-    public ResponseEntity<String> updateUserStatus(@RequestParam String id, @RequestParam Boolean status) {
-        authService.updateStatus(id, status);
-        return ResponseEntity.ok("User status updated successfully");
-    }
 
     /**
      * Changes the password for the currently authenticated user.
@@ -75,15 +60,6 @@ public class AuthController {
         return ResponseEntity.ok(authService.resetPassword(request));
     }
 
-    /**
-     * Endpoint for Managers/Admins to create new employee accounts.
-     * Accessible only by users with 'MANAGER' or 'ADMIN' roles.
-     */
-    @PostMapping("/create-employee")
-    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    public ResponseEntity<String> createEmployee(@Valid @RequestBody UserRequest request) {
-        String response = authService.createUser(request);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
-    }
+
 
 }

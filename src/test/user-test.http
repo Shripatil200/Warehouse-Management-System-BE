@@ -1,0 +1,50 @@
+### 1. Create a New Employee (Must be in YOUR warehouse)
+POST {{baseUrl}}/create
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Vikram Patil",
+  "email": "vikram.patil@mailinator.com",
+  "contactNumber": "1253078945",
+  "warehouseId": "{{warehouseId}}"
+}
+
+### 2. Get All Users (Returns only users in your Warehouse)
+GET {{baseUrl}}/all
+Authorization: Bearer {{authToken}}
+
+### 3. Get All Active Users
+GET {{baseUrl}}/all-active
+Authorization: Bearer {{authToken}}
+
+### 4. Update User Status (ADMIN ONLY) (If you use a MANAGER token, this should return 403 Forbidden)
+
+PATCH {{baseUrl}}/status?id={{userId}}&status=ACTIVE
+Authorization: Bearer {{authToken}}
+
+### 5. Get User by ID
+GET {{baseUrl}}/{{userId}}
+Authorization: Bearer {{authToken}}
+
+### 6. Get Users by Role (Filtered by your Warehouse)
+GET {{baseUrl}}/role/EMPLOYEE
+Authorization: Bearer {{authToken}}
+
+### 7. Update User Details (ADMIN ONLY)
+PUT {{baseUrl}}/{{userId}}
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Shri Updated",
+  "role": "MANAGER"
+}
+
+### 8. Delete User (ADMIN ONLY)
+DELETE {{baseUrl}}/{{userId}}
+Authorization: Bearer {{authToken}}
+
+### 9. Security Test: Cross-Warehouse Access (Try to access a User ID that belongs to a DIFFERENT warehouse) (Expected: 401 Unauthorized (from Service Layer validateWarehouseAccess))
+GET {{baseUrl}}/USER_ID_FROM_OTHER_WAREHOUSE
+Authorization: Bearer {{authToken}}

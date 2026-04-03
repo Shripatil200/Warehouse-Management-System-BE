@@ -33,3 +33,7 @@ build/
 .vscode/
 
 .env
+
+# IntelliJ HTTP Client environments
+src/test/http-client.private.env.json
+src/test/http-client.env.json

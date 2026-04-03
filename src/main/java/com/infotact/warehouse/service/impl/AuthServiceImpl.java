@@ -6,6 +6,7 @@ import com.infotact.warehouse.dto.v1.request.UserRequest;
 import com.infotact.warehouse.dto.v1.response.UserResponse;
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.Role;
+import com.infotact.warehouse.entity.enums.UserStatus; // 1. Added Import
 import com.infotact.warehouse.exception.AccessDeniedException;
 import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
@@ -29,10 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Implementation of {@link AuthService}.
- * Manages user authentication lifecycle and administrative permissions.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -45,17 +42,9 @@ public class AuthServiceImpl implements AuthService {
     private final EmailUtils emailUtils;
     private final PasswordEncoder passwordEncoder;
 
-    // HELPER: Replaces the need for injecting JwtFilter
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null) ? auth.getName() : null;
-    }
-
-    private boolean hasRole(String role) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return false;
-        return auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
     }
 
     @Override
@@ -69,8 +58,9 @@ public class AuthServiceImpl implements AuthService {
                 User user = userRepository.findByEmail(request.getEmail())
                         .orElseThrow(() -> new UnauthorizedException("User record not found."));
 
-                if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
-                    throw new AccessDeniedException("Account is pending for admin approval.");
+                // ✅ FIX: Compare using the Enum instead of String "ACTIVE"
+                if (user.getStatus() != UserStatus.ACTIVE) {
+                    throw new AccessDeniedException("Account is " + user.getStatus() + ". Please contact Admin.");
                 }
 
                 return "{\"token\":\"" + jwtUtil.generateToken(user.getEmail(), user.getRole().name()) + "\"}";
@@ -80,8 +70,6 @@ public class AuthServiceImpl implements AuthService {
         }
         throw new BadRequestException("Authentication failed");
     }
-
-
 
     @Override
     @Transactional
@@ -99,18 +87,14 @@ public class AuthServiceImpl implements AuthService {
         return "Password updated successfully.";
     }
 
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional
     public String forgotPassword(String email) {
         log.info("Forgot password link requested for email: {}", email);
 
-        // Process only if user exists to prevent email enumeration
         userRepository.findByEmail(email).ifPresent(user -> {
             String token = UUID.randomUUID().toString();
+            // Ensure ResetPasswordToken entity uses String for email to match UUID
             ResetPasswordToken resetToken = new ResetPasswordToken(token, user.getEmail());
             resetPasswordRepository.save(resetToken);
 
@@ -118,17 +102,13 @@ public class AuthServiceImpl implements AuthService {
                 emailUtils.forgetPasswordMail(user.getEmail(), "Reset Password", token);
             } catch (MessagingException e) {
                 log.error("Failed to send reset email to {}: {}", user.getEmail(), e.getMessage());
-                // Use a custom exception that you have defined in your handler
-                throw new BadRequestException("We encountered an error sending your reset link. Please try again.");
+                throw new BadRequestException("Error sending reset link. Please try again.");
             }
         });
 
         return "Reset link sent to your email.";
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     @Transactional
     public String resetPassword(ResetPasswordRequest request) {
@@ -143,12 +123,14 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
-        // One-time use: Delete token after successful reset
         resetPasswordRepository.delete(tokenObj);
 
-        emailUtils.passwordUpdatedEmail(user.getEmail(), "Password Updated", "Your password has been updated successfully.");
+        try {
+            emailUtils.passwordUpdatedEmail(user.getEmail(), "Password Updated", "Your password has been updated successfully.");
+        } catch (Exception e) {
+            log.warn("Password reset successful, but notification email failed for {}", user.getEmail());
+        }
 
         return "Password changed successfully";
     }
-
 }

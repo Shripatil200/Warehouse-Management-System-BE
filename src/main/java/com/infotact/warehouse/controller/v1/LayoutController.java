@@ -17,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,49 +28,46 @@ public class LayoutController {
 
     private final LayoutService layoutService;
 
-    @Operation(summary = "Get full warehouse layout", description = "Returns a hierarchical tree of Zones -> Aisles -> Bins for a specific warehouse.")
+    @Operation(summary = "Get full warehouse layout", description = "Returns a hierarchical tree. Accessible by Admin and Manager.")
     @GetMapping("/warehouse/{warehouseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<WarehouseLayoutResponse> getFullLayout(
             @Parameter(description = "The UUID of the warehouse") @PathVariable String warehouseId) {
         return ResponseEntity.ok(layoutService.getWarehouseLayout(warehouseId));
     }
 
-    @Operation(summary = "List bins in an aisle", description = "Retrieves a paginated list of storage bins within a specific aisle.")
+    @Operation(summary = "List bins in an aisle", description = "Retrieves a paginated list of storage bins. Accessible by Admin and Manager.")
     @GetMapping("/aisle/{aisleId}/bins")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Page<WarehouseLayoutResponse.BinSummary>> getBinsByAisle(
             @Parameter(description = "The UUID of the aisle") @PathVariable String aisleId,
             @ParameterObject Pageable pageable) {
         return ResponseEntity.ok(layoutService.getBinsByAisle(aisleId, pageable));
     }
 
-    @Operation(summary = "Add a zone to a warehouse", description = "Defines a new physical or logical zone within a warehouse facility.")
+    @Operation(summary = "Add a zone to a warehouse", description = "Restricted to Admin.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Zone added successfully"),
-            @ApiResponse(responseCode = "409", description = "Zone name already exists in this warehouse")
+            @ApiResponse(responseCode = "403", description = "Forbidden: Only Admin can add zones")
     })
     @PostMapping(path = "/zone")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> addZoneToWarehouse(@Valid @RequestBody ZoneRequest request) {
         layoutService.addZoneToWarehouse(request);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @Operation(summary = "Add an aisle to a zone", description = "Creates a new aisle. Validates that the zone belongs to the specified warehouse.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Aisle added successfully"),
-            @ApiResponse(responseCode = "400", description = "Data mismatch: Zone does not belong to the warehouse")
-    })
+    @Operation(summary = "Add an aisle to a zone", description = "Restricted to Admin.")
     @PostMapping(path = "/aisle")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> addAisleToZone(@Valid @RequestBody AisleRequest request){
         layoutService.addAisleToZone(request);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @Operation(summary = "Bulk create storage bins", description = "Generates multiple bins at once using a prefix and sequence. Limits generation to 999 per batch.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Bins created successfully"),
-            @ApiResponse(responseCode = "400", description = "Hierarchy mismatch or invalid prefix range")
-    })
+    @Operation(summary = "Bulk create storage bins", description = "Restricted to Admin.")
     @PostMapping(path = "/storage_bin")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> bulkCreateBins(@Valid @RequestBody BulkBinRequest request){
         layoutService.bulkCreateBins(request);
         return ResponseEntity.status(HttpStatus.CREATED).build();

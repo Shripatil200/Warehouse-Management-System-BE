@@ -2,15 +2,9 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.common_wrappers.*;
 import com.infotact.warehouse.config.JWT.JwtUtil;
-import com.infotact.warehouse.dto.v1.request.UserRequest;
-import com.infotact.warehouse.dto.v1.response.UserResponse;
 import com.infotact.warehouse.entity.User;
-import com.infotact.warehouse.entity.enums.Role;
-import com.infotact.warehouse.entity.enums.UserStatus; // 1. Added Import
-import com.infotact.warehouse.exception.AccessDeniedException;
-import com.infotact.warehouse.exception.BadRequestException;
-import com.infotact.warehouse.exception.ResourceNotFoundException;
-import com.infotact.warehouse.exception.UnauthorizedException;
+import com.infotact.warehouse.entity.enums.UserStatus;
+import com.infotact.warehouse.exception.*;
 import com.infotact.warehouse.repository.ResetPasswordRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.AuthService;
@@ -27,9 +21,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
+/**
+ * Implementation of {@link AuthService} handling core security logic.
+ * Uses Spring Security's AuthenticationManager and JWT for stateless sessions.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -42,11 +39,15 @@ public class AuthServiceImpl implements AuthService {
     private final EmailUtils emailUtils;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * Utility to extract email from the Security Context of the current request.
+     */
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null) ? auth.getName() : null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String login(LoginRequest request) {
         try {
@@ -58,7 +59,7 @@ public class AuthServiceImpl implements AuthService {
                 User user = userRepository.findByEmail(request.getEmail())
                         .orElseThrow(() -> new UnauthorizedException("User record not found."));
 
-                // ✅ FIX: Compare using the Enum instead of String "ACTIVE"
+                // Business Logic: Only ACTIVE accounts can log in
                 if (user.getStatus() != UserStatus.ACTIVE) {
                     throw new AccessDeniedException("Account is " + user.getStatus() + ". Please contact Admin.");
                 }
@@ -71,6 +72,7 @@ public class AuthServiceImpl implements AuthService {
         throw new BadRequestException("Authentication failed");
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public String changePassword(ChangePasswordRequest request) {
@@ -87,6 +89,7 @@ public class AuthServiceImpl implements AuthService {
         return "Password updated successfully.";
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public String forgotPassword(String email) {
@@ -94,7 +97,6 @@ public class AuthServiceImpl implements AuthService {
 
         userRepository.findByEmail(email).ifPresent(user -> {
             String token = UUID.randomUUID().toString();
-            // Ensure ResetPasswordToken entity uses String for email to match UUID
             ResetPasswordToken resetToken = new ResetPasswordToken(token, user.getEmail());
             resetPasswordRepository.save(resetToken);
 
@@ -109,6 +111,7 @@ public class AuthServiceImpl implements AuthService {
         return "Reset link sent to your email.";
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public String resetPassword(ResetPasswordRequest request) {
@@ -123,6 +126,7 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
+        // Token cleanup after successful use
         resetPasswordRepository.delete(tokenObj);
 
         try {

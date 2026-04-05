@@ -1,5 +1,6 @@
-### 1. Create a New Warehouse (SUPER_ADMIN ONLY) (Expected- 201 Created)
-POST {{warehouseApiBaseUrl}}
+
+### WH-S1: Create Warehouse (Expected: 201)
+POST {{baseUrlForWarehouse}}
 Authorization: Bearer {{superAdminToken}}
 Content-Type: application/json
 
@@ -8,33 +9,24 @@ Content-Type: application/json
   "location": "Solapur, Maharashtra"
 }
 
-### 2. List All Warehouses (Global View) ( Expected- 200 OK with Paginated Content )
-GET {{warehouseApiBaseUrl}}?page=0&size=10&includeInactive=true
-Authorization: Bearer {{superAdminToken}}
-
-### 3. Get Specific Warehouse Details ( Expecte - 200 OK)
-GET {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
-Authorization: Bearer {{superAdminToken}}
-
-### 4. Update Warehouse Details ( Expected- 200 OK)
-PUT {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
+### WH-F1: Duplicate Name Failure (Expected: 409 Conflict)
+POST {{baseUrlForWarehouse}}
 Authorization: Bearer {{superAdminToken}}
 Content-Type: application/json
 
 {
-  "name": "Mumbai Logistics Hub - Phase 2",
-  "location": "Bhiwandi, Sector 5"
+  "name": "Pune Hub",
+  "location": "Kondhwa"
 }
 
-### 5. Deactivate Warehouse (Soft Delete)(Expected- 204 No Content)
-DELETE {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
+### WH-S2: Get All Warehouses (Paginated)
+GET {{baseUrlForWarehouse}}?page=0&size=10&includeInactive=true
 Authorization: Bearer {{superAdminToken}}
 
-### 6. Reactivate Warehouse (Expected- 204 No Content)
-PATCH {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}/activate
+### WH-F2: Security Test - Unauthorized Access (Expected: 403)
+GET {{baseUrlForWarehouse}}
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiU1VQRVJfQURNSU4iLCJzdWIiOiJzdXBlcmFkbWluQHdhcmVob3VzZS5jb20iLCJpYXQiOjE3NzUyMDAwMDQsImV4cCI6MTc3NTIzNjAwNH0.NMIQJPkYB0nrJxBRFSe8Zrvp0OTrm-R_AxBbvvEqihk
+
+### WH-S3: Deactivate Warehouse
+DELETE {{baseUrlForWarehouse}}/{{warehouseId}}
 Authorization: Bearer {{superAdminToken}}
-
-### 7. SECURITY TEST: Forbidden Access (Use a LOCAL_ADMIN or MANAGER token here) (Expected- 403 Forbidden (Controller level PreAuthorize))
-
-GET {{warehouseApiBaseUrl}}
-Authorization: Bearer PASTE_LOCAL_ADMIN_TOKEN_HERE

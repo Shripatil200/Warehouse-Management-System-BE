@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Implementation of {@link ProductService}.
  * Manages the core inventory of the warehouse, ensuring SKU uniqueness
  * and validating category relationships.
+ * * Secured to ensure only Managers can execute business logic.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('MANAGER')") // Secondary security layer to protect business logic
 public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;

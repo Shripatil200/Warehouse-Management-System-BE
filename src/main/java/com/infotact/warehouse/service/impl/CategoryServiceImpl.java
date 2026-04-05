@@ -12,17 +12,21 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
 
 /**
  * Implementation of {@link CategoryService}.
  * Focuses on maintaining data integrity within the warehouse category tree.
+ * Secured to ensure only Managers can execute business logic.
  */
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('MANAGER')") // Redundant but safe secondary security layer
 public class CategoryServiceImpl implements CategoryService {
 
     private final ProductCategoryRepository categoryRepository;
@@ -35,7 +39,6 @@ public class CategoryServiceImpl implements CategoryService {
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
         log.info("Adding new category: {}", request.getName());
 
-        // Business Rule: Category names must be unique regardless of letter casing
         if (categoryRepository.existsByNameIgnoreCase(request.getName())) {
             throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
         }
@@ -43,7 +46,6 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
 
-        // Handle hierarchical linking if a parent ID is provided
         if (request.getParentCategoryId() != null) {
             ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
@@ -59,7 +61,6 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional(readOnly = true)
     public ProductCategoryResponse getCategory(String id) {
-        // Fetching by ID; visibility logic is typically handled at the Controller/Security layer
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
 
@@ -76,10 +77,8 @@ public class CategoryServiceImpl implements CategoryService {
 
         Page<ProductCategory> categories;
         if (includeInactive) {
-            // Admin/Audit View: Retrieve all records including disabled ones
             categories = categoryRepository.findAll(pageable);
         } else {
-            // Standard Operational View: Filter out deactivated categories
             categories = categoryRepository.findAllByActiveTrue(pageable);
         }
 
@@ -97,12 +96,10 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with id: " + id));
 
-        // Referential Integrity: Prevent deleting categories that act as parents to other categories
         if (category.getSubCategories() != null && !category.getSubCategories().isEmpty()) {
             throw new IllegalOperationException("Please delete all sub-categories before deleting this category.");
         }
 
-        // Referential Integrity: Prevent orphaned products by blocking deletion of populated categories
         if (category.getProducts() != null && !category.getProducts().isEmpty()) {
             throw new IllegalOperationException("Cannot delete category as it contains active products.");
         }
@@ -121,20 +118,17 @@ public class CategoryServiceImpl implements CategoryService {
         ProductCategory category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
-        // Only check name uniqueness if the name is actually being modified
         if (!category.getName().equalsIgnoreCase(request.getName()) &&
                 categoryRepository.existsByNameIgnoreCase(request.getName())) {
             throw new AlreadyExistsException("Category with name '" + request.getName() + "' already exists");
         }
 
-        // Prevent Tree Inconsistency: A node cannot be its own parent
         if (id.equals(request.getParentCategoryId())) {
             throw new IllegalOperationException("A category cannot be its own parent.");
         }
 
         category.setName(request.getName());
 
-        // Update parent reference; null indicates a top-level root category
         if (request.getParentCategoryId() != null) {
             ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Parent category not found"));
@@ -145,7 +139,6 @@ public class CategoryServiceImpl implements CategoryService {
 
         return mapToResponse(categoryRepository.save(category));
     }
-
 
     /**
      * {@inheritDoc}
@@ -169,7 +162,6 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * Internal utility to map Entity state to a Response DTO.
-     * Includes basic relationship resolution for the parent name.
      */
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
         ProductCategoryResponse response = new ProductCategoryResponse();
@@ -178,9 +170,7 @@ public class CategoryServiceImpl implements CategoryService {
         response.setActive(entity.isActive());
         response.setCreatedAt(entity.getCreatedAt());
         response.setUpdatedAt(entity.getUpdatedAt());
-
-        // Initialize empty list to avoid null pointers in UI/Frontend mapping
-        response.setChildren(new java.util.ArrayList<>());
+        response.setChildren(new ArrayList<>());
 
         if (entity.getParentCategory() != null) {
             response.setParentCategoryName(entity.getParentCategory().getName());
@@ -189,7 +179,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     /**
-     * Common logic for status toggling to avoid code duplication.
+     * Common logic for status toggling.
      */
     private ProductCategoryResponse updateStatus(String id, boolean status) {
         ProductCategory category = categoryRepository.findById(id)

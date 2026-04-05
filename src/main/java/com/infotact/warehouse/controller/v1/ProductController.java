@@ -16,12 +16,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST controller for managing the warehouse product catalog.
+ * Access is strictly restricted to users with the MANAGER role.
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('MANAGER')") // Global security gate for all product operations
 @Tag(name = "Product Management", description = "Endpoints for managing the warehouse inventory catalog")
 public class ProductController {
 
@@ -31,6 +37,7 @@ public class ProductController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Product created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid product data or inactive category"),
+            @ApiResponse(responseCode = "403", description = "Forbidden: Access restricted to Managers"),
             @ApiResponse(responseCode = "409", description = "SKU already exists in the system")
     })
     @PostMapping

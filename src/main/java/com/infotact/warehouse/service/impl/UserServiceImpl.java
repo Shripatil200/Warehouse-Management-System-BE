@@ -23,6 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Implementation of {@link UserService}.
+ * Enforces Role-Based Access Control (RBAC) and data isolation between warehouses.
+ */
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -37,6 +41,9 @@ public class UserServiceImpl implements UserService {
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
     private static final String ROLE_MANAGER = "ROLE_MANAGER";
 
+    /**
+     * Internal utility to check the roles of the currently authenticated user.
+     */
     private boolean hasRole(String role) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
@@ -45,14 +52,20 @@ public class UserServiceImpl implements UserService {
                 .anyMatch(a -> a.getAuthority().equalsIgnoreCase(target));
     }
 
+    /**
+     * Retrieves the User entity of the person making the request.
+     */
     private User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new UnauthorizedException("Authenticated user profile not found."));
     }
 
+    /**
+     * Logic for Multi-Tenant Isolation.
+     * Ensures that Managers/Admins cannot access or modify users from a different warehouse.
+     */
     private void validateWarehouseAccess(User currentUser, User targetUser) {
-        // Super Admin has global access to all warehouses
         if (hasRole(ROLE_SUPER_ADMIN)) return;
 
         if (currentUser.getWarehouse() == null || targetUser.getWarehouse() == null ||
@@ -61,33 +74,28 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public String createUser(UserRequest request) {
         User currentUser = getAuthenticatedUser();
         Role targetRole = Role.valueOf(request.getRole().toUpperCase());
 
-        // --- ROLE HIERARCHY CHECKS ---
-
-        // 1. Only Super Admin can create Admin users
+        // Hierarchical Security: Admin creation is global (Super Admin only)
         if (targetRole == Role.ADMIN && !hasRole(ROLE_SUPER_ADMIN)) {
             throw new UnauthorizedException("Only Super Admins can create Admin accounts.");
         }
 
-        // 2. Warehouse Isolation Check
-        // If not a Super Admin, you must be in the same warehouse as the user you are creating
+        // Warehouse Isolation: Prevent cross-warehouse user creation
         if (!hasRole(ROLE_SUPER_ADMIN)) {
             if (!currentUser.getWarehouse().getId().equals(request.getWarehouseId())) {
                 throw new UnauthorizedException("You can only create users for your own warehouse.");
             }
 
-            // Managers/Admins can create Employees
             if (targetRole == Role.EMPLOYEE && !hasRole(ROLE_ADMIN) && !hasRole(ROLE_MANAGER)) {
                 throw new UnauthorizedException("Insufficient permissions to create an employee.");
             }
         }
-
-        // --- DATABASE PERSISTENCE ---
 
         if (userRepository.findByEmail(request.getEmail()).isPresent())
             throw new AlreadyExistsException("Email already registered.");
@@ -103,7 +111,7 @@ public class UserServiceImpl implements UserService {
         newUser.setStatus(UserStatus.INACTIVE);
         newUser.setWarehouse(warehouse);
 
-        // Auto-generate password from last 4 digits of phone
+        // Auto-generate password: Welcome@{Last4DigitsOfPhone}
         String phone = request.getContactNumber();
         String lastFour = phone.length() >= 4 ? phone.substring(phone.length() - 4) : "1234";
         String tempPassword = "Welcome@" + lastFour;
@@ -115,21 +123,21 @@ public class UserServiceImpl implements UserService {
         return "User created successfully with role " + targetRole + " in warehouse " + warehouse.getName();
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUser() {
-        // Super Admin gets the list of all Admins across all warehouses
         if (hasRole(ROLE_SUPER_ADMIN)) {
             return userRepository.findByRole(Role.ADMIN)
                     .stream().map(UserResponse::new).collect(Collectors.toList());
         }
 
-        // Admins and Managers see users in their specific warehouse
         User currentUser = getAuthenticatedUser();
         return userRepository.findAllByWarehouse(currentUser.getWarehouse().getId())
                 .stream().map(UserResponse::new).collect(Collectors.toList());
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public String updateUserDetails(String id, UserUpdate request) {
@@ -137,7 +145,6 @@ public class UserServiceImpl implements UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
-        // Only Super Admin can touch an Admin account
         if (targetUser.getRole() == Role.ADMIN && !hasRole(ROLE_SUPER_ADMIN)) {
             throw new UnauthorizedException("Only Super Admins can modify Admin accounts.");
         }
@@ -146,12 +153,11 @@ public class UserServiceImpl implements UserService {
 
         if (request.getName() != null) targetUser.setName(request.getName());
 
-        // ROLE PROMOTION LOGIC
+        // Role Promotion Constraints
         if (request.getRole() != null) {
             Role newRole = Role.valueOf(request.getRole().toUpperCase());
 
             if (hasRole(ROLE_ADMIN)) {
-                // Admin can promote Employee -> Manager, but NOT to Admin/SuperAdmin
                 if (newRole == Role.ADMIN || newRole == Role.SUPER_ADMIN) {
                     throw new UnauthorizedException("Admins cannot promote users to Admin roles.");
                 }
@@ -167,18 +173,17 @@ public class UserServiceImpl implements UserService {
         return "User updated successfully.";
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void deleteUser(String id) {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
-        // Only Super Admin can delete an Admin
         if (targetUser.getRole() == Role.ADMIN && !hasRole(ROLE_SUPER_ADMIN)) {
             throw new UnauthorizedException("Only Super Admins can delete Admin accounts.");
         }
 
-        // Managers cannot delete users at all
         if (!hasRole(ROLE_ADMIN) && !hasRole(ROLE_SUPER_ADMIN)) {
             throw new UnauthorizedException("Only Admins can delete users.");
         }
@@ -190,6 +195,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(targetUser);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void updateStatus(String userId, UserStatus status) {
@@ -199,7 +205,6 @@ public class UserServiceImpl implements UserService {
 
         validateWarehouseAccess(currentUser, targetUser);
 
-        // Only Admins or Managers can activate/deactivate users
         if (!hasRole(ROLE_ADMIN) && !hasRole(ROLE_MANAGER) && !hasRole(ROLE_SUPER_ADMIN)) {
             throw new UnauthorizedException("Access denied.");
         }
@@ -208,6 +213,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(targetUser);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public UserResponse getUserById(String id) {
@@ -218,6 +224,7 @@ public class UserServiceImpl implements UserService {
         return new UserResponse(targetUser);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getAllActiveUsers() {
@@ -226,6 +233,7 @@ public class UserServiceImpl implements UserService {
                 .stream().map(UserResponse::new).collect(Collectors.toList());
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getUsersByRole(Role role) {

@@ -16,12 +16,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST controller for managing product categories.
+ * Restricted strictly to users with the MANAGER role.
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/categories")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('MANAGER')") // Restricts the entire controller to Managers
 @Tag(name = "Product Categories", description = "Endpoints for managing the hierarchical product category tree")
 public class CategoryController {
 
@@ -31,6 +37,7 @@ public class CategoryController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Category created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid input or parent ID"),
+            @ApiResponse(responseCode = "403", description = "Forbidden: Only Managers can create categories"),
             @ApiResponse(responseCode = "409", description = "Category name already exists")
     })
     @PostMapping

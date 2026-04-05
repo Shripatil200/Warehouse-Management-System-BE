@@ -1,50 +1,39 @@
-### 1. Create a New Employee (Must be in YOUR warehouse)
-POST {{baseUrl}}/create
-Authorization: Bearer {{authToken}}
+
+### US-S1: Create Employee (Success)
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "name": "Vikram Patil",
-  "email": "vikram.patil@mailinator.com",
-  "contactNumber": "1253078945",
-  "warehouseId": "{{warehouseId}}"
+    "name": "Sagar Patil",
+    "email": "sagar.p@infotact.com",
+    "contactNumber": "9876543210",
+    "role": "EMPLOYEE",
+    "warehouseId": "{{warehouseId}}"
 }
 
-### 2. Get All Users (Returns only users in your Warehouse)
-GET {{baseUrl}}/all
-Authorization: Bearer {{authToken}}
-
-### 3. Get All Active Users
-GET {{baseUrl}}/all-active
-Authorization: Bearer {{authToken}}
-
-### 4. Update User Status (ADMIN ONLY) (If you use a MANAGER token, this should return 403 Forbidden)
-
-PATCH {{baseUrl}}/status?id={{userId}}&status=ACTIVE
-Authorization: Bearer {{authToken}}
-
-### 5. Get User by ID
-GET {{baseUrl}}/{{userId}}
-Authorization: Bearer {{authToken}}
-
-### 6. Get Users by Role (Filtered by your Warehouse)
-GET {{baseUrl}}/role/EMPLOYEE
-Authorization: Bearer {{authToken}}
-
-### 7. Update User Details (ADMIN ONLY)
-PUT {{baseUrl}}/{{userId}}
-Authorization: Bearer {{authToken}}
+### US-F1: Unauthorized Role Promotion (Expected: 401)  Logic: Admin cannot create another ADMIN (Only Super Admin can)
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-  "name": "Shri Updated",
-  "role": "MANAGER"
+    "name": "Intruder Admin",
+    "email": "bad.admin@infotact.com",
+    "contactNumber": "1111111111",
+    "role": "ADMIN",
+    "warehouseId": "{{warehouseId}}"
 }
 
-### 8. Delete User (ADMIN ONLY)
-DELETE {{baseUrl}}/{{userId}}
-Authorization: Bearer {{authToken}}
+### US-F2: Warehouse Isolation Breach (Expected: 401) Logic: Admin/Manager can only manage users in their OWN warehouse
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
 
-### 9. Security Test: Cross-Warehouse Access (Try to access a User ID that belongs to a DIFFERENT warehouse) (Expected: 401 Unauthorized (from Service Layer validateWarehouseAccess))
-GET {{baseUrl}}/USER_ID_FROM_OTHER_WAREHOUSE
-Authorization: Bearer {{authToken}}
+{
+    "name": "Wrong WH Staff",
+    "email": "wrong.wh@infotact.com",
+    "contactNumber": "0000000000",
+    "role": "EMPLOYEE",
+    "warehouseId": "a-different-warehouse-uuid"
+}

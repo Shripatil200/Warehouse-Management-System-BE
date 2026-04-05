@@ -1,0 +1,22 @@
+
+### IV-S1: Receive Shipment (Success) # Logic: Auto-finds available bin and updates occupancy
+
+POST {{baseUrlForInventory}}/receive
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "productId": "valid-product-uuid",
+    "quantity": 25
+}
+
+### IV-F1: Insufficient Storage (Expected: 400) # Logic: Throws InsufficientStorageException if quantity > available space
+
+POST {{baseUrlForInventory}}/receive
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "productId": "valid-product-uuid",
+    "quantity": 999999
+}

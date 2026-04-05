@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,4 +36,6 @@ public interface UserRepository extends JpaRepository<User, String> {
             "WHERE u.warehouse.id = :warehouseId AND u.role = :role " +
             "AND u.status <> com.infotact.warehouse.entity.enums.UserStatus.DELETED")
     List<User> findByWarehouseAndRole(@Param("warehouseId") String warehouseId, @Param("role") Role role);
+
+    Collection<User> findByRole(Role role);
 }

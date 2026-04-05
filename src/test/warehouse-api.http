@@ -1,0 +1,40 @@
+### 1. Create a New Warehouse (SUPER_ADMIN ONLY) (Expected- 201 Created)
+POST {{warehouseApiBaseUrl}}
+Authorization: Bearer {{superAdminToken}}
+Content-Type: application/json
+
+{
+  "name": "Solapur Logistics Hub",
+  "location": "Solapur, Maharashtra"
+}
+
+### 2. List All Warehouses (Global View) ( Expected- 200 OK with Paginated Content )
+GET {{warehouseApiBaseUrl}}?page=0&size=10&includeInactive=true
+Authorization: Bearer {{superAdminToken}}
+
+### 3. Get Specific Warehouse Details ( Expecte - 200 OK)
+GET {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
+Authorization: Bearer {{superAdminToken}}
+
+### 4. Update Warehouse Details ( Expected- 200 OK)
+PUT {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
+Authorization: Bearer {{superAdminToken}}
+Content-Type: application/json
+
+{
+  "name": "Mumbai Logistics Hub - Phase 2",
+  "location": "Bhiwandi, Sector 5"
+}
+
+### 5. Deactivate Warehouse (Soft Delete)(Expected- 204 No Content)
+DELETE {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}
+Authorization: Bearer {{superAdminToken}}
+
+### 6. Reactivate Warehouse (Expected- 204 No Content)
+PATCH {{warehouseApiBaseUrl}}/{{warehouseIdForWarehouseAPI}}/activate
+Authorization: Bearer {{superAdminToken}}
+
+### 7. SECURITY TEST: Forbidden Access (Use a LOCAL_ADMIN or MANAGER token here) (Expected- 403 Forbidden (Controller level PreAuthorize))
+
+GET {{warehouseApiBaseUrl}}
+Authorization: Bearer PASTE_LOCAL_ADMIN_TOKEN_HERE

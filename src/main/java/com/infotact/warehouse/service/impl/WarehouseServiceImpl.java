@@ -5,6 +5,7 @@ import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import com.infotact.warehouse.entity.Warehouse;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
+import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.BinRepository;
 import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.WarehouseService;
@@ -12,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,97 +31,89 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final WarehouseRepository warehouseRepository;
     private final BinRepository binRepository;
 
-    /** {@inheritDoc} */
+    /**
+     * INTERNAL SECURITY CHECK
+     * Ensures only a SUPER_ADMIN can access global warehouse management.
+     */
+    private void validateSuperAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN"));
+
+        if (!isSuperAdmin) {
+            log.error("Unauthorized Access: User {} attempted to manage warehouse facilities.",
+                    auth != null ? auth.getName() : "Anonymous");
+            throw new UnauthorizedException("Access Denied: Only Super Admins can manage warehouse sites.");
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Page<WarehouseResponse> getAllWarehouses(Pageable pageable, boolean includeInactive) {
-        Page<Warehouse> warehouses;
-        if (includeInactive) {
-            // Administrative view for facility managers and auditors
-            warehouses = warehouseRepository.findAll(pageable);
-        } else {
-            // Standard operations view; prevents scheduling stock into disabled facilities
-            warehouses = warehouseRepository.findAllByActiveTrue(pageable);
-        }
+        validateSuperAdmin(); // Locked
+
+        Page<Warehouse> warehouses = includeInactive
+                ? warehouseRepository.findAll(pageable)
+                : warehouseRepository.findAllByActiveTrue(pageable);
+
         return warehouses.map(this::mapToResponse);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public WarehouseResponse getWarehouse(String id) {
+        validateSuperAdmin(); // Locked
+
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse Not Found"));
-
         return mapToResponse(warehouse);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public WarehouseResponse updateWarehouse(String id, WarehouseRequest request) {
-        // Validation: Updates are only permitted on active warehouse records
-        Warehouse warehouse = warehouseRepository.findByIdAndActiveTrue(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Active Warehouse with id: " + id + " not found"));
+        validateSuperAdmin(); // Locked
 
-        // Business Rule: Enforce facility name uniqueness during name changes
+        Warehouse warehouse = warehouseRepository.findByIdAndActiveTrue(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Active Warehouse not found"));
+
         if (!warehouse.getName().equalsIgnoreCase(request.name()) &&
                 warehouseRepository.existsByNameIgnoreCase(request.name())) {
-            throw new AlreadyExistsException("Warehouse with name " + request.name() + " already exists");
+            throw new AlreadyExistsException("Warehouse name already exists");
         }
 
         warehouse.setName(request.name());
         warehouse.setLocation(request.location());
-
-        Warehouse updatedWarehouse = warehouseRepository.save(warehouse);
-        log.info("refactor: updated warehouse details for ID: {}", id);
-
-        return mapToResponse(updatedWarehouse);
+        return mapToResponse(warehouseRepository.save(warehouse));
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public void activateWarehouse(String id) {
+        validateSuperAdmin(); // Locked
         Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
-
-        // Check current state to avoid unnecessary database IO (Idempotency)
-        if (!warehouse.isActive()) {
-            warehouse.setActive(true);
-            warehouseRepository.save(warehouse);
-            log.info("reactivated warehouse ID: {}", id);
-        } else {
-            log.warn("Warehouse with ID: {} is already active", id);
-        }
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+        warehouse.setActive(true);
+        warehouseRepository.save(warehouse);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public void deactivateWarehouse(String id) {
+        validateSuperAdmin(); // Locked
         Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse with id: " + id + " not found"));
-
-        // Soft-deactivation logic to prevent data loss while removing from operational list
-        if (warehouse.isActive()) {
-            warehouse.setActive(false);
-            warehouseRepository.save(warehouse);
-            log.info("deactivated warehouse ID: {}", id);
-        } else {
-            log.warn("Warehouse with ID: {} is already deactivated", id);
-        }
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+        warehouse.setActive(false);
+        warehouseRepository.save(warehouse);
     }
 
-    /** {@inheritDoc} */
     @Override
     @Transactional
     public WarehouseResponse createWarehouse(WarehouseRequest request) {
-        log.info("creating warehouse with name: {}", request.name());
+        validateSuperAdmin(); // Locked
 
-        // Prevent duplicate registration of physical sites
         if (warehouseRepository.existsByNameIgnoreCase(request.name())) {
-            throw new AlreadyExistsException("Warehouse with name: " + request.name() + " already exists");
+            throw new AlreadyExistsException("Warehouse name already exists");
         }
 
         Warehouse warehouse = new Warehouse();
@@ -126,16 +121,9 @@ public class WarehouseServiceImpl implements WarehouseService {
         warehouse.setLocation(request.location());
         warehouse.setActive(true);
 
-        Warehouse savedWarehouse = warehouseRepository.save(warehouse);
-        log.info("feat: created new warehouse facility: {}", savedWarehouse.getName());
-
-        return mapToResponse(savedWarehouse);
+        return mapToResponse(warehouseRepository.save(warehouse));
     }
 
-    /**
-     * Maps the Warehouse entity to a response DTO.
-     * Includes a calculated 'zoneCount' derived from the child Zones collection.
-     */
     private WarehouseResponse mapToResponse(Warehouse entity) {
         return WarehouseResponse.builder()
                 .id(entity.getId())

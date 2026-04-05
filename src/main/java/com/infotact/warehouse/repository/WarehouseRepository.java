@@ -31,4 +31,6 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
      * Essential for ensuring stock isn't received into a deactivated facility.
      */
     Optional<Warehouse> findByIdAndActiveTrue(String id);
+
+    Optional<Warehouse> findByName(String systemHeadquarters);
 }

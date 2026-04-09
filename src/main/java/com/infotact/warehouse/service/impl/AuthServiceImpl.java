@@ -2,6 +2,7 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.common_wrappers.*;
 import com.infotact.warehouse.config.JWT.JwtUtil;
+import com.infotact.warehouse.dto.v1.response.AuthResponse;
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import com.infotact.warehouse.exception.*;
@@ -25,7 +26,11 @@ import java.util.UUID;
 
 /**
  * Implementation of {@link AuthService} handling core security logic.
- * Uses Spring Security's AuthenticationManager and JWT for stateless sessions.
+ * <p>
+ * This class orchestrates the interaction between Spring Security, JWT generation,
+ * and persistent user records. It enforces account-status guardrails (e.g., blocking
+ * INACTIVE users) and manages the secure lifecycle of credential recovery.
+ * </p>
  */
 @Slf4j
 @Service
@@ -40,16 +45,26 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
 
     /**
-     * Utility to extract email from the Security Context of the current request.
+     * Internal utility to resolve the current session's identity.
+     * @return The email associated with the current SecurityContext.
      */
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null) ? auth.getName() : null;
     }
 
-    /** {@inheritDoc} */
+    /** * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li>Uses Spring Security's {@link AuthenticationManager} for credential verification.</li>
+     * <li>Strictly prevents logins for accounts that are not in {@link UserStatus#ACTIVE} state.</li>
+     * <li><b>Context Injection:</b> Returns a structured object containing the JWT and
+     * facility-specific metadata (WarehouseID) to assist frontend routing.</li>
+     * </ul>
+     */
     @Override
-    public String login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request) { // Method signature changed to AuthResponse
         try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
@@ -59,12 +74,23 @@ public class AuthServiceImpl implements AuthService {
                 User user = userRepository.findByEmail(request.getEmail())
                         .orElseThrow(() -> new UnauthorizedException("User record not found."));
 
-                // Business Logic: Only ACTIVE accounts can log in
                 if (user.getStatus() != UserStatus.ACTIVE) {
+                    log.warn("Login blocked: Account {} is currently {}", user.getEmail(), user.getStatus());
                     throw new AccessDeniedException("Account is " + user.getStatus() + ". Please contact Admin.");
                 }
 
-                return "{\"token\":\"" + jwtUtil.generateToken(user.getEmail(), user.getRole().name()) + "\"}";
+                log.info("Login successful for user: {}", user.getEmail());
+
+                // Generate the token
+                String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+
+                // Return the structured object
+                return AuthResponse.builder()
+                        .token(token)
+                        .email(user.getEmail())
+                        .role(user.getRole().name())
+                        .warehouseId(user.getWarehouse() != null ? user.getWarehouse().getId() : null)
+                        .build();
             }
         } catch (AuthenticationException ex) {
             throw new BadRequestException("Invalid email or password");
@@ -72,7 +98,14 @@ public class AuthServiceImpl implements AuthService {
         throw new BadRequestException("Authentication failed");
     }
 
-    /** {@inheritDoc} */
+    /** * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li>Resolves the user via the authenticated SecurityContext.</li>
+     * <li>Performs manual {@link PasswordEncoder#matches} check before applying updates.</li>
+     * </ul>
+     */
     @Override
     @Transactional
     public String changePassword(ChangePasswordRequest request) {
@@ -89,7 +122,15 @@ public class AuthServiceImpl implements AuthService {
         return "Password updated successfully.";
     }
 
-    /** {@inheritDoc} */
+    /** * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li>Generates a random UUID as a reset token.</li>
+     * <li>Persists the token-email mapping via {@link ResetPasswordRepository}.</li>
+     * <li>Fails silently for non-existent emails to prevent account enumeration.</li>
+     * </ul>
+     */
     @Override
     @Transactional
     public String forgotPassword(String email) {
@@ -111,7 +152,14 @@ public class AuthServiceImpl implements AuthService {
         return "Reset link sent to your email.";
     }
 
-    /** {@inheritDoc} */
+    /** * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li>Invalidates the token immediately after successful use to prevent Replay Attacks.</li>
+     * <li>Sends a confirmation email notifying the user of the successful security update.</li>
+     * </ul>
+     */
     @Override
     @Transactional
     public String resetPassword(ResetPasswordRequest request) {

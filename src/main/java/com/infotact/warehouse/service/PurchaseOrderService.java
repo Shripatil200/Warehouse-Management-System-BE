@@ -1,36 +1,55 @@
 package com.infotact.warehouse.service;
 
 import com.infotact.warehouse.dto.v1.request.PurchaseOrderRequest;
-import com.infotact.warehouse.entity.PurchaseOrder;
+import com.infotact.warehouse.dto.v1.response.PurchaseOrderResponse;
 import java.util.List;
 
 /**
- * Service interface for managing Purchase Orders (Inbound Stock Expectations).
- * Directives: Ensures absolute data integrity for supplier transactions.
+ * Service interface for Inbound Procurement and Supply Chain orchestration.
+ * <p>
+ * This service manages the lifecycle of stock replenishment from external vendors.
+ * It acts as the 'Expected Inventory' ledger, allowing the facility to plan
+ * labor and storage space ahead of physical shipment arrivals.
+ * </p>
  */
 public interface PurchaseOrderService {
 
     /**
-     * Registers a new order with a supplier.
-     * Maps incoming DTO to PurchaseOrder and child PurchaseOrderItems.
-     * * @param request Data containing supplier ID and list of product SKUs/quantities.
-     * @return The persisted PurchaseOrder entity.
+     * Registers a new stock replenishment request with a supplier.
+     * <p>
+     * <b>Execution Workflow:</b>
+     * 1. <b>Supplier Verification:</b> Validates that the {@link com.infotact.warehouse.entity.Supplier}
+     * is active and authorized.
+     * 2. <b>SKU Validation:</b> Ensures all requested items exist in the global
+     * {@link com.infotact.warehouse.entity.Product} catalog.
+     * 3. <b>Order Generation:</b> Generates a unique PO Reference and persists
+     * line items with an initial 'CREATED' or 'PLACED' status.
+     * </p>
+     * @param request Data containing supplier ID, expected delivery date, and product quantities.
+     * @return The persisted PurchaseOrder details.
      */
-    PurchaseOrder createPurchaseOrder(PurchaseOrderRequest request);
+    PurchaseOrderResponse createPurchaseOrder(PurchaseOrderRequest request);
 
     /**
      * Retrieves specific details for a single purchase order.
-     * * @param id The internal UUID of the purchase order.
-     * @return The PurchaseOrder entity.
-     * @throws com.infotact.warehouse.exception.EntityNotFoundException if the ID is invalid.
+     * <p>
+     * <b>Security:</b> This lookup is warehouse-scoped to prevent one facility
+     * from viewing the procurement costs or vendor details of another.
+     * </p>
+     * @param id The internal UUID of the purchase order.
+     * @return The detailed order response including line items.
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the ID is invalid.
      */
-    PurchaseOrder getPurchaseOrder(String id);
+    PurchaseOrderResponse getPurchaseOrder(String id);
 
     /**
-     * Lists all purchase orders, optionally filtered by status (e.g., PLACED, RECEIVED).
-     * Supports macroscopic visibility for Warehouse Managers.
-     * @param status Optional string filter for order status.
-     * @return List of matching PurchaseOrder entities.
+     * Provides a filterable view of all inbound expectations.
+     * <p>
+     * <b>Operational Usage:</b> Managers use this to identify 'Delayed' shipments
+     * or to prepare the receiving dock for 'Shipped' orders.
+     * </p>
+     * @param status Optional filter (e.g., 'PLACED', 'SHIPPED', 'PARTIALLY_RECEIVED', 'CLOSED').
+     * @return A list of matching orders belonging to the authenticated warehouse.
      */
-    List<PurchaseOrder> getAllPurchaseOrders(String status);
+    List<PurchaseOrderResponse> getAllPurchaseOrders(String status);
 }

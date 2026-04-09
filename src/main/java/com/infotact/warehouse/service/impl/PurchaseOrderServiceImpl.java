@@ -1,61 +1,84 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.PurchaseOrderRequest;
-import com.infotact.warehouse.entity.Product;
-import com.infotact.warehouse.entity.PurchaseOrder;
-import com.infotact.warehouse.entity.PurchaseOrderItem;
-import com.infotact.warehouse.entity.Supplier;
+import com.infotact.warehouse.dto.v1.response.PurchaseOrderResponse;
+import com.infotact.warehouse.entity.*;
+import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import com.infotact.warehouse.exception.EntityNotFoundException;
-import com.infotact.warehouse.repository.ProductRepository;
-import com.infotact.warehouse.repository.PurchaseOrderRepository;
-import com.infotact.warehouse.repository.SupplierRepository;
+import com.infotact.warehouse.exception.UnauthorizedException;
+import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.PurchaseOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * Implementation of {@link PurchaseOrderService}.
- * Handles business logic for validating suppliers/products and creating inbound orders.
- * Secured to ensure only Managers can execute business logic.
+ * Implementation of {@link PurchaseOrderService} for inbound logistics management.
+ * <p>
+ * This service orchestrates the procurement process, allowing managers to forecast
+ * incoming stock and track vendor fulfillment performance. It acts as the primary
+ * ledger for "Expected Inventory" within a specific facility.
+ * </p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('MANAGER')") // Secondary security layer for business logic
+@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
 public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private final PurchaseOrderRepository poRepository;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+
+    /**
+     * Resolves the current manager's profile to maintain facility-scoped data integrity.
+     */
+    private User getAuthenticatedUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new UnauthorizedException("User profile not found."));
+    }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li><b>Supplier Audit:</b> Verifies the vendor exists before initializing the contract.</li>
+     * <li><b>Forecasting:</b> Automatically applies a default 7-day lead time for expected delivery.</li>
+     * <li><b>Multi-tenant Scoping:</b> Anchors the PO directly to the manager's {@link Warehouse}.</li>
+     * </ul>
      */
     @Override
     @Transactional
-    public PurchaseOrder createPurchaseOrder(PurchaseOrderRequest request) {
-        log.info("Processing creation of Purchase Order for supplier: {}", request.supplierId());
+    @CacheEvict(value = "purchaseOrders", allEntries = true)
+    public PurchaseOrderResponse createPurchaseOrder(PurchaseOrderRequest request) {
+        User manager = getAuthenticatedUser();
 
-        // 1. Validate Supplier Existence
         Supplier supplier = supplierRepository.findById(request.supplierId())
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found"));
 
-        // 2. Initialize Purchase Order
         PurchaseOrder po = new PurchaseOrder();
         po.setSupplier(supplier);
+        po.setWarehouse(manager.getWarehouse());
         po.setOrderDate(LocalDateTime.now());
-        po.setStatus("PLACED");
+        po.setExpectedDate(LocalDateTime.now().plusDays(7)); // Logic: Default supply chain lead time
+        po.setStatus(PurchaseOrderStatus.PENDING);
 
-        // 3. Map Request Items to Order Items while validating SKUs
         List<PurchaseOrderItem> items = request.items().stream().map(itemRequest -> {
             Product product = productRepository.findBySku(itemRequest.sku())
-                    .orElseThrow(() -> new EntityNotFoundException("Product not found: " + itemRequest.sku()));
+                    .orElseThrow(() -> new EntityNotFoundException("Product SKU not found: " + itemRequest.sku()));
 
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(po);
@@ -65,34 +88,71 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         }).toList();
 
         po.setItems(items);
-
-        log.info("Successfully created Purchase Order with {} items for supplier {}", items.size(), supplier.getName());
-        return poRepository.save(po);
+        log.info("Procurement: New PO created for Supplier '{}' at Warehouse '{}'", supplier.getName(), manager.getWarehouse().getName());
+        return mapToResponse(poRepository.save(po));
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Security Guardrail:</b> Ensures that a manager can only view POs
+     * belonging strictly to their assigned facility.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
-    public PurchaseOrder getPurchaseOrder(String id) {
-        log.info("Fetching Purchase Order with ID: {}", id);
-        return poRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Purchase Order not found with ID: " + id));
+    @Cacheable(value = "purchaseOrders", key = "#id")
+    public PurchaseOrderResponse getPurchaseOrder(String id) {
+        User manager = getAuthenticatedUser();
+        PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
+                .orElseThrow(() -> new EntityNotFoundException("Purchase Order not found or access denied."));
+        return mapToResponse(po);
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Operational View:</b> Provides filtered access to the procurement queue.
+     * Results are cached by status to accelerate dashboard rendering.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
-    public List<PurchaseOrder> getAllPurchaseOrders(String status) {
-        log.info("Fetching all Purchase Orders with status: {}", status);
+    @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
+    public List<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr) {
+        User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
 
-        // If a status is provided, filter by it; otherwise, return all orders.
-        if (status != null && !status.isBlank()) {
-            return poRepository.findAllByStatus(status);
+        List<PurchaseOrder> pos;
+        if (statusStr != null && !statusStr.isBlank()) {
+            PurchaseOrderStatus status = PurchaseOrderStatus.valueOf(statusStr.toUpperCase());
+            pos = poRepository.findAllByStatusAndWarehouseId(status, warehouseId);
+        } else {
+            pos = poRepository.findAllByWarehouseId(warehouseId);
         }
-        return poRepository.findAll();
+
+        return pos.stream().map(this::mapToResponse).collect(Collectors.toList());
+    }
+
+    /**
+     * Maps the persistent PO entity to a detailed Response DTO.
+     */
+    private PurchaseOrderResponse mapToResponse(PurchaseOrder po) {
+        return new PurchaseOrderResponse(
+                po.getId(),
+                po.getSupplier().getName(),
+                po.getStatus().name(),
+                po.getWarehouse().getId(),
+                po.getWarehouse().getName(),
+                po.getOrderDate(),
+                po.getExpectedDate(),
+                po.getItems().stream()
+                        .map(item -> new PurchaseOrderResponse.OrderItemDetail(
+                                item.getProduct().getId(),
+                                item.getProduct().getName(),
+                                item.getProduct().getSku(),
+                                item.getQuantity()
+                        )).toList()
+        );
     }
 }

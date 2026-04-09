@@ -10,116 +10,85 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Global Interceptor for exception handling across the entire Warehouse API.
+ * <p>
+ * This class catches specific business exceptions and formats them into a
+ * standardized JSON error structure. This ensures a consistent contract
+ * with the frontend team and prevents sensitive internal stack traces from
+ * leaking into the HTTP responses.
+ * </p>
+ */
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    // This catches the custom exception you created
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Object> handleResourceNotFoundException(
-            ResourceNotFoundException ex, WebRequest request) {
-
+    /**
+     * Standard error structure generator.
+     */
+    private Map<String, Object> createErrorBody(HttpStatus status, String message, String errorName) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.NOT_FOUND.value());
-        body.put("error", "Not Found");
-        body.put("message", ex.getMessage());
+        body.put("status", status.value());
+        body.put("error", errorName);
+        body.put("message", message);
+        return body;
+    }
+
+    /**
+     * Handles missing resources (404 Not Found).
+     */
+    @ExceptionHandler({ResourceNotFoundException.class, EntityNotFoundException.class})
+    public ResponseEntity<Object> handleNotFound(RuntimeException ex, WebRequest request) {
+        Map<String, Object> body = createErrorBody(HttpStatus.NOT_FOUND, ex.getMessage(), "Not Found");
         body.put("path", request.getDescription(false).replace("uri=", ""));
-
-        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
-    }
-
-    // Recommended: Catch general exceptions so the user doesn't see a raw stack trace
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleGlobalException(
-            Exception ex, WebRequest request) {
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        body.put("message", "An unexpected error occurred");
-
-        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    @ExceptionHandler(AlreadyExistsException.class)
-    public ResponseEntity<Object> handleAlreadyExistsException(AlreadyExistsException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.CONFLICT.value());
-        body.put("error", "Conflict");
-        body.put("message", ex.getMessage());
-        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
-    }
-
-    @ExceptionHandler(IllegalOperationException.class)
-    public ResponseEntity<Object> handleIllegalOperation(IllegalOperationException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<Object> handleBadRequestException(BadRequestException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(InsufficientStorageException.class)
-    public ResponseEntity<Object> handleInsufficientStorageException(InsufficientStorageException ex){
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad request");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<Object> handleEntityNotFoundException(EntityNotFoundException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.NOT_FOUND.value());
-        body.put("error", "Not Found");
-        body.put("message", ex.getMessage());
-
         return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
     }
 
     /**
-     * Handles cases where a user attempts to access a resource or perform an action
-     * without the necessary security permissions or valid authentication.
+     * Handles data conflicts, such as duplicate SKUs or Names (409 Conflict).
+     */
+    @ExceptionHandler(AlreadyExistsException.class)
+    public ResponseEntity<Object> handleAlreadyExistsException(AlreadyExistsException ex) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.CONFLICT, ex.getMessage(), "Conflict"), HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Handles invalid business logic requests (400 Bad Request).
+     */
+    @ExceptionHandler({
+            BadRequestException.class,
+            IllegalOperationException.class,
+            InsufficientStorageException.class
+    })
+    public ResponseEntity<Object> handleBadRequest(RuntimeException ex) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, ex.getMessage(), "Bad Request"), HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Handles security authentication failures (401 Unauthorized).
      */
     @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<Object> handleUnauthorizedAccess(UnauthorizedException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.UNAUTHORIZED.value());
-        body.put("error", "Unauthorized");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.UNAUTHORIZED);
+    public ResponseEntity<Object> handleUnauthorized(UnauthorizedException ex) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.UNAUTHORIZED, ex.getMessage(), "Unauthorized"), HttpStatus.UNAUTHORIZED);
     }
 
+    /**
+     * Handles role-based permission failures (403 Forbidden).
+     */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Object> handleAccessDenied(AccessDeniedException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.FORBIDDEN.value()); // 403
-        body.put("error", "Forbidden");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.FORBIDDEN);
+        return new ResponseEntity<>(createErrorBody(HttpStatus.FORBIDDEN, ex.getMessage(), "Forbidden"), HttpStatus.FORBIDDEN);
     }
 
-
+    /**
+     * Catch-all for unhandled server-side errors (500 Internal Server Error).
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Object> handleGlobalException(Exception ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        body.put("message", "An unexpected error occurred. Please contact system administrator.");
+        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 }

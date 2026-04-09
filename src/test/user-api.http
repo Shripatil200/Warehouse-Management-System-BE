@@ -1,0 +1,39 @@
+
+### US-S1: Create Employee (Success)
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Sagar Patil",
+    "email": "sagar.p@infotact.com",
+    "contactNumber": "9876543210",
+    "role": "EMPLOYEE",
+    "warehouseId": "{{warehouseId}}"
+}
+
+### US-F1: Unauthorized Role Promotion (Expected: 401)  Logic: Admin cannot create another ADMIN (Only Super Admin can)
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Intruder Admin",
+    "email": "bad.admin@infotact.com",
+    "contactNumber": "1111111111",
+    "role": "ADMIN",
+    "warehouseId": "{{warehouseId}}"
+}
+
+### US-F2: Warehouse Isolation Breach (Expected: 401) Logic: Admin/Manager can only manage users in their OWN warehouse
+POST {{baseUrlForUser}}/create
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Wrong WH Staff",
+    "email": "wrong.wh@infotact.com",
+    "contactNumber": "0000000000",
+    "role": "EMPLOYEE",
+    "warehouseId": "a-different-warehouse-uuid"
+}

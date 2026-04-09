@@ -5,80 +5,85 @@ import com.infotact.warehouse.dto.v1.response.ProductCategoryResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-
 /**
  * Service interface for managing the product category lifecycle.
- * Handles the organizational hierarchy of products within the warehouse.
+ * <p>
+ * This service manages the organizational hierarchy used for cataloging products.
+ * It ensures data integrity within the category tree and enforces multi-tenant
+ * isolation at the warehouse level.
+ * </p>
  */
 public interface CategoryService {
 
-
     /**
-     * Creates a new product category.
-     *
-     * @param request Data containing the name and optional parent category ID.
-     * @return The created category details.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException    if a category with the same name already exists.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the specified parent category ID does not exist.
+     * Creates a new product category within a specific warehouse context.
+     * <p>
+     * <b>Validation Logic:</b>
+     * 1. Unique Name Check: Verifies no category with the same name exists in the current warehouse.
+     * 2. Parent Validation: If a parent ID is provided, it must exist and belong to the same warehouse.
+     * </p>
+     * @param request Data containing the name, description, and optional parent category.
+     * @return The persisted category mapped to a response DTO.
+     * @throws com.infotact.warehouse.exception.AlreadyExistsException if name collision occurs.
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if parent ID is invalid.
      */
-    public ProductCategoryResponse addCategory(ProductCategoryRequest request);
+    ProductCategoryResponse addCategory(ProductCategoryRequest request);
 
     /**
-     * Retrieves a specific category by its unique identifier.
-     *
+     * Retrieves a specific category.
      * @param id The UUID of the category.
-     * @return The found category details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if no category is found with the given ID.
+     * @return Detailed category information.
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if ID does not exist.
      */
-    public ProductCategoryResponse getCategory(String id);
+    ProductCategoryResponse getCategory(String id);
 
     /**
-     * Retrieves a paginated list of categories.
-     *
-     * @param pageable        Pagination and sorting information (page number, size, sort order).
-     * @param includeInactive If true, returns all categories; if false, filters for active categories only.
-     * @return A page of category response objects.
+     * Retrieves a paginated list of categories filtered by facility and status.
+     * <p>
+     * <b>Multi-tenancy:</b> This list is strictly filtered by the logged-in user's warehouse ID.
+     * </p>
+     * @param pageable Pagination and sorting parameters.
+     * @param includeInactive If true, includes "Soft-Deleted" categories.
+     * @return A pageable collection of categories.
      */
     Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive);
 
     /**
-     * Permanently removes category from the system.
-     *
-     * @param id The unique identifier of the category to delete.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the category does not exist.
-     * @throws com.infotact.warehouse.exception.IllegalOperationException if category has existing sub-category or linked product.
+     * Permanently removes a category from the database.
+     * <p>
+     * <b>Safety Guardrails:</b>
+     * 1. Child Check: Blocks deletion if the category has active sub-categories.
+     * 2. Product Check: Blocks deletion if any products are currently assigned to this category.
+     * </p>
+     * @param id The UUID of the category to remove.
+     * @throws com.infotact.warehouse.exception.IllegalOperationException if the category is not "Empty".
      */
     void deleteCategory(String id);
 
     /**
-     * Updates details of existing category.
-     *
-     * @param id      Unique identifier of category to update.
-     * @param request The updated date (name, parent ID).
+     * Updates an existing category's metadata or position in the hierarchy.
+     * <p>
+     * <b>Circular Reference Protection:</b>
+     * Prevents logic errors where a category is set as its own parent or as a
+     * descendant of its own child, which would break tree traversal.
+     * </p>
+     * @param id Unique identifier of the target category.
+     * @param request The updated attributes.
      * @return The updated category details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException If category does not exist.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException    If the new name is already taken by another category.
-     * @throws com.infotact.warehouse.exception.IllegalOperationException If update would create circular reference (e.g. self-parenting).
      */
-    public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request);
+    ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request);
 
     /**
-     * Set a category's status to inactive.
-     * Inactive categories are generally hidden from standard operational views.
-     *
-     * @param id Unique identifier of category.
-     * @return The updated category details with active set to false.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException If the category is not found.
+     * Performs a "Soft-Delete" by marking the category as inactive.
+     * <p>
+     * Logic: Inactive categories remain in the database for historical audit
+     * purposes but are filtered out of operational dropdowns and picker views.
+     * </p>
      */
     ProductCategoryResponse deactivateCategory(String id);
 
     /**
-     * Re-active previously deactivated category.
-     *
-     * @param id Unique identifier of category.
-     * @return Updated category details with active set to true.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException If the category is not found.
+     * Restores an inactive category to operational status.
      */
     ProductCategoryResponse activateCategory(String id);
-
 }

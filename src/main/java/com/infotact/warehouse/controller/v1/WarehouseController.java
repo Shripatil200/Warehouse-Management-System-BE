@@ -1,5 +1,6 @@
 package com.infotact.warehouse.controller.v1;
 
+import com.infotact.warehouse.dto.v1.request.CreateWarehouseRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import com.infotact.warehouse.service.WarehouseService;
@@ -10,72 +11,88 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Slf4j
+/**
+ * REST controller for root-level warehouse management.
+ * <p>
+ * This controller manages the lifecycle of the warehouse facility itself.
+ * It includes the critical 'Setup' endpoint which initializes the system's
+ * primary facility and its first Administrative user.
+ * </p>
+ */
 @RestController
 @RequestMapping(path="/api/v1/warehouses")
 @RequiredArgsConstructor
-@Tag(name = "Warehouse Facilities", description = "Operations for managing physical warehouse locations and status")
+@Tag(name = "0. Warehouse Management", description = "Root operations for facility setup and lifecycle control")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
 
-    @Operation(summary = "Register a new warehouse", description = "Creates a new physical facility site. Names must be unique.")
+    /**
+     * Initializes the system with a primary warehouse and an Admin account.
+     * <p>
+     * Logic: This is a <b>public</b> endpoint intended for first-time setup.
+     * It creates the Warehouse entity and simultaneously generates the Super Admin
+     * credentials required to manage the platform.
+     * </p>
+     *
+     * @param request Data containing warehouse details and admin contact info.
+     * @return The created warehouse profile.
+     */
+    @Operation(summary = "Initial System Setup",
+            description = "Bootstrap endpoint to initialize the first warehouse facility and its primary Admin.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Warehouse created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid facility data"),
-            @ApiResponse(responseCode = "409", description = "Warehouse name already exists")
+            @ApiResponse(responseCode = "201", description = "System initialized successfully"),
+            @ApiResponse(responseCode = "400", description = "Validation error or warehouse already exists")
     })
-    @PostMapping
-    public ResponseEntity<WarehouseResponse> createWarehouse(@Valid @RequestBody WarehouseRequest request){
-        log.info("REST request to create Warehouse: {}", request.name());
+    @PostMapping("/setup")
+    public ResponseEntity<WarehouseResponse> setup(@Valid @RequestBody CreateWarehouseRequest request){
         return ResponseEntity.status(HttpStatus.CREATED).body(warehouseService.createWarehouse(request));
     }
 
-    @Operation(summary = "List all warehouses", description = "Retrieves a paginated list of facilities. Can include decommissioned sites.")
-    @GetMapping
-    public ResponseEntity<Page<WarehouseResponse>> getAllWarehouses(
-            @ParameterObject Pageable pageable,
-            @Parameter(description = "If true, includes inactive/deactivated warehouses")
-            @RequestParam(defaultValue = "false") boolean includeInactive
-    ){
-        return ResponseEntity.ok(warehouseService.getAllWarehouses(pageable, includeInactive));
-    }
-
-    @Operation(summary = "Get warehouse by ID", description = "Retrieves specific details for a single warehouse facility.")
-    @GetMapping("/{id}")
-    public ResponseEntity<WarehouseResponse> getWarehouse(
-            @Parameter(description = "The UUID of the warehouse") @PathVariable String id){
-        return ResponseEntity.ok(warehouseService.getWarehouse(id));
-    }
-
-    @Operation(summary = "Update warehouse details", description = "Updates the name and geographic location of an active warehouse.")
-    @PutMapping("/{id}")
-    public ResponseEntity<WarehouseResponse> updateWarehouse(
-            @PathVariable String id,
-            @Valid @RequestBody WarehouseRequest request){
-        return ResponseEntity.ok(warehouseService.updateWarehouse(id, request));
-    }
-
-    @Operation(summary = "Activate a warehouse", description = "Restores a deactivated warehouse to active status for inventory operations.")
+    /**
+     * Re-activates a previously deactivated warehouse.
+     *
+     * @param id The UUID of the warehouse.
+     */
+    @Operation(summary = "Activate Warehouse", description = "Restores a warehouse to ACTIVE status.")
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/activate")
-    public ResponseEntity<Void> activateWarehouse(@PathVariable String id){
+    public ResponseEntity<Void> activate(
+            @Parameter(description = "The UUID of the warehouse", example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String id){
         warehouseService.activateWarehouse(id);
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Deactivate a warehouse", description = "Performs a soft-delete by deactivating the facility. Prevents new inventory operations.")
+    /**
+     * Deactivates a warehouse (Soft Delete).
+     * <p>
+     * Logic: Marks the warehouse as inactive. This prevents any new logins or
+     * operations associated with this facility.
+     * </p>
+     */
+    @Operation(summary = "Deactivate Warehouse", description = "Performs a soft delete by deactivating the facility.")
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deactivateWarehouse(@PathVariable String id) {
-        log.warn("REST request to deactivate warehouse: {}", id);
+    public ResponseEntity<Void> deactivate(@PathVariable String id) {
         warehouseService.deactivateWarehouse(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Updates warehouse metadata (name, location, etc.).
+     */
+    @Operation(summary = "Update Warehouse", description = "Updates the physical details of the warehouse facility.")
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}")
+    public ResponseEntity<WarehouseResponse> update(
+            @PathVariable String id,
+            @Valid @RequestBody WarehouseRequest request){
+        return ResponseEntity.ok(warehouseService.updateWarehouse(id, request));
     }
 }

@@ -1,0 +1,42 @@
+
+
+### AU-S1: Login Success (Active User)
+POST {{baseUrlForAuth}}/login
+Content-Type: application/json
+
+{
+    "email": "superadmin@warehouse.com",
+    "password": "password123"
+}
+
+### AU-F1: Login Failure (Incorrect Credentials) # Logic: Service catches AuthenticationException
+
+POST {{baseUrlForAuth}}/login
+Content-Type: application/json
+
+{
+    "email": "superadmin@warehouse.com",
+    "password": "wrongpassword"
+}
+
+### AU-F2: Login Failure (Inactive Account) # Logic: Service checks UserStatus.ACTIVE enum
+
+POST {{baseUrlForAuth}}/login
+Content-Type: application/json
+
+{
+    "email": "inactive_user@infotact.com",
+    "password": "password123"
+}
+
+### AU-S2: Forgot Password Request
+POST {{baseUrlForAuth}}/forgot-password?email=superadmin@warehouse.com
+
+### AU-F3: Reset Password (Invalid/Expired Token)
+POST {{baseUrlForAuth}}/reset-password
+Content-Type: application/json
+
+{
+    "token": "invalid-uuid-token",
+    "newPassword": "NewSecurePassword@123"
+}

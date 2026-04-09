@@ -1,5 +1,6 @@
 package com.infotact.warehouse.service;
 
+import com.infotact.warehouse.dto.v1.request.CreateWarehouseRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import jakarta.validation.Valid;
@@ -7,57 +8,79 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 /**
- * Service interface for managing physical warehouse facilities.
- * Handles the lifecycle of warehouses, including registration, location updates,
- * and operational status toggling.
+ * Service interface for Physical Infrastructure and Facility Onboarding.
+ * <p>
+ * This service acts as the root orchestrator for the platform's multi-tenant
+ * architecture. It manages the lifecycle of physical facilities and handles
+ * the initial provisioning of warehouse administrative accounts.
+ * </p>
  */
 public interface WarehouseService {
 
     /**
-     * Retrieves a paginated list of all warehouses.
+     * Retrieves a paginated list of facilities across the system.
+     * <p>
+     * <b>Administrative Usage:</b> Typically used by Super Admins to manage
+     * the global facility portfolio.
+     * </p>
      * @param pageable Pagination and sorting parameters.
-     * @param includeInactive If true, returns all records; if false, filters for active facilities.
-     * @return A page of warehouse response objects.
+     * @param includeInactive If true, includes decommissioned or suspended facilities.
+     * @return A page of warehouse profiles.
      */
     Page<WarehouseResponse> getAllWarehouses(Pageable pageable, boolean includeInactive);
 
     /**
-     * Retrieves detailed information for a specific warehouse.
+     * Retrieves detailed metadata for a specific facility.
      * @param id The unique identifier (UUID) of the warehouse.
-     * @return The found warehouse details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if no warehouse exists with the given ID.
+     * @return Comprehensive warehouse details.
      */
     WarehouseResponse getWarehouse(String id);
 
     /**
-     * Updates an existing warehouse's name and location.
-     * @param id The unique identifier of the warehouse to update.
-     * @param request The updated data (name and location).
-     * @return The updated warehouse details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if no active warehouse is found.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException if the new name is taken by another facility.
+     * Updates facility-level metadata (Name and Geographic Location).
+     * <p>
+     * <b>Validation:</b> Ensures the new name does not collide with existing
+     * facilities to maintain reporting clarity.
+     * </p>
      */
     WarehouseResponse updateWarehouse(String id, @Valid WarehouseRequest request);
 
     /**
-     * Enables a deactivated warehouse, making it available for operational use.
-     * @param id The unique identifier of the warehouse.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the ID is invalid.
+     * Restores a facility to operational status.
+     * <p>
+     * Logic: Marking a warehouse as active allows users to once again log into
+     * this facility and perform inventory transactions.
+     * </p>
      */
     void activateWarehouse(String id);
 
     /**
-     * Deactivates a warehouse, effectively removing it from active operational views.
-     * @param id The unique identifier of the warehouse.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the ID is invalid.
+     * Decommissions a facility (Soft-Delete).
+     * <p>
+     * <b>Safety Logic:</b> Suspends all operational activity for the facility.
+     * Does not delete data, ensuring that historical audit logs for
+     * stock and orders remain intact.
+     * </p>
      */
     void deactivateWarehouse(String id);
 
     /**
-     * Registers a new warehouse facility in the system.
-     * @param request Data containing the facility name and geographic location.
-     * @return The created warehouse details.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException if the warehouse name is already registered.
+     * THE ONBOARDING ENGINE: Facility and Admin Provisioning.
+     * <p>
+     * <b>Transactional Workflow:</b>
+     * 1. <b>Facility Creation:</b> Validates name uniqueness and persists the new
+     * {@link com.infotact.warehouse.entity.Warehouse} record.
+     * 2. <b>Admin Initialization:</b> Creates the primary {@link com.infotact.warehouse.entity.User}
+     * for the facility, enforcing the "One Admin per Warehouse" business rule.
+     * 3. <b>Credential Logic:</b> Generates a deterministic welcome password
+     * (Welcome@ + Last 4 digits of contact number).
+     * 4. <b>Asynchronous Onboarding:</b> Triggers the Welcome Email workflow
+     * containing the access credentials.
+     * </p>
+     * @param request Data containing facility attributes and the primary admin's profile.
+     * @return The newly created warehouse details.
+     * @throws com.infotact.warehouse.exception.AlreadyExistsException if the name or
+     * admin email is already registered in the system.
      */
-    WarehouseResponse createWarehouse(@Valid WarehouseRequest request);
+    WarehouseResponse createWarehouse(@Valid CreateWarehouseRequest request);
 }

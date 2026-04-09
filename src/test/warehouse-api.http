@@ -1,0 +1,32 @@
+
+### WH-S1: Create Warehouse (Expected: 201)
+POST {{baseUrlForWarehouse}}
+Authorization: Bearer {{superAdminToken}}
+Content-Type: application/json
+
+{
+  "name": "Solapur Logistics Hub",
+  "location": "Solapur, Maharashtra"
+}
+
+### WH-F1: Duplicate Name Failure (Expected: 409 Conflict)
+POST {{baseUrlForWarehouse}}
+Authorization: Bearer {{superAdminToken}}
+Content-Type: application/json
+
+{
+  "name": "Pune Hub",
+  "location": "Kondhwa"
+}
+
+### WH-S2: Get All Warehouses (Paginated)
+GET {{baseUrlForWarehouse}}?page=0&size=10&includeInactive=true
+Authorization: Bearer {{superAdminToken}}
+
+### WH-F2: Security Test - Unauthorized Access (Expected: 403)
+GET {{baseUrlForWarehouse}}
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiU1VQRVJfQURNSU4iLCJzdWIiOiJzdXBlcmFkbWluQHdhcmVob3VzZS5jb20iLCJpYXQiOjE3NzUyMDAwMDQsImV4cCI6MTc3NTIzNjAwNH0.NMIQJPkYB0nrJxBRFSe8Zrvp0OTrm-R_AxBbvvEqihk
+
+### WH-S3: Deactivate Warehouse
+DELETE {{baseUrlForWarehouse}}/{{warehouseId}}
+Authorization: Bearer {{superAdminToken}}

@@ -2,8 +2,5 @@ package com.infotact.warehouse.entity.enums;
 
 public enum OrderStatus {
 
-    PENDING,
-    PICKING,
-    PACKED,
-    SHIPPED
+    PENDING, SHIPPED, DELIVERED, DELAYED, CANCELLED
 }

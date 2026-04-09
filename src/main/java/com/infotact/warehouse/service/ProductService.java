@@ -6,66 +6,84 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 /**
- * Service interface for managing the product lifecycle.
- * Handles inventory cataloging, SKU uniqueness, and visibility states.
+ * Service interface for Product Master Data management.
+ * <p>
+ * This service serves as the source of truth for the product catalog. It manages
+ * product definitions, SKU integrity, and lifecycle states (Active/Inactive).
+ * It ensures that all inventory operations reference valid, facility-authorized
+ * product entities.
+ * </p>
  */
 public interface ProductService {
 
     /**
-     * Registers a new product in the warehouse.
-     * @param request The product details including SKU, price, and category.
-     * @return The created product response.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException if the SKU is already in use.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the associated category is invalid or inactive.
+     * Registers a new product within the warehouse catalog.
+     * <p>
+     * <b>Integrity Rules:</b>
+     * 1. <b>SKU Uniqueness:</b> Validates that the SKU is unique within the facility
+     * using a case-insensitive check.
+     * 2. <b>Category Binding:</b> Ensures the product is linked to an existing
+     * and 'Active' {@link com.infotact.warehouse.entity.ProductCategory}.
+     * </p>
+     * @param request Product attributes (SKU, Name, Dimensions, Thresholds).
+     * @return The persisted product mapped to a response DTO.
+     * @throws com.infotact.warehouse.exception.AlreadyExistsException if SKU is taken.
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if Category is invalid.
      */
     ProductResponse addProduct(ProductRequest request);
 
     /**
-     * Retrieves a product by its internal database ID.
+     * Retrieves product metadata using the internal system identifier.
      * @param id The UUID of the product.
-     * @return The found product details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if no product exists with that ID.
+     * @return Full product details.
      */
     ProductResponse getProductById(String id);
 
     /**
-     * Retrieves a product using its unique Stock Keeping Unit (SKU).
-     * @param sku The business-facing unique code for the product.
-     * @return The found product details.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if no active product exists with that SKU.
+     * Resolves a product using its human-readable identifier (SKU).
+     * <p>
+     * <b>Operational Usage:</b> This is the primary entry point for
+     * Barcode/RFID scanner integrations.
+     * </p>
+     * @param sku The business-facing unique code.
+     * @return Product details if active.
      */
     ProductResponse getProductBySku(String sku);
 
     /**
-     * Updates an existing product's information.
-     * @param id The UUID of the product to update.
-     * @param request The updated data.
-     * @return The updated product details.
-     * @throws com.infotact.warehouse.exception.AlreadyExistsException if the new SKU conflicts with another product.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the product or new category is not found.
+     * Updates product specifications or classification.
+     * <p>
+     * <b>Note:</b> If the SKU is modified, the service re-validates
+     * uniqueness against the global catalog to prevent collisions.
+     * </p>
      */
     ProductResponse updateProduct(String id, ProductRequest request);
 
     /**
-     * Retrieves a paginated list of products.
+     * Provides a paginated view of the warehouse catalog.
+     * <p>
+     * <b>Filtering:</b> Defaults to 'Active' products for standard operations
+     * (Picking/Receiving) but allows 'Inactive' inclusion for administrative audits.
+     * </p>
      * @param pageable Pagination and sorting parameters.
-     * @param includeInactive If true, returns all products; if false, filters for active inventory only.
-     * @return A page of product responses.
+     * @param includeInactive Toggle to include archived/soft-deleted items.
      */
     Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive);
 
     /**
-     * Deactivates a product (Soft Delete).
-     * The product remains in the database for historical records but is hidden from operational views.
-     * @param id The UUID of the product to deactivate.
-     * @return The updated product with active set to false.
+     * Archives a product via "Soft-Delete".
+     * <p>
+     * <b>Logic:</b> Sets 'active' to false. This prevents the product from
+     * being ordered or received while preserving historical transaction
+     * data for financial and audit reports.
+     * </p>
+     * @param id The UUID of the product.
+     * @return The archived product details.
      */
     ProductResponse deleteProduct(String id);
 
     /**
-     * Reactivates a previously soft-deleted product.
-     * @param id The UUID of the product.
-     * @return The updated product with active set to true.
+     * Restores an archived product to the active catalog.
      */
     ProductResponse activateProduct(String id);
 }

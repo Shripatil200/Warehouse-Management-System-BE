@@ -1,5 +1,6 @@
 package com.infotact.warehouse.common_wrappers;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -9,16 +10,19 @@ import lombok.NoArgsConstructor;
 /**
  * Data Transfer Object for user authentication requests.
  */
-@Data
+
 @NoArgsConstructor
 @AllArgsConstructor
+@Data
+@Schema(description = "Login Credentials")
 public class LoginRequest {
 
-    @NotBlank(message = "Email is required")
-    @Email(message = "Invalid email format")
+    @NotBlank
+    @Email
+    @Schema(description = "Registered email address", example = "admin@warehouse.com")
     private String email;
 
-    @NotBlank(message = "Password is required")
+    @NotBlank
+    @Schema(description = "Account password", example = "Welcome@1234")
     private String password;
-
 }

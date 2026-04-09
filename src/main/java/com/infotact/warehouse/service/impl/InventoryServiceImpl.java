@@ -16,6 +16,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
+/**
+ * Implementation of {@link InventoryService} focusing on intelligent stock placement.
+ * <p>
+ * This service implements the 'Smart Putaway' algorithm, which optimizes warehouse
+ * space by prioritizing product affinity zones before searching for global
+ * fallback locations.
+ * </p>
+ */
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -25,50 +35,98 @@ public class InventoryServiceImpl implements InventoryService {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * <b>Implementation Details:</b>
+     * <ul>
+     * <li><b>Affinity Logic:</b> Attempts to locate bins within the product's
+     * Category-defined preferred zone to keep similar items together.</li>
+     * <li><b>Fallback Mechanism:</b> If the preferred zone is saturated, the system
+     * performs an automated global search for any available bin with sufficient capacity.</li>
+     * <li><b>Transactional Integrity:</b> Ensures that if an {@link InsufficientStorageException}
+     * is thrown, no partial stock updates occur.</li>
+     * </ul>
+     */
     @Override
     @Transactional
     public void receiveShipment(ReceivingRequest request) {
-        log.info("Starting receiving process for Product ID: {} | Quantity: {}",
+        log.info("Starting optimized receiving for Product ID: {} | Qty: {}",
                 request.getProductId(), request.getQuantity());
 
-        // 1. Validate Product Existence
+        // 1. Validate Product & Category
         Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found with ID: " + request.getProductId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        // 2. Putaway Algorithm: Find the first bin that can accommodate the quantity
-        StorageBin targetBin = binRepository.findAvailableBinsForPutaway(request.getQuantity())
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new InsufficientStorageException("No available bin space for quantity: " + request.getQuantity()));
+        String preferredZoneId = product.getCategory().getPreferredZoneId();
+        StorageBin targetBin = null;
 
-        // 3. Atomic Update: Update Storage Bin Occupancy
-        int newOccupancy = targetBin.getCurrentOccupancy() + request.getQuantity();
-        targetBin.setCurrentOccupancy(newOccupancy);
+        // 2. PHASE 1: Try Preferred Zone (Consolidation + Product Affinity)
+        if (preferredZoneId != null) {
+            List<StorageBin> preferredBins = binRepository.findSmartPutawayBins(
+                    product.getId(), preferredZoneId, request.getQuantity());
 
-        if (newOccupancy >= targetBin.getCapacity()) {
-            targetBin.setStatus(BinStatus.FULL);
+            if (!preferredBins.isEmpty()) {
+                targetBin = preferredBins.get(0);
+                log.info("Preferred Zone Match: Selected Bin {}", targetBin.getBinCode());
+            }
         }
 
-        // Save the bin state - @Version handles optimistic locking here
-        binRepository.save(targetBin);
+        // 3. PHASE 2: Fallback - Global Search
+        if (targetBin == null) {
+            log.warn("Preferred zone {} is FULL or not defined. Searching all zones...", preferredZoneId);
 
-        // 4. Atomic Update: Upsert Inventory Item
-        // Using orElseGet is professional practice to avoid unnecessary object instantiation
-        InventoryItem item = inventoryRepository.findByProductIdAndStorageBinId(product.getId(), targetBin.getId())
+            List<StorageBin> alternativeBins = binRepository.findSmartPutawayBins(
+                    product.getId(), null, request.getQuantity());
+
+            if (alternativeBins.isEmpty()) {
+                throw new InsufficientStorageException("CRITICAL: Warehouse is 100% full. No space found.");
+            }
+
+            targetBin = alternativeBins.get(0);
+            log.info("Force Putaway: Product diverted to Zone: {} | Bin: {}",
+                    targetBin.getAisle().getZone().getName(), targetBin.getBinCode());
+        }
+
+        // 4. Atomic Updates
+        processPutaway(targetBin, product, request.getQuantity());
+    }
+
+    /**
+     * Executes the physical-to-digital state transition.
+     * <p>
+     * This helper handles the dual-update of the {@link StorageBin} occupancy
+     * and the {@link InventoryItem} ledger.
+     * </p>
+     * @param bin The resolved target location.
+     * @param product The product being received.
+     * @param quantity The incoming amount.
+     */
+    private void processPutaway(StorageBin bin, Product product, Integer quantity) {
+        // Update Bin Occupancy
+        int newOccupancy = bin.getCurrentOccupancy() + quantity;
+        bin.setCurrentOccupancy(newOccupancy);
+
+        // Auto-toggle bin status if capacity is reached
+        if (newOccupancy >= bin.getCapacity()) {
+            bin.setStatus(BinStatus.FULL);
+        }
+        binRepository.save(bin);
+
+        // Update/Upsert Inventory Item using an upsert pattern
+        InventoryItem item = inventoryRepository.findByProductIdAndStorageBinId(product.getId(), bin.getId())
                 .orElseGet(() -> {
                     InventoryItem newItem = new InventoryItem();
                     newItem.setProduct(product);
-                    newItem.setStorageBin(targetBin);
+                    newItem.setStorageBin(bin);
                     newItem.setQuantity(0);
                     return newItem;
                 });
 
-        item.setQuantity(item.getQuantity() + request.getQuantity());
+        item.setQuantity(item.getQuantity() + quantity);
         inventoryRepository.save(item);
 
-        log.info("Successfully moved {} units of SKU: {} to Bin: {}",
-                request.getQuantity(), product.getSku(), targetBin.getBinCode());
-
-        // the sum of InventoryItems is our real-time source of truth.
+        log.info("Putaway Complete: SKU {} -> Bin {} (New Occupancy: {})",
+                product.getSku(), bin.getBinCode(), newOccupancy);
     }
 }

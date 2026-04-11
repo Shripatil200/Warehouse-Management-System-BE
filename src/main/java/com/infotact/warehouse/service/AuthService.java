@@ -5,6 +5,8 @@ import com.infotact.warehouse.common_wrappers.LoginRequest;
 import com.infotact.warehouse.common_wrappers.ResetPasswordRequest;
 import com.infotact.warehouse.dto.v1.response.AuthResponse; // New Import
 
+import java.util.Map;
+
 /**
  * Service interface for Identity and Access Management (IAM).
  * <p>
@@ -51,7 +53,7 @@ public interface AuthService {
      * @param email The target user's registered email address.
      * @return A generic notification message to prevent 'User Enumeration' attacks.
      */
-    String forgotPassword(String email);
+    Map<String, String> forgotPassword(String email);
 
     /**
      * Completes the account recovery process using a valid token.
@@ -65,4 +67,10 @@ public interface AuthService {
      * @throws com.infotact.warehouse.exception.BadRequestException if the token is invalid or expired.
      */
     String resetPassword(ResetPasswordRequest request);
+
+    void sendEmailOtp(String email);
+    String processEmailVerification(String email, String otp);
+
+    void sendContactOtp(String contact);
+    String processContactVerification(String contact, String otp);
 }

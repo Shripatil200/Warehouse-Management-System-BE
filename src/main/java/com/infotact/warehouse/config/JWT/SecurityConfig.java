@@ -37,7 +37,7 @@ public class SecurityConfig {
     private final UsersDetailsService usersDetailsService;
     private final JwtFilter jwtFilter;
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000}")
+    @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
     public SecurityConfig(UsersDetailsService usersDetailsService, JwtFilter jwtFilter) {
@@ -60,6 +60,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
                                 "/api/v1/warehouses/setup",
+                                "/api/v1/auth/otp/send-email",
+                                "api/v1/auth/otp/verify-email",
+                                "api/v1/auth/otp/send-contact",
+                                "api/v1/auth/otp/verify-contact",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**"
                         ).permitAll()

@@ -51,6 +51,8 @@ public class WarehouseController {
     })
     @PostMapping("/setup")
     public ResponseEntity<WarehouseResponse> setup(@Valid @RequestBody CreateWarehouseRequest request){
+        System.out.println(request.getContactToken());
+        System.out.println(request.getEmailToken());
         return ResponseEntity.status(HttpStatus.CREATED).body(warehouseService.createWarehouse(request));
     }
 

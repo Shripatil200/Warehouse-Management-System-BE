@@ -10,16 +10,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Data Transfer Object for the initial system setup.
+ * Data Transfer Object for the verified system setup.
  * <p>
- * This request simultaneously creates the first physical warehouse entity
- * and the primary Administrative user who will manage the system.
+ * Requires verification tokens generated from the OTP flow to ensure
+ * authenticity and prevent bot-driven warehouse creation.
  * </p>
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Request payload to initialize the primary warehouse facility and the first Admin user")
+@Schema(description = "Verified request payload to initialize a warehouse and the primary Admin user")
 public class CreateWarehouseRequest {
 
     // --- Warehouse Details ---
@@ -40,12 +40,27 @@ public class CreateWarehouseRequest {
 
     @Email(message = "Invalid email format")
     @NotBlank(message = "Admin email is required")
-    @Schema(description = "Email address for the admin account (used for login and recovery)", example = "admin@infotact.com")
+    @Schema(description = "Email used for login. Must match the email used for OTP verification.", example = "admin@infotact.com")
     private String adminEmail;
 
     @NotBlank(message = "Contact number is required")
     @Size(min = 10, max = 15)
     @Pattern(regexp = "^\\d+$", message = "Contact number must contain only digits")
-    @Schema(description = "Primary contact number. The last 4 digits will be used to generate the default password.", example = "9876543210")
+    @Schema(description = "Primary contact number. Must match the number used for OTP verification.", example = "9876543210")
     private String adminContact;
+
+    @NotBlank(message = "Password is required")
+    @Size(min = 8, message = "Password must be at least 8 characters long")
+    @Schema(description = "Secure password for the admin account", example = "SecurePass123!")
+    private String password;
+
+    // --- Verification Proofs (Critical for Security) ---
+
+    @NotBlank(message = "Email verification token is missing")
+    @Schema(description = "The eml-UUID token received after successful email OTP verification")
+    private String emailToken;
+
+    @NotBlank(message = "Contact verification token is missing")
+    @Schema(description = "The cnt-UUID token received after successful contact OTP verification")
+    private String contactToken;
 }

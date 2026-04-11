@@ -1,5 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.common_wrappers.VerifiedProof;
 import com.infotact.warehouse.dto.v1.request.CreateWarehouseRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
@@ -8,8 +9,10 @@ import com.infotact.warehouse.entity.Warehouse;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import com.infotact.warehouse.exception.AlreadyExistsException;
+import com.infotact.warehouse.exception.BadRequestException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.UserRepository;
+import com.infotact.warehouse.repository.VerifiedProofRepository;
 import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.WarehouseService;
 import com.infotact.warehouse.util.EmailUtils;
@@ -45,39 +48,61 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final PasswordEncoder passwordEncoder;
     private final EmailUtils emailUtils;
 
+    private final VerifiedProofRepository proofRepo;
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Implementation Details:</b>
+     * <b>Updated Implementation:</b>
      * <ul>
-     * <li><b>Uniqueness Guard:</b> Validates both Warehouse Name and Admin Email
-     * before initiating persistence.</li>
-     * <li><b>Deterministic Passwords:</b> Sets the initial credential using the
-     * <code>Welcome@ + last4</code> phone logic.</li>
-     * <li><b>Resilient Onboarding:</b> Triggers an asynchronous welcome email.
-     * Failures in the mail server will not roll back the facility creation.</li>
+     * <li><b>Proof Validation:</b> Verifies Redis tokens for both Email and Contact.</li>
+     * <li><b>Identity Guard:</b> Ensures the verified identifiers match the form data.</li>
+     * <li><b>Secure Passwords:</b> Uses the password provided by the user in the request.</li>
      * </ul>
+     * Tokens are deleted immediately after successful persistence to prevent replay attacks.
      */
+
     @Override
     @Transactional
     public WarehouseResponse createWarehouse(@Valid CreateWarehouseRequest request) {
 
-        if (warehouseRepository.existsByNameIgnoreCase(request.getName())) {
-            throw new AlreadyExistsException("Warehouse with name '" + request.getName() + "' already exists.");
+        // 1. Validate and Fetch Email Proof from Redis
+        VerifiedProof emailProof = proofRepo.findById(request.getEmailToken())
+                .orElseThrow(() -> new BadRequestException("Email verification expired or invalid."));
+
+        if (!emailProof.getIdentifier().equalsIgnoreCase(request.getAdminEmail())) {
+            throw new BadRequestException("Security Alert: The verified email does not match the provided admin email.");
         }
 
-        if (userRepository.findByEmail(request.getAdminEmail()).isPresent()) {
-            throw new AlreadyExistsException("The email '" + request.getAdminEmail() + "' is already registered.");
+        // 2. Validate and Fetch Contact Proof from Redis
+        VerifiedProof contactProof = proofRepo.findById(request.getContactToken())
+                .orElseThrow(() -> new BadRequestException("Contact verification expired or invalid."));
+
+        if (!contactProof.getIdentifier().equals(request.getAdminContact())) {
+            throw new BadRequestException("Security Alert: The verified contact does not match the provided admin contact.");
         }
 
-        // 1. Create the Warehouse Facility
+        // 3. Uniqueness Checks
+        // Business Rule: Duplicate names allowed only if locations are different
+        if (warehouseRepository.existsByNameIgnoreCaseAndLocationIgnoreCase(request.getName(), request.getLocation())) {
+            throw new AlreadyExistsException("A warehouse with this name already exists at this location.");
+        }
+
+        if (userRepository.existsByEmail(request.getAdminEmail())) {
+            throw new AlreadyExistsException("The admin email '" + request.getAdminEmail() + "' is already in use.");
+        }
+
+        if(userRepository.existsByContactNumber(request.getAdminContact())){
+            throw new AlreadyExistsException("The admin contact '"+ request.getAdminContact()+"' is already in use.");
+        }
+
+        // 4. Persist the Warehouse Facility
         Warehouse warehouse = new Warehouse();
         warehouse.setName(request.getName());
         warehouse.setLocation(request.getLocation());
         warehouse.setActive(true);
         Warehouse savedWarehouse = warehouseRepository.save(warehouse);
 
-        // 2. Initialize the Primary Admin User
+        // 5. Initialize the Primary Admin User
         User admin = new User();
         admin.setName(request.getAdminName());
         admin.setEmail(request.getAdminEmail());
@@ -85,30 +110,31 @@ public class WarehouseServiceImpl implements WarehouseService {
         admin.setRole(Role.ADMIN);
         admin.setStatus(UserStatus.ACTIVE);
         admin.setWarehouse(savedWarehouse);
+        admin.setPassword(passwordEncoder.encode(request.getPassword()));
 
-        // 3. Password Generation Logic
-        String phone = request.getAdminContact();
-        String lastFour = (phone != null && phone.length() >= 4)
-                ? phone.substring(phone.length() - 4)
-                : "0000";
-
-        admin.setPassword(passwordEncoder.encode("Welcome@" + lastFour));
         userRepository.save(admin);
 
-        // 4. Asynchronous Welcome Notification
+        // 6. STRICT CLEANUP: Delete proof tokens from Redis immediately
+        // This ensures the same tokens cannot be used to call this API again.
+        proofRepo.delete(emailProof);
+        proofRepo.delete(contactProof);
+
+        log.info("Redis proof tokens consumed and deleted for: {}", admin.getEmail());
+
+        // 7. Asynchronous Welcome Notification
         try {
             emailUtils.sendWarehouseWelcomeEmail(
                     admin.getEmail(),
                     admin.getName(),
                     savedWarehouse.getName()
             );
-            log.info("Provisioning: Welcome email queued for Admin: {}", admin.getEmail());
         } catch (Exception e) {
-            log.error("Warning: Warehouse created, but onboarding email failed: {}", e.getMessage());
+            log.warn("Warehouse '{}' created, but welcome email failed for {}: {}",
+                    savedWarehouse.getName(), admin.getEmail(), e.getMessage());
         }
 
-        log.info("SUCCESS: Facility '{}' initialized with Admin account '{}'.",
-                savedWarehouse.getName(), admin.getEmail());
+        log.info("SUCCESS: Verified Facility '{}' (ID: {}) initialized for Admin '{}'.",
+                savedWarehouse.getName(), savedWarehouse.getId(), admin.getEmail());
 
         return mapToResponse(savedWarehouse);
     }

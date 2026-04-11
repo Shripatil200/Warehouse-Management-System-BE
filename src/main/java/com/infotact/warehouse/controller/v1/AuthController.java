@@ -3,6 +3,7 @@ package com.infotact.warehouse.controller.v1;
 import com.infotact.warehouse.common_wrappers.ChangePasswordRequest;
 import com.infotact.warehouse.common_wrappers.LoginRequest;
 import com.infotact.warehouse.common_wrappers.ResetPasswordRequest;
+import com.infotact.warehouse.dto.v1.request.OtpVerificationRequest;
 import com.infotact.warehouse.dto.v1.response.AuthResponse; // New Import
 import com.infotact.warehouse.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,7 +40,7 @@ public class AuthController {
      * Logic: Validates credentials and checks account status. Returns an object
      * containing the JWT and user metadata (Role, Warehouse) for client-side routing.
      * </p>
-     *
+     *w
      * @param request Contains email and password.
      * @return An {@link AuthResponse} containing the session token and user context.
      */
@@ -84,7 +85,7 @@ public class AuthController {
      */
     @Operation(summary = "Forgot Password", description = "Triggers an email containing a reset token to the user's registered email address.")
     @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(
+    public ResponseEntity<Map<String, String>> forgotPassword(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "JSON containing the user email",
                     content = @Content(schema = @Schema(example = "{\"email\": \"user@example.com\"}")))
@@ -104,5 +105,37 @@ public class AuthController {
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         return ResponseEntity.ok(authService.resetPassword(request));
+    }
+
+    @PostMapping("/otp/send-email")
+    public ResponseEntity<Void> sendEmailOtp(@RequestParam String email) {
+        authService.sendEmailOtp(email);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/otp/verify-email")
+    public ResponseEntity<Map<String, String>> verifyEmail(@Valid @RequestBody OtpVerificationRequest request) {
+        System.out.println(request.getIdentifier());
+        System.out.println(request.getOtp());
+        // request.getIdentifier() now works!
+        String token = authService.processEmailVerification(request.getIdentifier(), request.getOtp());
+        return ResponseEntity.ok(Map.of("emailToken", token));
+    }
+
+    // --- CONTACT VERIFICATION HANDSHAKE ---
+
+    @PostMapping("/otp/send-contact")
+    public ResponseEntity<Void> sendContactOtp(@RequestParam String contact) {
+        authService.sendContactOtp(contact);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/otp/verify-contact")
+    public ResponseEntity<Map<String, String>> verifyContact(@RequestBody OtpVerificationRequest request) {
+        System.out.println(request.getIdentifier());
+        System.out.println(request.getOtp());
+        // Returns: {"contactToken": "v-token-uuid-here"}
+        String token = authService.processContactVerification(request.getIdentifier(), request.getOtp());
+        return ResponseEntity.ok(Map.of("contactToken", token));
     }
 }

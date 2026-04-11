@@ -6,10 +6,13 @@ import com.infotact.warehouse.dto.v1.response.AuthResponse;
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import com.infotact.warehouse.exception.*;
+import com.infotact.warehouse.repository.OtpTokenRepository;
 import com.infotact.warehouse.repository.ResetPasswordRepository;
 import com.infotact.warehouse.repository.UserRepository;
+import com.infotact.warehouse.repository.VerifiedProofRepository;
 import com.infotact.warehouse.service.AuthService;
 import com.infotact.warehouse.util.EmailUtils;
+import com.infotact.warehouse.util.SmsUtils;
 import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -43,6 +47,9 @@ public class AuthServiceImpl implements AuthService {
     private final JwtUtil jwtUtil;
     private final EmailUtils emailUtils;
     private final PasswordEncoder passwordEncoder;
+    private final OtpTokenRepository otpRepo;
+    private final VerifiedProofRepository proofRepo;
+    private final SmsUtils smsUtils;
 
     /**
      * Internal utility to resolve the current session's identity.
@@ -133,7 +140,7 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     @Transactional
-    public String forgotPassword(String email) {
+    public Map<String, String> forgotPassword(String email) {
         log.info("Forgot password link requested for email: {}", email);
 
         userRepository.findByEmail(email).ifPresent(user -> {
@@ -149,7 +156,7 @@ public class AuthServiceImpl implements AuthService {
             }
         });
 
-        return "Reset link sent to your email.";
+        return Map.of("message", "Reset link sent to your email.");
     }
 
     /** * {@inheritDoc}
@@ -184,5 +191,89 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return "Password changed successfully";
+    }
+
+    /**
+     * Sends a 6-digit OTP to email.
+     * Clears any existing OTP for this email first.
+     */
+    @Override
+    public void sendEmailOtp(String email) {
+        // 1. Clear previous OTP if user clicked 'Resend'
+        otpRepo.findById(email).ifPresent(otpRepo::delete);
+
+        String otp = String.format("%06d", new java.util.Random().nextInt(1000000));
+        otpRepo.save(new OtpToken(email, otp));
+
+        try {
+            emailUtils.sendOtpMail(email, "Email Verification Code", otp);
+            log.info("Fresh OTP sent to email: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send email OTP to {}: {}", email, e.getMessage());
+            throw new BadRequestException("Failed to send email. Please try again.");
+        }
+    }
+
+    /**
+     * Verifies Email OTP.
+     * Deletes the OTP immediately so it cannot be reused.
+     */
+    @Override
+    public String processEmailVerification(String email, String otp) {
+        OtpToken cached = otpRepo.findById(email)
+                .orElseThrow(() -> new BadRequestException("OTP expired or not found. Please resend."));
+
+        if (!cached.getOtpCode().equals(otp)) {
+            throw new BadRequestException("Invalid OTP code.");
+        }
+
+        // 2. Consume OTP immediately on success
+        otpRepo.delete(cached);
+
+        String vToken = "eml-" + UUID.randomUUID();
+        proofRepo.save(new VerifiedProof(vToken, email));
+        return vToken;
+    }
+
+    /**
+     * Sends a 6-digit OTP to contact via Fast2SMS.
+     * Clears any existing OTP for this contact first.
+     */
+    @Override
+    public void sendContactOtp(String contact) {
+        // 1. Clear previous OTP to ensure only the latest SMS is valid
+        otpRepo.findById(contact).ifPresent(otpRepo::delete);
+
+        String otp = String.format("%06d", new java.util.Random().nextInt(1000000));
+        otpRepo.save(new OtpToken(contact, otp));
+
+        try {
+            smsUtils.sendOtpSms(contact, otp);
+            log.info("Fresh Contact OTP sent to: {}", contact);
+        } catch (Exception e) {
+            log.error("Failed to send SMS to {}: {}", contact, e.getMessage());
+            throw new BadRequestException("Failed to send SMS. Please check the number or balance.");
+        }
+    }
+
+    /**
+     * Verifies Contact OTP.
+     * Deletes the OTP immediately so it cannot be reused.
+     */
+    @Override
+    public String processContactVerification(String contact, String otp) {
+        OtpToken cached = otpRepo.findById(contact)
+                .orElseThrow(() -> new BadRequestException("OTP expired or not found. Please resend."));
+
+        if (!cached.getOtpCode().equals(otp)) {
+            throw new BadRequestException("Invalid OTP code.");
+        }
+
+        // 2. Consume OTP immediately on success
+        otpRepo.delete(cached);
+
+        String vToken = "cnt-" + UUID.randomUUID();
+        proofRepo.save(new VerifiedProof(vToken, contact));
+        return vToken;
     }
 }

@@ -3,6 +3,10 @@ package com.infotact.warehouse.repository;
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -70,4 +74,15 @@ public interface UserRepository extends JpaRepository<User, String> {
      * Global role lookup. Primarily used for system-wide administrative tasks.
      */
     Collection<User> findByRole(Role role);
+
+    boolean existsByEmail(@Email(message = "Invalid email format") @NotBlank(message = "Admin email is required") String adminEmail);
+
+    boolean existsByContactNumber(@NotBlank(message = "Contact number is required") @Size(min = 10, max = 15) @Pattern(regexp = "^\\d+$", message = "Contact number must contain only digits") String adminContact);
+
+    /**
+     * Counts the number of unique warehouses assigned to a specific user email.
+     * Use DISTINCT to ensure we don't over-count if the user has multiple roles/records.
+     */
+    @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
+    long countAssignedWarehouseForUser(@Param("email") String email);
 }

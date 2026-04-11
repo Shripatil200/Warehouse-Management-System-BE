@@ -64,9 +64,11 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
     Integer sumOccupancyByAisleId(@Param("aisleId") String aisleId);
 
     /**
-     * Checks if a warehouse exists with the given name, ignoring case sensitivity.
-     * Spring Data JPA will automatically generate the implementation.
+     * Checks if a warehouse exists with the given name and location, ignoring case.
      */
+    boolean existsByNameIgnoreCaseAndLocationIgnoreCase(String name, String location);
+
+    // You might also have this for your login/auth flow
     boolean existsByNameIgnoreCase(String name);
 
 

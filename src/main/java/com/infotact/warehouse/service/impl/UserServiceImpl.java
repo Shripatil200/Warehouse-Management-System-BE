@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,13 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Implementation of {@link UserService} for Identity and Access Management.
+ * Implementation of {@link UserService} for Identity and Access Management (IAM).
  * <p>
- * This service manages the staff lifecycle within the boundaries of a specific facility.
- * It implements strict hierarchical security where <code>ADMIN</code> users hold
- * promotion/deletion authority, while <code>MANAGER</code> users handle daily status
- * and profile management.
+ * This service manages the staff lifecycle within strict multi-tenant boundaries.
+ * It enforces a "Silo" architecture where users are isolated by their assigned warehouse facility.
  * </p>
+ * <p><b>Security Principles:</b>
+ * <ul>
+ * <li><b>Hierarchy:</b> Managers manage Employees; only Admins manage Managers/Admins.</li>
+ * <li><b>Isolation:</b> Cross-warehouse data access is strictly prohibited.</li>
+ * <li><b>Integrity:</b> Soft-delete is used to preserve historical transaction audits.</li>
+ * </ul>
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -48,7 +54,9 @@ public class UserServiceImpl implements UserService {
     private static final String ROLE_MANAGER = "ROLE_MANAGER";
 
     /**
-     * Internal helper to verify if the requester has specific authority.
+     * Internal helper to verify the security clearance of the current session holder.
+     * @param role The role string to check (e.g., "ROLE_ADMIN").
+     * @return true if the user holds the specified authority.
      */
     private boolean hasRole(String role) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -59,9 +67,10 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * Resolves the session holder's profile.
-     * <p><b>Optimization:</b> Cached by username to reduce repeated SecurityContext
-     * lookups during multi-tenant validation.</p>
+     * Resolves the profile of the currently authenticated user from the SecurityContext.
+     * <p><b>Cache Optimization:</b> Uses Spring Cache to reduce database hits for
+     * multi-tenant validation on every request.</p>
+     * @return The {@link User} entity of the current requester.
      */
     @Cacheable(value = "userProfiles", key = "'auth_' + T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName()")
     public User getAuthenticatedUser() {
@@ -71,8 +80,8 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * Enforces the 'Silo' boundary.
-     * Ensures the current user and the target user belong to the same facility.
+     * Enforces the multi-tenant "Silo" boundary.
+     * @throws UnauthorizedException if the requester attempts to access data outside their assigned warehouse.
      */
     private void validateWarehouseAccess(User currentUser, User targetUser) {
         if (currentUser.getWarehouse() == null || targetUser.getWarehouse() == null ||
@@ -83,13 +92,25 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
+     * Enforces the hierarchical management rule.
+     * <p>Prevents Managers from modifying other Managers or Admins. Only Admins have authority
+     * over management-level personnel.</p>
+     */
+    private void validateHierarchy(User targetUser) {
+        if (hasRole(ROLE_MANAGER) && !hasRole(ROLE_ADMIN)) {
+            if (targetUser.getRole() == Role.ADMIN || targetUser.getRole() == Role.MANAGER) {
+                throw new UnauthorizedException("Hierarchy Violation: Managers can only manage Staff/Employees.");
+            }
+        }
+    }
+
+    /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b>
+     * <p><b>Business Logic:</b>
      * <ul>
-     * <li>Enforces deterministic password policy: <code>Welcome@ + [Last 4 phone digits]</code>.</li>
-     * <li>Strictly prevents Managers from creating Admin-level accounts.</li>
-     * <li>Triggers an onboarding email containing temporary credentials.</li>
+     * <li>Generates a temporary password: Welcome@ + [Last 4 digits of phone].</li>
+     * <li>Assigns the user to the requester's warehouse facility.</li>
+     * <li>Triggers onboarding email with credentials.</li>
      * </ul>
      */
     @Override
@@ -99,19 +120,19 @@ public class UserServiceImpl implements UserService {
         User currentUser = getAuthenticatedUser();
         Role targetRole = Role.valueOf(request.getRole().toUpperCase());
 
-        if (targetRole == Role.ADMIN && !hasRole(ROLE_ADMIN)) {
-            throw new UnauthorizedException("Insufficient Privilege: Only Admins can provision other Admin accounts.");
+        if (targetRole != Role.EMPLOYEE && !hasRole(ROLE_ADMIN)) {
+            throw new UnauthorizedException("Insufficient Privilege: Only Admins can provision non-employee accounts.");
         }
 
         if (!currentUser.getWarehouse().getId().equals(request.getWarehouseId())) {
-            throw new UnauthorizedException("Multi-tenancy Error: Warehouse assignment mismatch.");
+            throw new UnauthorizedException("Multi-tenancy Error: You cannot create users for a different facility.");
         }
 
         if (userRepository.findByEmail(request.getEmail()).isPresent())
             throw new AlreadyExistsException("A user with this email is already registered.");
 
         Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse facility not found."));
 
         User newUser = new User();
         newUser.setName(request.getName());
@@ -133,22 +154,25 @@ public class UserServiceImpl implements UserService {
 
     /**
      * {@inheritDoc}
-     * <p><b>Filtering:</b> Strictly limited to the authenticated user's warehouse.</p>
+     * <p>Returns a paginated view of staff members restricted to the requester's warehouse.</p>
      */
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Cacheable(value = "warehouseUsers", key = "'list_' + T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName()")
-    public List<UserResponse> getAllUser() {
+    public Page<UserResponse> getAllUser(Pageable pageable) {
         User currentUser = getAuthenticatedUser();
-        return userRepository.findAllByWarehouse(currentUser.getWarehouse().getId())
-                .stream().map(UserResponse::new).toList();
+        return userRepository.findAllByWarehouse(currentUser.getWarehouse().getId(), pageable)
+                .map(UserResponse::new);
     }
 
     /**
      * {@inheritDoc}
-     * <p><b>RBAC Logic:</b> Profile metadata updates are permitted for Managers,
-     * but Role modifications (Promotions) are strictly reserved for Admins.</p>
+     * <p><b>Validation Logic:</b>
+     * <ul>
+     * <li>Self-update is permitted for all users.</li>
+     * <li>Email and Contact uniqueness is verified against other existing users.</li>
+     * <li>Role promotion/demotion is strictly reserved for ADMIN role.</li>
+     * </ul>
      */
     @Override
     @Transactional
@@ -158,37 +182,58 @@ public class UserServiceImpl implements UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
-        validateWarehouseAccess(currentUser, targetUser);
+        if (!currentUser.getId().equals(targetUser.getId())) {
+            validateWarehouseAccess(currentUser, targetUser);
+            validateHierarchy(targetUser);
+        }
+
+        if (request.getEmail() != null && !targetUser.getEmail().equalsIgnoreCase(request.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new AlreadyExistsException("The email '" + request.getEmail() + "' is already in use by another account.");
+            }
+            targetUser.setEmail(request.getEmail());
+        }
+
+        if (request.getContactNumber() != null && !targetUser.getContactNumber().equalsIgnoreCase(request.getContactNumber())) {
+            if (userRepository.existsByContactNumber(request.getContactNumber())) {
+                throw new AlreadyExistsException("The contact number '" + request.getContactNumber() + "' is already registered.");
+            }
+            targetUser.setContactNumber(request.getContactNumber());
+        }
 
         if (request.getName() != null) targetUser.setName(request.getName());
-        if (request.getEmail() != null) targetUser.setEmail(request.getEmail());
-        if (request.getContactNumber() != null) targetUser.setContactNumber(request.getContactNumber());
 
         if (request.getRole() != null) {
             if (!hasRole(ROLE_ADMIN)) {
-                log.warn("Unauthorized Role Update: Manager {} attempted to promote {}", currentUser.getEmail(), targetUser.getEmail());
                 throw new UnauthorizedException("Access Denied: Role modifications require Admin clearance.");
             }
-            targetUser.setRole(Role.valueOf(request.getRole().toUpperCase()));
+            targetRoleModification(targetUser, request.getRole());
         }
 
         userRepository.save(targetUser);
         return "User profile updated successfully.";
     }
 
+    private void targetRoleModification(User user, String role) {
+        user.setRole(Role.valueOf(role.toUpperCase()));
+    }
+
     /**
      * {@inheritDoc}
-     * <p><b>Soft-Delete:</b> Sets status to <code>DELETED</code> to maintain
-     * referential integrity for historical order logs.</p>
+     * <p>Sets user status to <code>DELETED</code>. Prevents self-deletion.</p>
      */
     @Override
     @Transactional
     @CacheEvict(value = {"userProfiles", "warehouseUsers"}, allEntries = true)
     public void deleteUser(String id) {
-        if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Only Admins can deactivate user accounts.");
+        if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Only Admins can perform account deactivation.");
 
         User targetUser = userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found."));
         User currentUser = getAuthenticatedUser();
+
+        if (currentUser.getId().equals(targetUser.getId())) {
+            throw new BadRequestException("Safety Violation: You cannot delete your own account.");
+        }
 
         validateWarehouseAccess(currentUser, targetUser);
         targetUser.setStatus(UserStatus.DELETED);
@@ -198,11 +243,14 @@ public class UserServiceImpl implements UserService {
     /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "userProfiles", key = "#id")
     public UserResponse getUserById(String id) {
         User currentUser = getAuthenticatedUser();
         User targetUser = userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found."));
-        validateWarehouseAccess(currentUser, targetUser);
+
+        if (!currentUser.getId().equals(targetUser.getId())) {
+            validateWarehouseAccess(currentUser, targetUser);
+        }
+
         return new UserResponse(targetUser);
     }
 
@@ -214,9 +262,23 @@ public class UserServiceImpl implements UserService {
     public void updateStatus(String userId, UserStatus status) {
         User currentUser = getAuthenticatedUser();
         User targetUser = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (currentUser.getId().equals(targetUser.getId())) {
+            throw new BadRequestException("Self-Modification Error: You cannot change your own operational status.");
+        }
+
         validateWarehouseAccess(currentUser, targetUser);
+        validateHierarchy(targetUser);
+
         targetUser.setStatus(status);
         userRepository.save(targetUser);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getMyProfile() {
+        return new UserResponse(getAuthenticatedUser());
     }
 
     /** {@inheritDoc} */

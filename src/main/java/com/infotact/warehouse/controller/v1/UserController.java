@@ -16,6 +16,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,7 +31,7 @@ import java.util.List;
  * <p>
  * This controller handles the lifecycle of users, including registration, status updates,
  * and profile management. Access is partitioned by the requester's warehouse to
- * ensure strict multi-tenant data privacy.
+ * ensure strict multi-tenant data privacy (Silo Pattern).
  * </p>
  */
 @RestController
@@ -51,7 +54,7 @@ public class UserController {
      */
     @Operation(
             summary = "Register a new staff member",
-            description = "Creates a new user record. Warehouse isolation is enforced based on the requester's context."
+            description = "Creates a new user record. Warehouse isolation is enforced. Managers cannot create ADMIN/MANAGER roles."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "User created successfully"),
@@ -65,19 +68,29 @@ public class UserController {
     }
 
     /**
-     * Retrieves all users within the authenticated user's warehouse.
-     *
-     * @return A list of UserResponse objects.
+     * Retrieves the profile of the currently authenticated user.
+     * * @return The UserResponse of the session holder.
      */
-    @Operation(summary = "Retrieve all users", description = "Fetches all users belonging to the requester's assigned warehouse.")
+    @Operation(summary = "Get my profile", description = "Retrieves the profile of the currently logged-in user.")
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getMyProfile() {
+        return ResponseEntity.ok(userService.getMyProfile());
+    }
+
+    /**
+     * Retrieves a paginated list of all users within the requester's warehouse.
+     *
+     * @param pageable pagination parameters (page, size, sort).
+     * @return A Page of UserResponse objects.
+     */
+    @Operation(summary = "Retrieve all users (Paginated)", description = "Fetches a paginated list of users belonging to the requester's warehouse.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "List retrieved",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = UserResponse.class))))
+            @ApiResponse(responseCode = "200", description = "Page retrieved successfully")
     })
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    public ResponseEntity<List<UserResponse>> getAll() {
-        return ResponseEntity.ok(userService.getAllUser());
+    public ResponseEntity<Page<UserResponse>> getAll(@PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(userService.getAllUser(pageable));
     }
 
     /**
@@ -86,9 +99,9 @@ public class UserController {
      * @param id The UUID of the user.
      * @return The user details if the requester has warehouse access.
      */
-    @Operation(summary = "Get user by ID", description = "Fetches details for a user. Access is restricted to the user's warehouse.")
+    @Operation(summary = "Get user by ID", description = "Fetches details for a user. Access is restricted to the user's warehouse context.")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<UserResponse> getById(
             @Parameter(description = "The unique UUID of the user", example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable String id) {
@@ -116,7 +129,7 @@ public class UserController {
      * @param id The user's UUID.
      * @param status The new status to apply.
      */
-    @Operation(summary = "Update user status", description = "Activates or deactivates a user record within the warehouse scope.")
+    @Operation(summary = "Update user status", description = "Activates or deactivates a user record. Managers cannot modify other Managers/Admins.")
     @PatchMapping("/status")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> updateStatus(
@@ -129,13 +142,13 @@ public class UserController {
     /**
      * Updates user profile information.
      * <p>
-     * Note: While Managers can update basic details, the service layer
-     * prevents them from modifying the 'Role' field.
+     * Users can update their own details. Managers can update employees.
+     * Role changes are strictly restricted to ADMINs in the service layer.
      * </p>
      */
-    @Operation(summary = "Update user details", description = "Updates profile fields. Role changes are restricted to ADMIN in the service layer.")
+    @Operation(summary = "Update user details", description = "Updates profile fields. Role changes require ADMIN role.")
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<String> update(
             @PathVariable String id,
             @Valid @RequestBody UserUpdate request) {
@@ -149,10 +162,11 @@ public class UserController {
      * Account is marked as 'DELETED' to preserve audit history.
      * </p>
      */
-    @Operation(summary = "Soft delete user", description = "Marks a user record as DELETED. Strictly restricted to ADMIN role.")
+    @Operation(summary = "Soft delete user", description = "Marks a user record as DELETED. Restricted to ADMIN role. Self-deletion is blocked.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "User deleted successfully"),
-            @ApiResponse(responseCode = "403", description = "Forbidden: Managers cannot delete accounts")
+            @ApiResponse(responseCode = "400", description = "Cannot delete own account"),
+            @ApiResponse(responseCode = "403", description = "Forbidden: Insufficient permissions")
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
@@ -161,7 +175,10 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "Get all active users", description = "Retrieves ACTIVE users within the warehouse scope.")
+    /**
+     * Retrieves all active users for operational assignments.
+     */
+    @Operation(summary = "Get all active users", description = "Retrieves ACTIVE users within the warehouse scope for task assignment.")
     @GetMapping("/all-active")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<List<UserResponse>> getAllActiveUsers(){

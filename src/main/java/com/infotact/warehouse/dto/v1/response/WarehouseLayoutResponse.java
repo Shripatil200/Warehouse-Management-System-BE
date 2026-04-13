@@ -2,6 +2,9 @@ package com.infotact.warehouse.dto.v1.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
+
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 import java.util.Set;
 
@@ -20,7 +23,9 @@ import java.util.Set;
         name = "WarehouseLayoutResponse",
         description = "Hierarchical model of the physical warehouse structure including maintenance status and capacity metrics"
 )
-public class WarehouseLayoutResponse {
+public class WarehouseLayoutResponse implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "The unique UUID of the warehouse facility", example = "550e8400-e29b-41d4-a716-446655440000")
     private String id;

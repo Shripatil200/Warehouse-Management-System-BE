@@ -6,27 +6,48 @@ import com.infotact.warehouse.dto.v1.response.UserResponse;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
 /**
  * Service interface for Identity Management and Staff Orchestration.
  * <p>
- * This service manages the staff lifecycle, role-based access control (RBAC),
- * and multi-tenant security boundaries. It ensures that staff assignments
- * and administrative actions remain strictly within the authorized facility scope.
+ * This service manages the staff lifecycle within strict multi-tenant boundaries.
+ * It enforces a "Silo" architecture where users are isolated by their assigned warehouse facility.
  * </p>
  */
 public interface UserService {
 
     /**
+     * Unified Advanced Search API for dynamic staff filtering.
+     * <p>
+     * <b>Capabilities:</b>
+     * <ul>
+     * <li><b>Fuzzy Search:</b> Matches 'query' against name or email.</li>
+     * <li><b>Dynamic Filtering:</b> Combine role, status, and search query in one call.</li>
+     * <li><b>Silo Enforcement:</b> Automatically scopes results to the requester's warehouse.</li>
+     * <li><b>Performance:</b> Returns a paginated result to ensure high performance.</li>
+     * </ul>
+     * </p>
+     * @param query    Optional string for name/email search.
+     * @param role     Optional {@link Role} filter.
+     * @param status   Optional {@link UserStatus} filter.
+     * @param pageable Pagination and sorting metadata.
+     * @return A {@link Page} of matching user profiles.
+     */
+    Page<UserResponse> searchUsers(String query, Role role, UserStatus status, Pageable pageable);
+
+    /**
      * Provisions a new staff member and triggers onboarding.
      * <p>
      * <b>Onboarding Logic:</b>
-     * 1. <b>Password Generation:</b> Creates a temporary, deterministic password
-     * based on the warehouse's welcome policy.
-     * 2. <b>Security Boundary:</b> Binds the user to a specific {@link com.infotact.warehouse.entity.Warehouse}.
-     * 3. <b>Notification:</b> Triggers an onboarding email via the Mail Utility.
+     * <ul>
+     * <li><b>Hierarchy Check:</b> Managers can only create {@link Role#EMPLOYEE} accounts.</li>
+     * <li><b>Security Boundary:</b> Binds the user to the requester's warehouse facility.</li>
+     * <li><b>Credentialing:</b> Generates a deterministic temporary password.</li>
+     * </ul>
      * </p>
      * @param request User profile and facility assignment details.
      * @return A success message confirming account creation.
@@ -34,21 +55,22 @@ public interface UserService {
     String createUser(@Valid UserRequest request);
 
     /**
-     * Retrieves staff members based on the requester's security clearance.
+     * Updates profile metadata or modifies authorization levels (Roles).
      * <p>
-     * <b>Visibility Rules:</b>
-     * 1. <b>Super Admin:</b> Can view Global Admins and facility managers across all warehouses.
-     * 2. <b>Warehouse Admin/Manager:</b> Can only view staff registered to their own facility.
+     * <b>Validation:</b> Ensures email/contact uniqueness and restricts
+     * role promotions strictly to the {@link Role#ADMIN}.
      * </p>
-     * @return A filtered list of user profiles.
+     * @param id Target User UUID.
+     * @param request The update payload.
+     * @return A confirmation message.
      */
-    List<UserResponse> getAllUser();
+    String updateUserDetails(String id, UserUpdate request);
 
     /**
      * Manages the operational availability of a staff member.
      * <p>
-     * <b>Safety Check:</b> Prevents an Admin from deactivating their own account
-     * to avoid system lockout.
+     * <b>Safety Constraints:</b> Prevents self-lockout and restricts Managers
+     * from modifying statuses of equivalent or higher-ranking roles.
      * </p>
      * @param id Target User UUID.
      * @param status New status (ACTIVE, INACTIVE, etc.).
@@ -56,42 +78,33 @@ public interface UserService {
     void updateStatus(String id, UserStatus status);
 
     /**
-     * Updates profile metadata or modifies authorization levels (Roles).
+     * Performs a logical 'Soft-Delete' of a user account.
      * <p>
-     * <b>Validation:</b> Ensures that role promotions (e.g., Staff to Manager)
-     * are performed by a user with higher or equal authority.
+     * <b>Data Integrity:</b> Marks the record as DELETED to maintain
+     * referential integrity for historical audit trails.
      * </p>
+     * @param id User UUID to be deactivated.
      */
-    String updateUserDetails(String id, UserUpdate request);
+    void deleteUser(String id);
 
     /**
-     * Fetches detailed profile information for a specific staff member.
+     * Fetches the detailed profile information for a specific staff member.
      * @param id User UUID.
      * @return User details mapped to a response DTO.
      */
     UserResponse getUserById(String id);
 
     /**
-     * Performs a logical 'Soft-Delete' of a user account.
-     * <p>
-     * <b>Data Integrity:</b> The record is marked as 'DELETED' but remains in
-     * the database to maintain referential integrity for historical
-     * Warehouse Transactions (e.g., "Who picked this order?").
-     * </p>
+     * Retrieves the profile of the currently authenticated user.
+     * @return The profile of the session holder.
      */
-    void deleteUser(String id);
+    UserResponse getMyProfile();
 
     /**
-     * Filters staff by specialized role within the current warehouse scope.
-     * @param role The target {@link Role} (e.g., PICKER, MANAGER).
+     * Retrieves a paginated list of all non-deleted staff members within
+     * the requester's warehouse.
+     * * @param pageable Pagination metadata.
+     * @return A {@link Page} of user profiles.
      */
-    List<UserResponse> getUsersByRole(Role role);
-
-    /**
-     * Lists all staff currently cleared for warehouse operations.
-     * <p>
-     * Usage: Used to populate assignment dropdowns for picking and receiving tasks.
-     * </p>
-     */
-    List<UserResponse> getAllActiveUsers();
+    Page<UserResponse> getAllUser(Pageable pageable);
 }

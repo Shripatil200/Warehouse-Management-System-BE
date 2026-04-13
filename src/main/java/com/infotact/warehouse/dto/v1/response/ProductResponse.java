@@ -3,6 +3,9 @@ package com.infotact.warehouse.dto.v1.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
+
+import java.io.Serial;
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -20,7 +23,9 @@ import java.time.LocalDateTime;
         name = "ProductResponse",
         description = "Full specification of a product in the warehouse catalog"
 )
-public class ProductResponse {
+public class ProductResponse implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "Internal unique identifier (UUID) of the product",
             example = "550e8400-e29b-41d4-a716-446655440000")

@@ -3,6 +3,8 @@ package com.infotact.warehouse.dto.v1.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -19,7 +21,10 @@ import java.util.List;
         name = "ProductCategoryResponse",
         description = "Response model for product categories featuring hierarchical nesting"
 )
-public class ProductCategoryResponse {
+public class ProductCategoryResponse implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "The unique UUID of the category",
             example = "c1b2c3d4-e5f6-7890-abcd-ef1234567890")

@@ -5,6 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -23,8 +26,9 @@ import java.util.List;
         name = "DashboardSummaryResponse",
         description = "Consolidated operational metrics and analytics for the warehouse dashboard"
 )
-public class DashboardSummaryResponse {
-
+public class DashboardSummaryResponse implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
     @Schema(description = "Total number of unique products in the catalog", example = "1250")
     private Long totalProducts;
 

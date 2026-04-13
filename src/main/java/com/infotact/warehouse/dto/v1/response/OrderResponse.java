@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -26,7 +28,10 @@ import java.util.List;
         name = "OrderResponse",
         description = "Detailed view of an outbound order including fulfillment status and itemized details"
 )
-public class OrderResponse {
+public class OrderResponse  implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "The internal unique identifier (UUID) of the order",
             example = "550e8400-e29b-41d4-a716-446655440000")

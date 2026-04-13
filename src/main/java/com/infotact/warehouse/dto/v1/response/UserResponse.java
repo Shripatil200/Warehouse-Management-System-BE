@@ -8,6 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
  * Data Transfer Object representing a user profile within the warehouse ecosystem.
  * <p>
@@ -23,7 +26,10 @@ import lombok.NoArgsConstructor;
         name = "UserResponse",
         description = "Public profile information for warehouse staff and administrators"
 )
-public class UserResponse {
+public class UserResponse implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "The unique UUID of the user",
             example = "550e8400-e29b-41d4-a716-446655440000")

@@ -13,7 +13,7 @@ import java.util.List;
  * </p>
  */
 @Schema(description = "Detailed view of an inbound purchase order and its fulfillment status")
-public record PurchaseOrderResponse(
+public record PurchaseOrderResponse (
         @Schema(description = "Internal unique identifier (UUID) of the PO",
                 example = "550e8400-e29b-41d4-a716-446655440000")
         String id,

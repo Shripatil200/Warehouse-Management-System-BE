@@ -4,6 +4,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
  * Data Transfer Object representing a system-generated operational alert.
  * <p>
@@ -18,8 +21,10 @@ import lombok.Data;
         name = "AlertDTO",
         description = "Notification model for critical warehouse operational events"
 )
-public class AlertDTO {
+public class AlertDTO implements Serializable {
 
+    @Serial
+    private static final long serialVersionUID = 1L;
     @Schema(
             description = "A human-readable description of the alert",
             example = "Product 'Sony Headphones' is below the minimum threshold (5 units remaining)."

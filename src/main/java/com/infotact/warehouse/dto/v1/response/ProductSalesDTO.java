@@ -4,6 +4,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
  * Data Transfer Object representing sales performance for a specific product.
  * <p>
@@ -17,8 +20,9 @@ import lombok.Data;
         name = "ProductSalesDTO",
         description = "Simplified model for product performance rankings and sales volume charts"
 )
-public class ProductSalesDTO {
-
+public class ProductSalesDTO implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
     @Schema(
             description = "The display name of the product",
             example = "Sony WH-1000XM4"

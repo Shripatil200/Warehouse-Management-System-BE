@@ -3,6 +3,9 @@ package com.infotact.warehouse.dto.v1.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
+
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
@@ -19,7 +22,9 @@ import java.time.LocalDateTime;
         name = "WarehouseResponse",
         description = "Metadata response for a warehouse facility"
 )
-public class WarehouseResponse {
+public class WarehouseResponse implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Schema(description = "The internal unique identifier (UUID) of the facility",
             example = "550e8400-e29b-41d4-a716-446655440000")

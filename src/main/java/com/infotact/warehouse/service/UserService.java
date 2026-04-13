@@ -14,67 +14,51 @@ import java.util.List;
 /**
  * Service interface for Identity Management and Staff Orchestration.
  * <p>
- * This service manages the staff lifecycle, role-based access control (RBAC),
- * and multi-tenant security boundaries. It ensures that staff assignments
- * and administrative actions remain strictly within the authorized facility scope (Silo Pattern).
+ * This service manages the staff lifecycle within strict multi-tenant boundaries.
+ * It enforces a "Silo" architecture where users are isolated by their assigned warehouse facility.
  * </p>
  */
 public interface UserService {
+
+    /**
+     * Unified Advanced Search API for dynamic staff filtering.
+     * <p>
+     * <b>Capabilities:</b>
+     * <ul>
+     * <li><b>Fuzzy Search:</b> Matches 'query' against name or email.</li>
+     * <li><b>Dynamic Filtering:</b> Combine role, status, and search query in one call.</li>
+     * <li><b>Silo Enforcement:</b> Automatically scopes results to the requester's warehouse.</li>
+     * <li><b>Performance:</b> Returns a paginated result to ensure high performance.</li>
+     * </ul>
+     * </p>
+     * @param query    Optional string for name/email search.
+     * @param role     Optional {@link Role} filter.
+     * @param status   Optional {@link UserStatus} filter.
+     * @param pageable Pagination and sorting metadata.
+     * @return A {@link Page} of matching user profiles.
+     */
+    Page<UserResponse> searchUsers(String query, Role role, UserStatus status, Pageable pageable);
 
     /**
      * Provisions a new staff member and triggers onboarding.
      * <p>
      * <b>Onboarding Logic:</b>
      * <ul>
-     * <li><b>Password Generation:</b> Creates a temporary, deterministic password
-     * (e.g., Welcome@ + last 4 digits of phone).</li>
-     * <li><b>Hierarchy Check:</b> Managers are restricted to creating {@link Role#EMPLOYEE}
-     * accounts; only Admins can provision Manager/Admin roles.</li>
-     * <li><b>Security Boundary:</b> Binds the user to a specific facility to ensure data isolation.</li>
-     * <li><b>Notification:</b> Triggers an automated email containing onboarding credentials.</li>
+     * <li><b>Hierarchy Check:</b> Managers can only create {@link Role#EMPLOYEE} accounts.</li>
+     * <li><b>Security Boundary:</b> Binds the user to the requester's warehouse facility.</li>
+     * <li><b>Credentialing:</b> Generates a deterministic temporary password.</li>
      * </ul>
      * </p>
      * @param request User profile and facility assignment details.
      * @return A success message confirming account creation.
-     * @throws com.infotact.warehouse.exception.UnauthorizedException if hierarchy or warehouse mismatch occurs.
      */
     String createUser(@Valid UserRequest request);
 
     /**
-     * Retrieves a paginated list of staff members within the requester's warehouse.
-     * <p>
-     * <b>Visibility Rules:</b>
-     * Requester is restricted to viewing users belonging to their assigned warehouse.
-     * Paginated response ensures system performance for large-scale facilities.
-     * </p>
-     * @param pageable Pagination and sorting metadata.
-     * @return A {@link Page} of user profiles.
-     */
-    Page<UserResponse> getAllUser(Pageable pageable);
-
-    /**
-     * Manages the operational availability of a staff member.
-     * <p>
-     * <b>Safety Constraints:</b>
-     * <ul>
-     * <li><b>Self-Lockout Prevention:</b> Prevents the current user from deactivating themselves.</li>
-     * <li><b>Hierarchy Protection:</b> Managers cannot change the status of other Managers or Admins.</li>
-     * </ul>
-     * </p>
-     * @param id Target User UUID.
-     * @param status New status (ACTIVE, INACTIVE, etc.).
-     */
-    void updateStatus(String id, UserStatus status);
-
-    /**
      * Updates profile metadata or modifies authorization levels (Roles).
      * <p>
-     * <b>Logic:</b>
-     * <ul>
-     * <li><b>Identity Validation:</b> Validates that the email/contact update is not already taken by another user.</li>
-     * <li><b>Role Promotion:</b> Role modifications (e.g., promoting to Manager) are strictly reserved for {@link Role#ADMIN}.</li>
-     * <li><b>Self-Update:</b> Users are permitted to update their own profile details regardless of management role.</li>
-     * </ul>
+     * <b>Validation:</b> Ensures email/contact uniqueness and restricts
+     * role promotions strictly to the {@link Role#ADMIN}.
      * </p>
      * @param id Target User UUID.
      * @param request The update payload.
@@ -83,50 +67,44 @@ public interface UserService {
     String updateUserDetails(String id, UserUpdate request);
 
     /**
-     * Fetches the detailed profile information for a specific staff member.
+     * Manages the operational availability of a staff member.
      * <p>
-     * <b>Access Control:</b> Users can fetch their own profile, but fetching others
-     * requires Manager/Admin clearance within the same warehouse.
+     * <b>Safety Constraints:</b> Prevents self-lockout and restricts Managers
+     * from modifying statuses of equivalent or higher-ranking roles.
      * </p>
+     * @param id Target User UUID.
+     * @param status New status (ACTIVE, INACTIVE, etc.).
+     */
+    void updateStatus(String id, UserStatus status);
+
+    /**
+     * Performs a logical 'Soft-Delete' of a user account.
+     * <p>
+     * <b>Data Integrity:</b> Marks the record as DELETED to maintain
+     * referential integrity for historical audit trails.
+     * </p>
+     * @param id User UUID to be deactivated.
+     */
+    void deleteUser(String id);
+
+    /**
+     * Fetches the detailed profile information for a specific staff member.
      * @param id User UUID.
      * @return User details mapped to a response DTO.
      */
     UserResponse getUserById(String id);
 
     /**
-     * Performs a logical 'Soft-Delete' of a user account.
-     * <p>
-     * <b>Data Integrity:</b> The record is marked as {@link UserStatus#DELETED} to
-     * maintain historical referential integrity for warehouse transactions.
-     * </p>
-     * @param id User UUID to be deactivated.
-     * @throws com.infotact.warehouse.exception.UnauthorizedException if requester is not an ADMIN.
-     */
-    void deleteUser(String id);
-
-    /**
-     * Filters staff by specialized role within the current warehouse scope.
-     * @param role The target {@link Role} (e.g., MANAGER, EMPLOYEE).
-     * @return A list of matching users in the requester's warehouse.
-     */
-    List<UserResponse> getUsersByRole(Role role);
-
-    /**
-     * Lists all staff currently cleared (ACTIVE) for warehouse operations.
-     * <p>
-     * Used primarily for task assignment (picking, packing, receiving).
-     * </p>
-     * @return List of active UserResponse objects.
-     */
-    List<UserResponse> getAllActiveUsers();
-
-    /**
      * Retrieves the profile of the currently authenticated user.
-     * <p>
-     * Used for the "My Profile" dashboard view without requiring the frontend
-     * to manage the user's UUID.
-     * </p>
      * @return The profile of the session holder.
      */
     UserResponse getMyProfile();
+
+    /**
+     * Retrieves a paginated list of all non-deleted staff members within
+     * the requester's warehouse.
+     * * @param pageable Pagination metadata.
+     * @return A {@link Page} of user profiles.
+     */
+    Page<UserResponse> getAllUser(Pageable pageable);
 }

@@ -27,9 +27,8 @@ import java.util.ArrayList;
 /**
  * Implementation of {@link CategoryService} managing product taxonomy.
  * <p>
- * This service operates under strict Multi-tenant isolation, ensuring that
- * category hierarchies are partitioned by Warehouse. It utilizes Spring Cache
- * to minimize database round-trips for frequently accessed catalog data.
+ * Supports hierarchical structures and Warehouse-specific storage optimization
+ * through preferred zone mapping.
  * </p>
  */
 @Slf4j
@@ -41,10 +40,6 @@ public class CategoryServiceImpl implements CategoryService {
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
 
-    /**
-     * Internal utility to resolve the Manager/Admin profile from the session.
-     * Used to enforce Warehouse-level data isolation.
-     */
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
@@ -53,12 +48,6 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li>Automatically binds the new category to the authenticated user's Warehouse.</li>
-     * <li>Flushes the 'categories' cache to ensure list consistency across the facility.</li>
-     * </ul>
      */
     @Override
     @Transactional
@@ -73,6 +62,8 @@ public class CategoryServiceImpl implements CategoryService {
         User manager = getAuthenticatedUser();
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
+        category.setDescription(request.getDescription());
+        category.setPreferredZoneId(request.getPreferredZoneId());
         category.setWarehouse(manager.getWarehouse());
 
         if (request.getParentCategoryId() != null) {
@@ -86,10 +77,6 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Optimization:</b> Results are cached by ID to accelerate repeated lookups
-     * during product catalog rendering.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -100,13 +87,6 @@ public class CategoryServiceImpl implements CategoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Multi-tenancy:</b> Filters results strictly by the Warehouse ID extracted
-     * from the authenticated user's profile.
-     * </p>
-     */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "categories", key = "'list-' + #includeInactive + '-' + #pageable.pageNumber")
@@ -123,10 +103,6 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Integrity Guard:</b> Blocks deletion if 'orphaned' products or
-     * sub-categories would be created as a result of this operation.
-     * </p>
      */
     @Override
     @Transactional
@@ -140,15 +116,10 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         categoryRepository.delete(category);
-        log.info("Category {} successfully purged.", id);
     }
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b> Updates metadata and handles parent-reassignment
-     * while triggering a global cache eviction for categories.
-     * </p>
      */
     @Override
     @Transactional
@@ -158,12 +129,21 @@ public class CategoryServiceImpl implements CategoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
         category.setName(request.getName());
-        // Additional business logic for parent updates would go here...
+        category.setDescription(request.getDescription());
+        category.setPreferredZoneId(request.getPreferredZoneId());
+
+        if (request.getParentCategoryId() != null) {
+            ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent category not found."));
+            category.setParentCategory(parent);
+        }
 
         return mapToResponse(categoryRepository.save(category));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
@@ -171,7 +151,9 @@ public class CategoryServiceImpl implements CategoryService {
         return updateStatus(id, true);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
@@ -179,26 +161,26 @@ public class CategoryServiceImpl implements CategoryService {
         return updateStatus(id, false);
     }
 
-    /**
-     * Maps the internal JPA Entity to a secure Response DTO.
-     */
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
         ProductCategoryResponse response = new ProductCategoryResponse();
         response.setId(entity.getId());
         response.setName(entity.getName());
+        response.setDescription(entity.getDescription());
+        response.setPreferredZoneId(entity.getPreferredZoneId());
         response.setActive(entity.isActive());
         response.setCreatedAt(entity.getCreatedAt());
         response.setUpdatedAt(entity.getUpdatedAt());
-        response.setChildren(new ArrayList<>());
+        response.setChildren(new ArrayList<>()); // Placeholder for tree mapping
 
         if (entity.getParentCategory() != null) {
+            response.setParentCategoryId(entity.getParentCategory().getId());
             response.setParentCategoryName(entity.getParentCategory().getName());
         }
         return response;
     }
 
     /**
-     * Internal status toggle utility.
+     * {@inheritDoc}
      */
     private ProductCategoryResponse updateStatus(String id, boolean status) {
         ProductCategory category = categoryRepository.findById(id)

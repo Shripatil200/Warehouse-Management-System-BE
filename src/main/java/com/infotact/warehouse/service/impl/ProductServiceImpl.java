@@ -35,8 +35,8 @@ import java.util.stream.Collectors;
  * data with physical inventory tracking.
  * </p>
  * <p>
- * <b>Update:</b> Now integrates <b>Sourcing Analytics</b>, allowing managers
- * to view associated suppliers and their quoted costs directly from the product catalog.
+ * <b>Update:</b> Supports advanced logistics (Dimensions, UOM) and
+ * traceability flags (Serialized/Batch) for warehouse optimization.
  * </p>
  */
 @Slf4j
@@ -48,27 +48,15 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
-    private final ProductSupplierRepository productSupplierRepository; // New: For sourcing data
+    private final ProductSupplierRepository productSupplierRepository;
 
-    /**
-     * Resolves the identity of the current user to enforce warehouse-level
-     * multi-tenancy during product creation.
-     */
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Authenticated user profile not found."));
     }
-
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li><b>SKU Guard:</b> Performs a case-insensitive check to prevent duplicate identification.</li>
-     * <li><b>Category Linkage:</b> Ensures the product is bound only to an 'Active' taxonomy node.</li>
-     * <li><b>Cache Policy:</b> Triggers a global eviction of the 'products' cache to maintain list integrity.</li>
-     * </ul>
      */
     @Override
     @Transactional
@@ -85,14 +73,16 @@ public class ProductServiceImpl implements ProductService {
         Product product = new Product();
         updateProductFields(product, request);
         product.setCategory(category);
-        product.setWarehouse(manager.getWarehouse()); // DENORMALIZATION: Optimized for facility-scoped lookups
+        product.setWarehouse(manager.getWarehouse());
         product.setActive(true);
 
         log.info("Catalog Update: Product '{}' (SKU: {}) registered for facility.", product.getName(), product.getSku());
         return mapToResponse(productRepository.save(product));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public ProductResponse getProductById(String id) {
@@ -103,10 +93,6 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Optimization:</b> Results are cached by SKU, significantly reducing latency
-     * for barcode scanning workflows in the physical warehouse.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -117,13 +103,6 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Active product with SKU '" + sku + "' not found."));
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Validation:</b> If the SKU is updated, the service re-verifies uniqueness
-     * across the global catalog before committing the change.
-     * </p>
-     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -147,10 +126,6 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Pagination:</b> Cached by page index and status filter to accelerate
-     * UI table rendering for staff members.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -162,13 +137,6 @@ public class ProductServiceImpl implements ProductService {
         return products.map(this::mapToResponse);
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Soft-Delete Policy:</b> Deactivates the product to hide it from
-     * operational views while preserving historical order and inventory records.
-     * </p>
-     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -176,11 +144,12 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
         product.setActive(false);
-        log.warn("Catalog Management: Product {} has been deactivated (Soft-Deleted).", product.getSku());
         return mapToResponse(productRepository.save(product));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -193,25 +162,38 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * Synchronizes DTO fields to the JPA entity.
+     * <p>
+     * <b>Update:</b> Now handles financial valuation (costPrice) and
+     * volumetric data (L/W/H) required for bin-capacity calculations.
+     * </p>
      */
     private void updateProductFields(Product product, ProductRequest request) {
         product.setName(request.getName());
-        product.setSku(request.getSku().toUpperCase()); // Logic: Standardize SKU case
+        product.setSku(request.getSku().toUpperCase());
         product.setDescription(request.getDescription());
+
+        // Financials
         product.setSellingPrice(request.getSellingPrice());
+        product.setCostPrice(request.getCostPrice());
+
+        // Logistics
+        product.setUom(request.getUom());
         product.setWeight(request.getWeight());
+        product.setLength(request.getLength());
+        product.setWidth(request.getWidth());
+        product.setHeight(request.getHeight());
+
         product.setBarcode(request.getBarcode());
+
+        // Operational Logic
         product.setMinThreshold(request.getMinThreshold() != null ? request.getMinThreshold() : 10);
+        product.setMaxThreshold(request.getMaxThreshold());
+
+        // Traceability
+        product.setSerialized(request.isSerialized());
+        product.setBatchTracked(request.isBatchTracked());
     }
 
-    /**
-     * Maps the internal Product entity to a builder-pattern based Response DTO.
-     * <p>
-     * <b>Update Logic:</b> Now dynamically fetches and maps <b>SourcingOptions</b>
-     * from the {@link ProductSupplierRepository} to provide visibility into available
-     * vendors and their quoted costs.
-     * </p>
-     */
     private ProductResponse mapToResponse(Product entity) {
         ProductResponse response = ProductResponse.builder()
                 .id(entity.getId())
@@ -219,17 +201,24 @@ public class ProductServiceImpl implements ProductService {
                 .sku(entity.getSku())
                 .description(entity.getDescription())
                 .sellingPrice(entity.getSellingPrice())
+                .costPrice(entity.getCostPrice())
+                .uom(entity.getUom())
                 .weight(entity.getWeight())
+                .length(entity.getLength())
+                .width(entity.getWidth())
+                .height(entity.getHeight())
                 .barcode(entity.getBarcode())
                 .active(entity.isActive())
                 .minThreshold(entity.getMinThreshold())
+                .maxThreshold(entity.getMaxThreshold())
+                .isSerialized(entity.isSerialized())
+                .isBatchTracked(entity.isBatchTracked())
                 .categoryId(entity.getCategory().getId())
                 .categoryName(entity.getCategory().getName())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
 
-        // New: Populate sourcing options so the manager can compare suppliers
         response.setSourcingOptions(
                 productSupplierRepository.findByProductId(entity.getId()).stream()
                         .map(ps -> ProductSupplierResponse.builder()

@@ -2,6 +2,7 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ProductRequest;
 import com.infotact.warehouse.dto.v1.response.ProductResponse;
+import com.infotact.warehouse.dto.v1.response.ProductSupplierResponse;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.entity.User;
@@ -10,6 +11,7 @@ import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.ProductRepository;
+import com.infotact.warehouse.repository.ProductSupplierRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -23,12 +25,18 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.stream.Collectors;
+
 /**
  * Implementation of {@link ProductService} for core catalog orchestration.
  * <p>
  * This service manages the lifecycle of warehouse inventory items. It enforces
  * data integrity via SKU uniqueness checks and bridges human-readable master
  * data with physical inventory tracking.
+ * </p>
+ * <p>
+ * <b>Update:</b> Now integrates <b>Sourcing Analytics</b>, allowing managers
+ * to view associated suppliers and their quoted costs directly from the product catalog.
  * </p>
  */
 @Slf4j
@@ -40,6 +48,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final ProductSupplierRepository productSupplierRepository; // New: For sourcing data
 
     /**
      * Resolves the identity of the current user to enforce warehouse-level
@@ -189,7 +198,7 @@ public class ProductServiceImpl implements ProductService {
         product.setName(request.getName());
         product.setSku(request.getSku().toUpperCase()); // Logic: Standardize SKU case
         product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
+        product.setSellingPrice(request.getSellingPrice());
         product.setWeight(request.getWeight());
         product.setBarcode(request.getBarcode());
         product.setMinThreshold(request.getMinThreshold() != null ? request.getMinThreshold() : 10);
@@ -197,14 +206,19 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * Maps the internal Product entity to a builder-pattern based Response DTO.
+     * <p>
+     * <b>Update Logic:</b> Now dynamically fetches and maps <b>SourcingOptions</b>
+     * from the {@link ProductSupplierRepository} to provide visibility into available
+     * vendors and their quoted costs.
+     * </p>
      */
     private ProductResponse mapToResponse(Product entity) {
-        return ProductResponse.builder()
+        ProductResponse response = ProductResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())
                 .sku(entity.getSku())
                 .description(entity.getDescription())
-                .price(entity.getPrice())
+                .sellingPrice(entity.getSellingPrice())
                 .weight(entity.getWeight())
                 .barcode(entity.getBarcode())
                 .active(entity.isActive())
@@ -214,5 +228,18 @@ public class ProductServiceImpl implements ProductService {
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
+
+        // New: Populate sourcing options so the manager can compare suppliers
+        response.setSourcingOptions(
+                productSupplierRepository.findByProductId(entity.getId()).stream()
+                        .map(ps -> ProductSupplierResponse.builder()
+                                .supplierName(ps.getSupplier().getName())
+                                .currentSupplyPrice(ps.getCurrentSupplyPrice())
+                                .leadTimeDays(ps.getLeadTimeDays())
+                                .build())
+                        .collect(Collectors.toList())
+        );
+
+        return response;
     }
 }

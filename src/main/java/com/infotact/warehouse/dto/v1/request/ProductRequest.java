@@ -9,7 +9,8 @@ import java.math.BigDecimal;
  * Data Transfer Object for creating or updating a product in the master catalog.
  * <p>
  * This request captures all physical and commercial attributes of an item.
- * Product validation ensures SKU uniqueness and mandatory category association.
+ * <b>Update:</b> Validates the sellingPrice as the primary revenue value,
+ * distinct from batch-specific purchase costs.
  * </p>
  */
 @Data
@@ -23,7 +24,7 @@ public class ProductRequest {
     @Size(max = 255)
     @Schema(
             description = "Display name of the product",
-            example = "Sony WH-1000XM4 Wireless Headphones",
+            example = "iPhone 17 256GB",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
     private String name;
@@ -31,44 +32,44 @@ public class ProductRequest {
     @NotBlank(message = "SKU is required")
     @Pattern(regexp = "^[A-Z0-9_-]+$", message = "SKU must be uppercase alphanumeric")
     @Schema(
-            description = "Stock Keeping Unit - must be unique and uppercase alphanumeric",
-            example = "AUDIO-SNY-4000",
+            description = "Stock Keeping Unit - unique business identifier used for tracking",
+            example = "APP-IP17-256-BLK",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
     private String sku;
 
     @Schema(
             description = "Detailed product description and specifications",
-            example = "Industry-leading noise canceling overhead headphones with Mic"
+            example = "Apple iPhone 17 with 256GB Storage, Black Titanium"
     )
     private String description;
 
-    @NotNull(message = "Price is required")
-    @PositiveOrZero(message = "Price cannot be negative")
+    @NotNull(message = "Selling price is required")
+    @PositiveOrZero(message = "Selling price cannot be negative")
     @Schema(
-            description = "Unit sales price of the product",
-            example = "349.99",
+            description = "The target price for customer sales (Revenue)",
+            example = "79999.00",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
-    private BigDecimal price;
+    private BigDecimal sellingPrice;
 
     @Positive(message = "Weight must be positive")
-    @Schema(description = "Physical weight of the unit in kilograms", example = "0.25")
+    @Schema(description = "Physical weight of the unit in kilograms", example = "0.18")
     private Double weight;
 
-    @Schema(description = "Universal barcode or EAN number", example = "4548736112148")
+    @Schema(description = "Universal barcode (EAN/UPC) for scanning", example = "194253123456")
     private String barcode;
 
     @Min(value = 0, message = "Threshold cannot be negative")
     @Schema(
-            description = "Minimum stock quantity before the system triggers a low-stock alert",
-            example = "10"
+            description = "Inventory level that triggers a 'Low Stock' dashboard alert",
+            example = "5"
     )
     private Integer minThreshold;
 
     @NotBlank(message = "Category ID is required")
     @Schema(
-            description = "The UUID of the assigned product category",
+            description = "UUID of the product category for hierarchical grouping",
             example = "550e8400-e29b-41d4-a716-446655440000",
             requiredMode = Schema.RequiredMode.REQUIRED
     )

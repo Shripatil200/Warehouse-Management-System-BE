@@ -54,14 +54,14 @@ public class Product extends BaseEntity {
     private String description;
 
     /**
-     * Unit price of the product.
+     * Unit sellingPrice of the product.
      * <p>
-     * Precision: Uses 19,4 to support high-accuracy financial calculations
-     * and multi-currency support if needed later.
+     * Logic: Uses 19,4 precision for financial accuracy. This is the price charged
+     * to customers, regardless of the historical purchase cost of the batch.
      * </p>
      */
     @Column(nullable = false, precision = 19, scale = 4)
-    private BigDecimal price;
+    private BigDecimal sellingPrice;
 
     /** Physical weight in KG. Used for calculating shipping costs and bin load limits. */
     private Double weight;

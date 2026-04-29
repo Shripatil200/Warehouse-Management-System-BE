@@ -62,7 +62,7 @@ public interface ProductRepository extends JpaRepository<Product, String> {
      * REPLENISHMENT LIST: Fetches full product details for low-stock items.
      * <p>
      * Usage: Primarily used to generate 'Reorder Reports' or automated
-     * Purchase Order drafts.
+     * Purchase SellingOrder drafts.
      * </p>
      */
     @Query("SELECT p FROM Product p WHERE p.warehouse.id = :id AND p.active = true AND p.id IN (" +

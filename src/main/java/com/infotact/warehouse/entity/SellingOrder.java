@@ -16,7 +16,7 @@ import java.util.List;
  * <p>
  * This entity tracks the lifecycle of a sale from initial placement to
  * picking, packing, and final dispatch. It acts as the parent container
- * for individual {@link OrderItem} line items.
+ * for individual {@link SellingOrderItem} line items.
  * </p>
  */
 @Data
@@ -30,7 +30,7 @@ import java.util.List;
         @Index(name = "idx_order_status", columnList = "status"),
         @Index(name = "idx_order_number", columnList = "orderNumber")
 })
-public class Order {
+public class SellingOrder {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -86,9 +86,9 @@ public class Order {
      * List of products and quantities included in this order.
      * <p>
      * Cascading: Uses {@link CascadeType#ALL} to ensure that order line
-     * items are managed entirely through the parent Order lifecycle.
+     * items are managed entirely through the parent SellingOrder lifecycle.
      * </p>
      */
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
-    private List<OrderItem> items;
+    private List<SellingOrderItem> items;
 }

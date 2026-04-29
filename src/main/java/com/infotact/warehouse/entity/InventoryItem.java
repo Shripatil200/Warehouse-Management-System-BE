@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -93,6 +94,16 @@ public class InventoryItem extends BaseEntity {
      * Crucial for FEFO (First-Expired, First-Out) picking strategies.
      */
     private LocalDate expiryDate;
+
+    /**
+     * The historical purchase cost for this specific batch.
+     * <p>
+     * Logic: Allows for accurate Profit/Loss reporting by comparing this cost
+     * against the sellingPrice in the Order record.
+     * </p>
+     */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal purchasePrice;
 
     /**
      * Business Logic: Calculates the quantity eligible for new orders.

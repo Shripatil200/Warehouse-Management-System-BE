@@ -8,67 +8,71 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Data Transfer Object representing a comprehensive view of a product.
  * <p>
- * This response is the primary model for product listings and detail views.
- * It includes denormalized category information and audit timestamps to support
- * enterprise-level reporting and UI breadcrumbs.
+ * This response provides a 360-degree view of the catalog item, including
+ * denormalized category data and associated sourcing options (suppliers).
  * </p>
  */
 @Data
 @Builder
 @Schema(
         name = "ProductResponse",
-        description = "Full specification of a product in the warehouse catalog"
+        description = "Full specification of a product including associated suppliers"
 )
 public class ProductResponse implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Schema(description = "Internal unique identifier (UUID) of the product",
-            example = "550e8400-e29b-41d4-a716-446655440000")
+    @Schema(description = "Internal unique identifier (UUID)", example = "550e8400-e29b-41d4-a716-446655440000")
     private String id;
 
-    @Schema(description = "The registered name of the product",
-            example = "Sony WH-1000XM4 Wireless Headphones")
+    @Schema(description = "The registered name of the product", example = "iPhone 17 256GB")
     private String name;
 
-    @Schema(description = "Stock Keeping Unit - unique business identifier",
-            example = "AUDIO-SNY-4000")
+    @Schema(description = "Stock Keeping Unit", example = "APP-IP17-256-BLK")
     private String sku;
 
-    @Schema(description = "Detailed marketing and technical description",
-            example = "Premium noise-canceling overhead headphones.")
+    @Schema(description = "Detailed specifications", example = "256GB Storage, 8GB RAM")
     private String description;
 
-    @Schema(description = "Current unit sales price", example = "349.99")
-    private BigDecimal price;
+    @Schema(description = "Current unit sales price for customers", example = "79999.00")
+    private BigDecimal sellingPrice;
 
-    @Schema(description = "Physical weight per unit in kilograms", example = "0.25")
+    @Schema(description = "Weight in kilograms", example = "0.18")
     private Double weight;
 
-    @Schema(description = "EAN/UPC barcode number for scanning", example = "4548736112148")
+    @Schema(description = "EAN/UPC barcode", example = "194253123456")
     private String barcode;
 
-    @Schema(description = "Operational status. Inactive products are soft-deleted.", example = "true")
+    @Schema(description = "Active status for catalog visibility", example = "true")
     private boolean active;
 
-    @Schema(description = "Safety stock level that triggers replenishment alerts", example = "10")
+    @Schema(description = "Safety stock alert level", example = "5")
     private Integer minThreshold;
 
-    @Schema(description = "UUID of the assigned category",
-            example = "c1b2c3d4-e5f6-7890")
+    @Schema(description = "Assigned category UUID", example = "c1b2c3d4-e5f6-7890")
     private String categoryId;
 
-    @Schema(description = "Name of the assigned category (Denormalized)",
-            example = "Audio & Sound")
+    @Schema(description = "Display name of the category", example = "Smartphones")
     private String categoryName;
 
-    @Schema(description = "Timestamp of initial catalog entry")
+    /**
+     * List of suppliers who provide this product.
+     * <p>
+     * Logic: Allows the manager to compare purchase costs (unitCost)
+     * across different vendors directly from the product view.
+     * </p>
+     */
+    @Schema(description = "Available sourcing and supplier options for this product")
+    private List<ProductSupplierResponse> sourcingOptions;
+
+    @Schema(description = "Timestamp of catalog creation")
     private LocalDateTime createdAt;
 
-    @Schema(description = "Timestamp of the last update to product attributes")
+    @Schema(description = "Timestamp of the last attribute update")
     private LocalDateTime updatedAt;
 }

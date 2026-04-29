@@ -90,4 +90,7 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
      */
     @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
     long countAssignedWarehouseForUser(@Param("email") String email);
+
+    @Query("SELECT u.status, COUNT(u) FROM User u GROUP BY u.status")
+    List<Object[]> countUsersByStatus();
 }

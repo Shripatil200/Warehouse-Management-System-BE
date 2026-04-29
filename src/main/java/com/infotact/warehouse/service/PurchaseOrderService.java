@@ -22,7 +22,7 @@ public interface PurchaseOrderService {
      * is active and authorized.
      * 2. <b>SKU Validation:</b> Ensures all requested items exist in the global
      * {@link com.infotact.warehouse.entity.Product} catalog.
-     * 3. <b>Order Generation:</b> Generates a unique PO Reference and persists
+     * 3. <b>SellingOrder Generation:</b> Generates a unique PO Reference and persists
      * line items with an initial 'CREATED' or 'PLACED' status.
      * </p>
      * @param request Data containing supplier ID, expected delivery date, and product quantities.

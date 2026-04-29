@@ -1,7 +1,7 @@
 package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.dto.v1.response.ProductSalesDTO;
-import com.infotact.warehouse.entity.Order;
+import com.infotact.warehouse.entity.SellingOrder;
 import com.infotact.warehouse.entity.enums.OrderStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -9,10 +9,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Data Access Object for customer Order management.
+ * Data Access Object for customer SellingOrder management.
  * <p>
  * This repository handles the outbound demand. By leveraging the direct
  * denormalized link to the Warehouse entity, it provides high-performance
@@ -20,12 +21,12 @@ import java.util.List;
  * </p>
  */
 @Repository
-public interface OrderRepository extends JpaRepository<Order, String> {
+public interface OrderRepository extends JpaRepository<SellingOrder, String> {
 
     /**
      * Retrieves all orders belonging to a specific facility.
      */
-    List<Order> findAllByWarehouseId(String warehouseId);
+    List<SellingOrder> findAllByWarehouseId(String warehouseId);
 
     /**
      * RESOLVED: Method to fetch filtered orders for the OrderService.
@@ -33,7 +34,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      * Logic: <code>WHERE warehouse_id = ? AND status = ?</code>
      * </p>
      */
-    List<Order> findAllByWarehouseIdAndStatus(String warehouseId, OrderStatus status);
+    List<SellingOrder> findAllByWarehouseIdAndStatus(String warehouseId, OrderStatus status);
 
     /**
      * Aggregates count of orders by status for dashboard metrics.
@@ -47,7 +48,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      * but are not yet finalized (SHIPPED or DELIVERED).
      * </p>
      */
-    @Query("SELECT COUNT(o) FROM Order o WHERE o.warehouse.id = :warehouseId " +
+    @Query("SELECT COUNT(o) FROM SellingOrder o WHERE o.warehouse.id = :warehouseId " +
             "AND o.expectedShipDate < CURRENT_TIMESTAMP " +
             "AND o.status NOT IN (com.infotact.warehouse.entity.enums.OrderStatus.SHIPPED, " +
             "com.infotact.warehouse.entity.enums.OrderStatus.DELIVERED)")
@@ -60,8 +61,17 @@ public interface OrderRepository extends JpaRepository<Order, String> {
      * </p>
      */
     @Query("SELECT new com.infotact.warehouse.dto.v1.response.ProductSalesDTO(p.name, SUM(oi.quantity)) " +
-            "FROM Order o JOIN o.items oi JOIN oi.product p " +
+            "FROM SellingOrder o JOIN o.items oi JOIN oi.product p " +
             "WHERE o.warehouse.id = :warehouseId " +
             "GROUP BY p.name ORDER BY SUM(oi.quantity) DESC")
     List<ProductSalesDTO> findTopSellingProducts(@Param("warehouseId") String warehouseId, Pageable pageable);
+
+    @Query("SELECT new com.infotact.warehouse.dto.v1.response.ProductSalesDTO(p.name, SUM(oi.quantity)) " +
+            "FROM SellingOrder o JOIN o.items oi JOIN oi.product p " +
+            "WHERE o.warehouse.id = :warehouseId AND o.createdAt >= :startDate " +
+            "GROUP BY p.name ORDER BY SUM(oi.quantity) DESC")
+    List<ProductSalesDTO> findTopSellingProductsMonthly(
+            @Param("warehouseId") String warehouseId,
+            @Param("startDate") LocalDateTime startDate,
+            Pageable pageable);
 }

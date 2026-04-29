@@ -9,15 +9,16 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
  * Data Transfer Object representing the detailed state of an outbound customer order.
  * <p>
- * This response includes denormalized data (Warehouse and Product names) to optimize
- * frontend rendering performance. It provides a complete snapshot of the order's
- * lifecycle and its constituent line items.
+ * This response provides a financial and operational snapshot of a sale.
+ * It includes denormalized names and price snapshots to ensure
+ * historical data integrity even if the master catalog prices change.
  * </p>
  */
 @Data
@@ -26,9 +27,9 @@ import java.util.List;
 @AllArgsConstructor
 @Schema(
         name = "OrderResponse",
-        description = "Detailed view of an outbound order including fulfillment status and itemized details"
+        description = "Detailed view of an outbound order including financial snapshots and fulfillment status"
 )
-public class OrderResponse  implements Serializable {
+public class OrderResponse implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -38,7 +39,7 @@ public class OrderResponse  implements Serializable {
     private String id;
 
     @Schema(description = "The business-facing order reference number",
-            example = "ORD-2026-001")
+            example = "ORD-2026-101")
     private String orderNumber;
 
     @Schema(description = "The current fulfillment state of the order",
@@ -48,8 +49,11 @@ public class OrderResponse  implements Serializable {
     @Schema(description = "Timestamp when the order was initially created")
     private LocalDateTime createdAt;
 
-    @Schema(description = "Name of the warehouse processing this order (Denormalized)",
-            example = "Central Hub Berlin")
+    @Schema(description = "Total monetary value of the order", example = "159998.00")
+    private BigDecimal totalAmount;
+
+    @Schema(description = "Name of the warehouse processing this order",
+            example = "Pune Main Warehouse")
     private String warehouseName;
 
     @Schema(description = "List of specific products and quantities included in the order")
@@ -57,28 +61,36 @@ public class OrderResponse  implements Serializable {
 
     /**
      * Detail view of a single product within an outbound order.
+     * Includes the price snapshot for historical accuracy.
      */
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Schema(description = "Detailed information for a single order line item")
+    @Schema(description = "Detailed information for a single order line item including price snapshots")
     public static class OrderItemDetail {
 
         @Schema(description = "The internal UUID of the product",
                 example = "p1b2c3d4-e5f6-7890")
         private String productId;
 
-        @Schema(description = "The display name of the product (Denormalized)",
-                example = "Sony WH-1000XM4")
+        @Schema(description = "The display name of the product",
+                example = "iPhone 17 256GB")
         private String productName;
 
-        @Schema(description = "The Stock Keeping Unit (SKU) for warehouse picking",
-                example = "AUDIO-SNY-4000")
+        @Schema(description = "The Stock Keeping Unit (SKU) for picking",
+                example = "APP-IP17-256-BLK")
         private String sku;
 
-        @Schema(description = "Number of units ordered",
-                example = "2")
+        @Schema(description = "Number of units ordered", example = "2")
         private Integer quantity;
+
+        @Schema(description = "The price per unit at the time the order was placed",
+                example = "79999.00")
+        private BigDecimal sellPriceAtTimeOfOrder;
+
+        @Schema(description = "Line item total (Quantity * Sell Price)",
+                example = "159998.00")
+        private BigDecimal lineTotal;
     }
 }

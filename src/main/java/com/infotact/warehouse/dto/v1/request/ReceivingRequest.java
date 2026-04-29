@@ -8,15 +8,15 @@ import lombok.Data;
 /**
  * Data Transfer Object for confirming the physical receipt of goods.
  * <p>
- * This request is used to update the actual inventory levels in the warehouse.
- * It transition stock from 'In-Transit' (Purchase Order state) to
- * 'Available' (Inventory state).
+ * Transitions stock from 'Inbound PO' state to 'Available' Inventory.
+ * <b>Update:</b> Now requires Bin and Batch details to satisfy inventory
+ * tracking and batch-based cost segregation.
  * </p>
  */
 @Data
 @Schema(
         name = "ReceivingRequest",
-        description = "Payload used to record the physical arrival of products into the warehouse"
+        description = "Payload used to record the physical arrival of products into a specific warehouse bin"
 )
 public class ReceivingRequest {
 
@@ -28,12 +28,28 @@ public class ReceivingRequest {
     )
     private String productId;
 
+    @NotBlank(message = "Storage Bin ID is required")
+    @Schema(
+            description = "The UUID of the physical bin/shelf where items are placed",
+            example = "bin-9922-x1",
+            requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    private String storageBinId;
+
     @Min(value = 1, message = "Quantity must be at least 1")
     @Schema(
-            description = "The physical count of units received and verified",
+            description = "The physical count of units received",
             example = "100",
             minimum = "1",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
     private Integer quantity;
+
+    @NotBlank(message = "Batch number is required")
+    @Schema(
+            description = "Manufacturer or internal batch/lot identifier (e.g., PO ID or Date)",
+            example = "LOT-2026-04-A",
+            requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    private String batchNumber;
 }

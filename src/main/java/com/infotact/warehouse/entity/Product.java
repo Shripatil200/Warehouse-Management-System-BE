@@ -2,24 +2,13 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * Persistence entity representing a master catalog item.
- * <p>
- * This entity serves as the template for all inventory tracked within a specific
- * facility. It stores static attributes (price, weight, SKU) and operational
- * parameters (minThreshold) used by the dashboard for stock-level alerting.
- * </p>
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -41,70 +30,61 @@ public class Product extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    /**
-     * Stock Keeping Unit (SKU).
-     * <p>
-     * Logic: A unique business identifier. Unlike the UUID, this is used for
-     * human-readable tracking, barcode printing, and supplier communication.
-     * </p>
-     */
     @Column(unique = true, nullable = false)
     private String sku;
 
     private String description;
 
-    /**
-     * Unit sellingPrice of the product.
-     * <p>
-     * Logic: Uses 19,4 precision for financial accuracy. This is the price charged
-     * to customers, regardless of the historical purchase cost of the batch.
-     * </p>
-     */
+    /** Unit Selling Price (Price charged to customer) */
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal sellingPrice;
 
-    /** Physical weight in KG. Used for calculating shipping costs and bin load limits. */
-    private Double weight;
+    /** Unit Cost Price (What the warehouse paid; used for valuation) */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal costPrice;
 
-    /** Industry-standard barcode (EAN, UPC) for handheld scanner integration. */
+    // --- Logistics & Physical Specs ---
+
+    /** Unit of Measure (e.g., PCS, BOX, KG, LTR) */
+    @Column(nullable = false, length = 20)
+    private String uom;
+
+    private Double weight; // in KG
+    private Double length; // in cm
+    private Double width;  // in cm
+    private Double height; // in cm
+
+    /** Industry-standard barcode for scanner integration */
     private String barcode;
 
-    /** * Status flag.
-     * <p>
-     * Logic: Soft-delete implementation. Inactive products remain in history
-     * but are hidden from the active catalog and cannot be ordered.
-     * </p>
-     */
+    // --- Operational Controls ---
+
     @Column(nullable = false)
     private boolean active = true;
 
-    /**
-     * Safety stock level.
-     * <p>
-     * Logic: When total inventory falls below this number, the system triggers
-     * a 'LOW_STOCK' alert on the dashboard.
-     * </p>
-     */
+    /** Minimum stock level before triggering alert */
     @Column(nullable = false)
     private Integer minThreshold = 10;
 
-    /** Hierarchical category for grouping and reporting. */
+    /** Maximum stock level to prevent overstocking */
+    private Integer maxThreshold;
+
+    // --- Traceability Flags ---
+
+    /** If true, every single unit must have a unique Serial Number */
+    private boolean isSerialized = false;
+
+    /** If true, items are tracked by Batch/Lot (e.g., food or pharma) */
+    private boolean isBatchTracked = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     private ProductCategory category;
 
-    /**
-     * DENORMALIZATION: Direct link to Warehouse.
-     * <p>
-     * Performance: Allows the system to quickly fetch all products belonging to a
-     * specific facility without traversing the complex Layout hierarchy.
-     * </p>
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
 
-    /** The physical instances of this product stored across various bins. */
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<InventoryItem> inventoryItems;
 }

@@ -15,13 +15,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/**
- * Custom security filter that validates the JWT in the Authorization header.
- * <p>
- * This filter runs once per request. If a valid 'Bearer' token is found,
- * it sets the authentication in the SecurityContext.
- * </p>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -38,21 +31,19 @@ public class JwtFilter extends OncePerRequestFilter {
         String token = null;
         String username = null;
 
-        // 1. Check for 'Bearer ' prefix
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
             try {
                 username = jwtUtil.extractUsername(token);
             } catch (Exception e) {
-                log.error("Failed to extract username from JWT: {}", e.getMessage());
+                log.error("JWT Error: {}", e.getMessage());
             }
         }
 
-        // 2. Validate token and set Security Context
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = service.loadUserByUsername(username);
 
-            if (jwtUtil.validateToken(token, userDetails)) {
+            if (jwtUtil.validateToken(token, userDetails.getUsername())) {
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
 

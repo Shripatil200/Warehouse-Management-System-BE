@@ -10,13 +10,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-/**
- * Service to load user-specific data from the database.
- * <p>
- * Validates that the account exists and is currently in 'ACTIVE' status
- * before granting access.
- * </p>
- */
 @Service
 @RequiredArgsConstructor
 public class UsersDetailsService implements UserDetailsService {
@@ -26,17 +19,12 @@ public class UsersDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
-        // ACCOUNT STATUS CHECK
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new DisabledException("Your account status is " + user.getStatus() + ". Login restricted.");
+            throw new DisabledException("Login restricted. Account status: " + user.getStatus());
         }
 
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getEmail())
-                .password(user.getPassword())
-                .roles(user.getRole().name()) // Maps e.g. "ADMIN" to ROLE_ADMIN
-                .build();
+        return new UserPrincipal(user);
     }
 }

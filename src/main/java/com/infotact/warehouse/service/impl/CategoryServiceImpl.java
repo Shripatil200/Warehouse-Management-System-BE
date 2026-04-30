@@ -22,13 +22,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of {@link CategoryService} managing product taxonomy.
  * <p>
- * Supports hierarchical structures and Warehouse-specific storage optimization
- * through preferred zone mapping.
+ * This service enforces multi-tenant isolation, ensuring that managers only
+ * interact with categories belonging to their assigned warehouse. It supports
+ * recursive nesting and provides safety checks for circular dependencies.
  * </p>
  */
 @Slf4j
@@ -40,26 +41,35 @@ public class CategoryServiceImpl implements CategoryService {
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
 
+    /**
+     * Context-helper to retrieve the currently authenticated user and their warehouse.
+     */
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("User profile not found"));
+                .orElseThrow(() -> new UnauthorizedException("Authenticated user context not found."));
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Validation:</b> Checks for name uniqueness within the specific warehouse context.
+     * If a parent ID is provided, verifies it exists within the same facility.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
-        log.info("Creating category '{}' for facility context.", request.getName());
+        User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
 
-        if (categoryRepository.existsByNameIgnoreCase(request.getName())) {
-            throw new AlreadyExistsException("Category with this name already exists.");
+        log.info("Attempting to create category '{}' for warehouse: {}", request.getName(), warehouseId);
+
+        if (categoryRepository.existsByNameIgnoreCaseAndWarehouseId(request.getName(), warehouseId)) {
+            throw new AlreadyExistsException("Category name '" + request.getName() + "' is already in use at this facility.");
         }
 
-        User manager = getAuthenticatedUser();
         ProductCategory category = new ProductCategory();
         category.setName(request.getName());
         category.setDescription(request.getDescription());
@@ -67,8 +77,8 @@ public class CategoryServiceImpl implements CategoryService {
         category.setWarehouse(manager.getWarehouse());
 
         if (request.getParentCategoryId() != null) {
-            ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Parent category not found."));
+            ProductCategory parent = categoryRepository.findByIdAndWarehouseId(request.getParentCategoryId(), warehouseId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent category not found or belongs to another warehouse."));
             category.setParentCategory(parent);
         }
 
@@ -77,16 +87,26 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Performs a warehouse-scoped lookup.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "categories", key = "#id")
     public ProductCategoryResponse getCategory(String id) {
-        return categoryRepository.findById(id)
+        User manager = getAuthenticatedUser();
+        return categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found or access denied."));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Returns a paginated list of categories mapped to the current user's facility.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "categories", key = "'list-' + #includeInactive + '-' + #pageable.pageNumber")
@@ -103,39 +123,68 @@ public class CategoryServiceImpl implements CategoryService {
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Constraint:</b> Deletion is blocked if the category has active sub-categories
+     * or associated product stock to maintain referential integrity.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public void deleteCategory(String id) {
-        ProductCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+        User manager = getAuthenticatedUser();
+        ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found for deletion."));
 
-        if (!category.getSubCategories().isEmpty() || !category.getProducts().isEmpty()) {
-            throw new IllegalOperationException("Cannot delete category: It contains linked products or sub-categories.");
+        if (!category.getSubCategories().isEmpty()) {
+            throw new IllegalOperationException("Cannot delete: Category has nested sub-categories. Delete children first.");
+        }
+
+        if (!category.getProducts().isEmpty()) {
+            throw new IllegalOperationException("Cannot delete: Category is currently linked to active products.");
         }
 
         categoryRepository.delete(category);
+        log.warn("Category '{}' (ID: {}) permanently removed from warehouse.", category.getName(), id);
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Logic:</b> Prevents circular references by ensuring a category cannot be
+     * set as its own parent.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request) {
-        ProductCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+        User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
+
+        ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found for update."));
+
+        // Name Change Validation
+        if (!category.getName().equalsIgnoreCase(request.getName()) &&
+                categoryRepository.existsByNameIgnoreCaseAndWarehouseId(request.getName(), warehouseId)) {
+            throw new AlreadyExistsException("Another category in this warehouse is already named '" + request.getName() + "'.");
+        }
 
         category.setName(request.getName());
         category.setDescription(request.getDescription());
         category.setPreferredZoneId(request.getPreferredZoneId());
 
+        // Hierarchy Logic
         if (request.getParentCategoryId() != null) {
-            ProductCategory parent = categoryRepository.findById(request.getParentCategoryId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Parent category not found."));
+            if (id.equals(request.getParentCategoryId())) {
+                throw new IllegalOperationException("A category cannot be assigned as its own parent.");
+            }
+            ProductCategory parent = categoryRepository.findByIdAndWarehouseId(request.getParentCategoryId(), warehouseId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Parent category assignment invalid."));
             category.setParentCategory(parent);
+        } else {
+            category.setParentCategory(null);
         }
 
         return mapToResponse(categoryRepository.save(category));
@@ -161,30 +210,38 @@ public class CategoryServiceImpl implements CategoryService {
         return updateStatus(id, false);
     }
 
+    /**
+     * Maps the JPA entity to a Response DTO including UI-centric metadata.
+     */
     private ProductCategoryResponse mapToResponse(ProductCategory entity) {
-        ProductCategoryResponse response = new ProductCategoryResponse();
-        response.setId(entity.getId());
-        response.setName(entity.getName());
-        response.setDescription(entity.getDescription());
-        response.setPreferredZoneId(entity.getPreferredZoneId());
-        response.setActive(entity.isActive());
-        response.setCreatedAt(entity.getCreatedAt());
-        response.setUpdatedAt(entity.getUpdatedAt());
-        response.setChildren(new ArrayList<>()); // Placeholder for tree mapping
-
-        if (entity.getParentCategory() != null) {
-            response.setParentCategoryId(entity.getParentCategory().getId());
-            response.setParentCategoryName(entity.getParentCategory().getName());
-        }
-        return response;
+        return ProductCategoryResponse.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .description(entity.getDescription())
+                .active(entity.isActive())
+                .preferredZoneId(entity.getPreferredZoneId())
+                .parentCategoryId(entity.getParentCategory() != null ? entity.getParentCategory().getId() : null)
+                .parentCategoryName(entity.getParentCategory() != null ? entity.getParentCategory().getName() : null)
+                // Metadata for frontend
+                .isRoot(entity.getParentCategory() == null)
+                .subCategoryCount(entity.getSubCategories() != null ? entity.getSubCategories().size() : 0)
+                .productCount(entity.getProducts() != null ? entity.getProducts().size() : 0)
+                // Recursive mapping for tree structures
+                .children(entity.getSubCategories().stream()
+                        .map(this::mapToResponse)
+                        .collect(Collectors.toList()))
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .build();
     }
 
     /**
-     * {@inheritDoc}
+     * Shared logic for status toggles.
      */
     private ProductCategoryResponse updateStatus(String id, boolean status) {
-        ProductCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+        User manager = getAuthenticatedUser();
+        ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found."));
         category.setActive(status);
         return mapToResponse(categoryRepository.save(category));
     }

@@ -15,79 +15,53 @@ import java.util.Set;
 /**
  * Data Access Object for the physical 'StorageBin' infrastructure.
  * <p>
- * This repository manages the final node of the warehouse hierarchy. It includes
- * high-performance projection queries and the 'Smart Putaway' algorithm used to
- * optimize storage efficiency and worker travel time.
+ * Updated to support Volumetric and Weight-based "Smart Putaway" logic.
  * </p>
  */
 @Repository
 public interface BinRepository extends JpaRepository<StorageBin, String> {
 
-    /**
-     * Retrieves a paginated list of bins within a specific aisle.
-     * <p>
-     * Optimization: Uses pagination to prevent memory overhead when rendering
-     * large warehouse maps in the UI.
-     * </p>
-     */
     Page<StorageBin> findByAisleId(String aisleId, Pageable pageable);
 
-    /**
-     * Global unique check for a bin code (e.g., "A1-S1-01").
-     */
     boolean existsByBinCodeIgnoreCase(String binCode);
 
-    /**
-     * Validates a bin's existence specifically within its assigned aisle.
-     */
     Optional<StorageBin> findByBinCodeAndAisleId(String binCode, String aisleId);
 
-    /**
-     * Performance-optimized projection to retrieve only the unique codes in an aisle.
-     * <p>
-     * Usage: Ideal for quick validation checks or populating dropdowns
-     * without loading full bin objects into memory.
-     * </p>
-     */
     @Query("SELECT b.binCode FROM StorageBin b WHERE b.aisle.id = :aisleId")
     Set<String> findAllBinCodesByAisleId(@Param("aisleId") String aisleId);
 
     boolean existsByBinCode(String generatedCode);
 
     /**
-     * THE SMART PUTAWAY ENGINE
+     * THE SMART PUTAWAY ENGINE (Volumetric & Weight Aware)
      * <p>
-     * Implements an intelligent suggestion algorithm for receiving stock:
-     * 1. <b>Product Affinity:</b> Prioritizes bins that already contain the same Product
-     * to keep stock grouped.
-     * 2. <b>Consolidation Strategy:</b> Among candidate bins, prioritizes those with
-     * the <i>least</i> remaining space to maximize overall warehouse density.
-     * 3. <b>Constraints:</b> Only selects active, available bins with sufficient
-     * remaining capacity.
+     * Implements an intelligent suggestion algorithm:
+     * 1. <b>Affinity:</b> Bins with the same product first.
+     * 2. <b>Physical Fit:</b> Checks BOTH (maxVolume - currentVolume) AND (maxWeight - currentWeight).
+     * 3. <b>Consolidation:</b> Prioritizes bins that are already partially full to save empty bins.
      * </p>
-     * @param productId The ID of the item being received.
-     * @param zoneId Optional filter to restrict storage to a specific zone (e.g., Cold Storage).
-     * @param requiredSpace The unit count to be stored.
-     * @return A sorted list of ideal bins for placement.
+     * @param productId ID of item to receive.
+     * @param zoneId Optional zone filter.
+     * @param reqVolume Total volume of the shipment (qty * L * W * H).
+     * @param reqWeight Total weight of the shipment (qty * weight).
      */
     @Query("SELECT b FROM StorageBin b " +
-            "LEFT JOIN InventoryItem ii ON ii.storageBin.id = b.id AND ii.product.id = :productId " +
+            "LEFT JOIN b.inventoryItems ii ON ii.product.id = :productId " +
             "JOIN b.aisle a " +
             "JOIN a.zone z " +
             "WHERE b.active = true " +
             "AND b.status = 'AVAILABLE' " +
             "AND (:zoneId IS NULL OR z.id = :zoneId) " +
-            "AND (b.capacity - b.currentOccupancy) >= :requiredSpace " +
+            "AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume " +
+            "AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight " +
             "ORDER BY " +
             "  CASE WHEN ii.product.id IS NOT NULL THEN 0 ELSE 1 END ASC, " +
-            "  (b.capacity - b.currentOccupancy) ASC")
+            "  (b.maxVolume - b.currentVolumeOccupied) ASC")
     List<StorageBin> findSmartPutawayBins(
             @Param("productId") String productId,
             @Param("zoneId") String zoneId,
-            @Param("requiredSpace") Integer requiredSpace);
+            @Param("reqVolume") Double reqVolume,
+            @Param("reqWeight") Double reqWeight);
 
-    /**
-     * Fetches a bin by its code only if it is currently active.
-     */
     Optional<StorageBin> findByBinCodeAndActiveTrue(String binCode);
 }

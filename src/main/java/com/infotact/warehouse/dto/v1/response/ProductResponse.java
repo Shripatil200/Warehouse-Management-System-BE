@@ -8,67 +8,98 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Data Transfer Object representing a comprehensive view of a product.
  * <p>
- * This response is the primary model for product listings and detail views.
- * It includes denormalized category information and audit timestamps to support
- * enterprise-level reporting and UI breadcrumbs.
+ * Provides a 360-degree view of the catalog item, including logistics (dimensions),
+ * financial valuation (cost price), and traceability flags (serialization/batching).
  * </p>
  */
 @Data
 @Builder
 @Schema(
         name = "ProductResponse",
-        description = "Full specification of a product in the warehouse catalog"
+        description = "Full specification of a product including logistics and sourcing data"
 )
 public class ProductResponse implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Schema(description = "Internal unique identifier (UUID) of the product",
-            example = "550e8400-e29b-41d4-a716-446655440000")
+    @Schema(description = "Internal unique identifier (UUID)", example = "550e8400-e29b-41d4-a716-446655440000")
     private String id;
 
-    @Schema(description = "The registered name of the product",
-            example = "Sony WH-1000XM4 Wireless Headphones")
+    @Schema(description = "The registered name of the product", example = "Industrial AC Motor")
     private String name;
 
-    @Schema(description = "Stock Keeping Unit - unique business identifier",
-            example = "AUDIO-SNY-4000")
+    @Schema(description = "Stock Keeping Unit", example = "MOT-IND-001")
     private String sku;
 
-    @Schema(description = "Detailed marketing and technical description",
-            example = "Premium noise-canceling overhead headphones.")
+    @Schema(description = "Detailed specifications", example = "3-Phase, 5HP High Torque Motor")
     private String description;
 
-    @Schema(description = "Current unit sales price", example = "349.99")
-    private BigDecimal price;
+    // --- Financials ---
 
-    @Schema(description = "Physical weight per unit in kilograms", example = "0.25")
+    @Schema(description = "Current unit sales price for customers", example = "12000.00")
+    private BigDecimal sellingPrice;
+
+    @Schema(description = "Purchase cost from supplier for valuation", example = "8500.00")
+    private BigDecimal costPrice;
+
+    // --- Logistics & Dimensions ---
+
+    @Schema(description = "Unit of Measure", example = "PCS")
+    private String uom;
+
+    @Schema(description = "Weight in kilograms", example = "15.5")
     private Double weight;
 
-    @Schema(description = "EAN/UPC barcode number for scanning", example = "4548736112148")
+    @Schema(description = "Length in cm", example = "40.0")
+    private Double length;
+
+    @Schema(description = "Width in cm", example = "30.0")
+    private Double width;
+
+    @Schema(description = "Height in cm", example = "30.0")
+    private Double height;
+
+    @Schema(description = "EAN/UPC barcode", example = "890123456789")
     private String barcode;
 
-    @Schema(description = "Operational status. Inactive products are soft-deleted.", example = "true")
+    // --- Operational Status ---
+
+    @Schema(description = "Active status for catalog visibility", example = "true")
     private boolean active;
 
-    @Schema(description = "Safety stock level that triggers replenishment alerts", example = "10")
+    @Schema(description = "Safety stock alert level", example = "5")
     private Integer minThreshold;
 
-    @Schema(description = "UUID of the assigned category",
-            example = "c1b2c3d4-e5f6-7890")
+    @Schema(description = "Maximum storage limit to prevent overstocking", example = "100")
+    private Integer maxThreshold;
+
+    // --- Traceability ---
+
+    @Schema(description = "Indicates if units are tracked by unique serial numbers")
+    private boolean isSerialized;
+
+    @Schema(description = "Indicates if items are tracked by batch/lot numbers")
+    private boolean isBatchTracked;
+
+    // --- Relationships ---
+
+    @Schema(description = "Assigned category UUID", example = "c1b2c3d4-e5f6-7890")
     private String categoryId;
 
-    @Schema(description = "Name of the assigned category (Denormalized)",
-            example = "Audio & Sound")
+    @Schema(description = "Display name of the category", example = "Industrial Machinery")
     private String categoryName;
 
-    @Schema(description = "Timestamp of initial catalog entry")
+    @Schema(description = "Available sourcing and supplier options for this product")
+    private List<ProductSupplierResponse> sourcingOptions;
+
+    @Schema(description = "Timestamp of catalog creation")
     private LocalDateTime createdAt;
 
-    @Schema(description = "Timestamp of the last update to product attributes")
+    @Schema(description = "Timestamp of the last attribute update")
     private LocalDateTime updatedAt;
 }

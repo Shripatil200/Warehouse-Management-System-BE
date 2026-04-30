@@ -9,14 +9,18 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * Persistence entity acting as an immutable ledger for all stock movements.
  * <p>
- * Every physical change to inventory (receiving, picking, adjusting, or moving)
- * must generate an InventoryTransaction record. This provides a complete
- * audit trail for security and inventory reconciliation.
+ * Every physical change to inventory (receiving, picking, adjusting)
+ * generates a record for security and inventory reconciliation.
+ * </p>
+ * <p>
+ * <b>Update:</b> Added unitPrice to record the financial value of the movement.
+ * For INBOUND, this is the purchase price; for OUTBOUND, it is the selling price.
  * </p>
  */
 @Data
@@ -65,7 +69,7 @@ public class InventoryTransaction {
     /**
      * External document reference for traceability.
      * <p>
-     * Example: A Purchase Order ID for INBOUND or a Sales Order ID for OUTBOUND.
+     * Example: A Purchase SellingOrder ID for INBOUND or a Sales SellingOrder ID for OUTBOUND.
      * This allows users to "drill down" into the source of the movement.
      * </p>
      */
@@ -94,4 +98,14 @@ public class InventoryTransaction {
      */
     @CreatedBy
     private String performedBy;
+
+    /**
+     * The financial value assigned to this specific transaction.
+     * <p>
+     * Logic: Allows auditors to see the total value of "Damaged" goods or
+     * the total value of stock received in a given month.
+     * </p>
+     */
+    @Column(precision = 19, scale = 4)
+    private BigDecimal unitPrice;
 }

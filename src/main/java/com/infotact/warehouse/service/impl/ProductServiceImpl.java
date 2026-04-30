@@ -2,6 +2,7 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ProductRequest;
 import com.infotact.warehouse.dto.v1.response.ProductResponse;
+import com.infotact.warehouse.dto.v1.response.ProductSupplierResponse;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.entity.User;
@@ -10,6 +11,7 @@ import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.ProductRepository;
+import com.infotact.warehouse.repository.ProductSupplierRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -23,12 +25,18 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.stream.Collectors;
+
 /**
  * Implementation of {@link ProductService} for core catalog orchestration.
  * <p>
  * This service manages the lifecycle of warehouse inventory items. It enforces
  * data integrity via SKU uniqueness checks and bridges human-readable master
  * data with physical inventory tracking.
+ * </p>
+ * <p>
+ * <b>Update:</b> Supports advanced logistics (Dimensions, UOM) and
+ * traceability flags (Serialized/Batch) for warehouse optimization.
  * </p>
  */
 @Slf4j
@@ -40,26 +48,15 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final ProductSupplierRepository productSupplierRepository;
 
-    /**
-     * Resolves the identity of the current user to enforce warehouse-level
-     * multi-tenancy during product creation.
-     */
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Authenticated user profile not found."));
     }
-
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li><b>SKU Guard:</b> Performs a case-insensitive check to prevent duplicate identification.</li>
-     * <li><b>Category Linkage:</b> Ensures the product is bound only to an 'Active' taxonomy node.</li>
-     * <li><b>Cache Policy:</b> Triggers a global eviction of the 'products' cache to maintain list integrity.</li>
-     * </ul>
      */
     @Override
     @Transactional
@@ -76,14 +73,16 @@ public class ProductServiceImpl implements ProductService {
         Product product = new Product();
         updateProductFields(product, request);
         product.setCategory(category);
-        product.setWarehouse(manager.getWarehouse()); // DENORMALIZATION: Optimized for facility-scoped lookups
+        product.setWarehouse(manager.getWarehouse());
         product.setActive(true);
 
         log.info("Catalog Update: Product '{}' (SKU: {}) registered for facility.", product.getName(), product.getSku());
         return mapToResponse(productRepository.save(product));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public ProductResponse getProductById(String id) {
@@ -94,10 +93,6 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Optimization:</b> Results are cached by SKU, significantly reducing latency
-     * for barcode scanning workflows in the physical warehouse.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -108,13 +103,6 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Active product with SKU '" + sku + "' not found."));
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Validation:</b> If the SKU is updated, the service re-verifies uniqueness
-     * across the global catalog before committing the change.
-     * </p>
-     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -138,10 +126,6 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Pagination:</b> Cached by page index and status filter to accelerate
-     * UI table rendering for staff members.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -153,13 +137,6 @@ public class ProductServiceImpl implements ProductService {
         return products.map(this::mapToResponse);
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Soft-Delete Policy:</b> Deactivates the product to hide it from
-     * operational views while preserving historical order and inventory records.
-     * </p>
-     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -167,11 +144,12 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
         product.setActive(false);
-        log.warn("Catalog Management: Product {} has been deactivated (Soft-Deleted).", product.getSku());
         return mapToResponse(productRepository.save(product));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
@@ -184,35 +162,73 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * Synchronizes DTO fields to the JPA entity.
+     * <p>
+     * <b>Update:</b> Now handles financial valuation (costPrice) and
+     * volumetric data (L/W/H) required for bin-capacity calculations.
+     * </p>
      */
     private void updateProductFields(Product product, ProductRequest request) {
         product.setName(request.getName());
-        product.setSku(request.getSku().toUpperCase()); // Logic: Standardize SKU case
+        product.setSku(request.getSku().toUpperCase());
         product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
+
+        // Financials
+        product.setSellingPrice(request.getSellingPrice());
+        product.setCostPrice(request.getCostPrice());
+
+        // Logistics
+        product.setUom(request.getUom());
         product.setWeight(request.getWeight());
+        product.setLength(request.getLength());
+        product.setWidth(request.getWidth());
+        product.setHeight(request.getHeight());
+
         product.setBarcode(request.getBarcode());
+
+        // Operational Logic
         product.setMinThreshold(request.getMinThreshold() != null ? request.getMinThreshold() : 10);
+        product.setMaxThreshold(request.getMaxThreshold());
+
+        // Traceability
+        product.setSerialized(request.isSerialized());
+        product.setBatchTracked(request.isBatchTracked());
     }
 
-    /**
-     * Maps the internal Product entity to a builder-pattern based Response DTO.
-     */
     private ProductResponse mapToResponse(Product entity) {
-        return ProductResponse.builder()
+        ProductResponse response = ProductResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())
                 .sku(entity.getSku())
                 .description(entity.getDescription())
-                .price(entity.getPrice())
+                .sellingPrice(entity.getSellingPrice())
+                .costPrice(entity.getCostPrice())
+                .uom(entity.getUom())
                 .weight(entity.getWeight())
+                .length(entity.getLength())
+                .width(entity.getWidth())
+                .height(entity.getHeight())
                 .barcode(entity.getBarcode())
                 .active(entity.isActive())
                 .minThreshold(entity.getMinThreshold())
+                .maxThreshold(entity.getMaxThreshold())
+                .isSerialized(entity.isSerialized())
+                .isBatchTracked(entity.isBatchTracked())
                 .categoryId(entity.getCategory().getId())
                 .categoryName(entity.getCategory().getName())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();
+
+        response.setSourcingOptions(
+                productSupplierRepository.findByProductId(entity.getId()).stream()
+                        .map(ps -> ProductSupplierResponse.builder()
+                                .supplierName(ps.getSupplier().getName())
+                                .currentSupplyPrice(ps.getCurrentSupplyPrice())
+                                .leadTimeDays(ps.getLeadTimeDays())
+                                .build())
+                        .collect(Collectors.toList())
+        );
+
+        return response;
     }
 }

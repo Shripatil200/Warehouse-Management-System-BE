@@ -7,12 +7,17 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
+import java.math.BigDecimal;
+
 /**
  * Persistence entity representing a single line item within a customer order.
  * <p>
- * This entity specifies the exact product and quantity requested by a customer.
- * During fulfillment, these records are used to calculate total reservations
- * and generate picking lists for warehouse personnel.
+ * Specifies the exact product and quantity requested. Used to calculate
+ * reservations and generate picking lists for warehouse personnel.
+ * </p>
+ * <p>
+ * <b>Update:</b> Added sellPriceAtTimeOfOrder to act as a financial snapshot.
+ * If the master Product price changes, this record preserves what the customer paid.
  * </p>
  */
 @Data
@@ -22,7 +27,7 @@ import org.hibernate.annotations.DynamicUpdate;
 @AllArgsConstructor
 @Entity
 @Table(name = "order_items")
-public class OrderItem {
+public class SellingOrderItem {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -37,7 +42,7 @@ public class OrderItem {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
-    private Order order;
+    private SellingOrder order;
 
     /**
      * The specific product referenced in this line item.
@@ -59,4 +64,14 @@ public class OrderItem {
      */
     @Column(nullable = false)
     private Integer quantity;
+
+    /**
+     * The selling price captured at the moment the order was placed.
+     * <p>
+     * Logic: Prevents "back-dating" of revenue. Even if Product.sellingPrice
+     * is updated to 20rs, an order placed at 15rs will always show 15rs.
+     * </p>
+     */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal sellPriceAtTimeOfOrder;
 }

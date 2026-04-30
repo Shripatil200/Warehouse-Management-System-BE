@@ -15,16 +15,16 @@ import jakarta.validation.Valid;
 public interface InventoryService {
 
     /**
-     * Processes the inbound receipt of goods against a Purchase Order.
+     * Processes the inbound receipt of goods against a Purchase SellingOrder.
      * <p>
      * <b>Workflow & Business Rules:</b>
-     * 1. <b>Validation:</b> Verifies the Purchase Order (PO) exists and is in a state
+     * 1. <b>Validation:</b> Verifies the Purchase SellingOrder (PO) exists and is in a state
      * capable of receiving (e.g., 'ORDERED' or 'PARTIALLY_RECEIVED').
      * 2. <b>Capacity Check:</b> Cross-references the {@link com.infotact.warehouse.entity.StorageBin}
      * logic to ensure the target location can physically accommodate the quantity.
      * 3. <b>Inventory Update:</b> Upserts the {@link com.infotact.warehouse.entity.InventoryItem}
      * using pessimistic locking to prevent race conditions during simultaneous receipts.
-     * 4. <b>PO Status Update:</b> Transitions the Purchase Order status and updates
+     * 4. <b>PO Status Update:</b> Transitions the Purchase SellingOrder status and updates
      * received quantities for audit tracking.
      * </p>
      * * @param request Data containing Product SKU, Quantity, Bin Location, and PO Reference.

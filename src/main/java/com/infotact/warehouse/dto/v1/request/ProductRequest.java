@@ -8,69 +8,86 @@ import java.math.BigDecimal;
 /**
  * Data Transfer Object for creating or updating a product in the master catalog.
  * <p>
- * This request captures all physical and commercial attributes of an item.
- * Product validation ensures SKU uniqueness and mandatory category association.
+ * This request captures all physical, commercial, and operational attributes.
+ * It includes logistics data (dimensions, UOM) to support automated bin-capacity
+ * checks and financial data (cost price) for warehouse valuation.
  * </p>
  */
 @Data
 @Schema(
         name = "ProductRequest",
-        description = "Payload for registering or modifying product details in the catalog"
+        description = "Detailed payload for registering or modifying master catalog products"
 )
 public class ProductRequest {
 
     @NotBlank(message = "Product name is required")
     @Size(max = 255)
-    @Schema(
-            description = "Display name of the product",
-            example = "Sony WH-1000XM4 Wireless Headphones",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
+    @Schema(description = "Display name of the product", example = "Industrial AC Motor")
     private String name;
 
     @NotBlank(message = "SKU is required")
     @Pattern(regexp = "^[A-Z0-9_-]+$", message = "SKU must be uppercase alphanumeric")
-    @Schema(
-            description = "Stock Keeping Unit - must be unique and uppercase alphanumeric",
-            example = "AUDIO-SNY-4000",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
+    @Schema(description = "Unique Stock Keeping Unit for business tracking", example = "MOT-IND-001")
     private String sku;
 
-    @Schema(
-            description = "Detailed product description and specifications",
-            example = "Industry-leading noise canceling overhead headphones with Mic"
-    )
+    @Schema(description = "Detailed specifications and notes", example = "3-Phase, 5HP Motor")
     private String description;
 
-    @NotNull(message = "Price is required")
-    @PositiveOrZero(message = "Price cannot be negative")
-    @Schema(
-            description = "Unit sales price of the product",
-            example = "349.99",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
-    private BigDecimal price;
+    // --- Financials ---
+
+    @NotNull(message = "Selling price is required")
+    @PositiveOrZero(message = "Selling price cannot be negative")
+    @Schema(description = "Revenue price charged to customers", example = "12000.00")
+    private BigDecimal sellingPrice;
+
+    @NotNull(message = "Cost price is required")
+    @PositiveOrZero(message = "Cost price cannot be negative")
+    @Schema(description = "Purchase cost from supplier for valuation", example = "8500.00")
+    private BigDecimal costPrice;
+
+    // --- Logistics & Dimensions ---
+
+    @NotBlank(message = "Unit of Measure (UOM) is required")
+    @Schema(description = "Standard unit of measurement", example = "PCS", allowableValues = {"PCS", "BOX", "KG", "LTR"})
+    private String uom;
 
     @Positive(message = "Weight must be positive")
-    @Schema(description = "Physical weight of the unit in kilograms", example = "0.25")
+    @Schema(description = "Weight in Kilograms (KG)", example = "15.5")
     private Double weight;
 
-    @Schema(description = "Universal barcode or EAN number", example = "4548736112148")
+    @Positive(message = "Length must be positive")
+    @Schema(description = "Physical length in CM", example = "40.0")
+    private Double length;
+
+    @Positive(message = "Width must be positive")
+    @Schema(description = "Physical width in CM", example = "30.0")
+    private Double width;
+
+    @Positive(message = "Height must be positive")
+    @Schema(description = "Physical height in CM", example = "30.0")
+    private Double height;
+
+    @Schema(description = "Universal barcode (EAN/UPC)", example = "890123456789")
     private String barcode;
 
-    @Min(value = 0, message = "Threshold cannot be negative")
-    @Schema(
-            description = "Minimum stock quantity before the system triggers a low-stock alert",
-            example = "10"
-    )
-    private Integer minThreshold;
+    // --- Inventory Controls ---
+
+    @Min(value = 0)
+    @Schema(description = "Safety stock level for alerts", example = "10")
+    private Integer minThreshold = 5;
+
+    @Schema(description = "Maximum storage limit for this item", example = "100")
+    private Integer maxThreshold;
+
+    // --- Traceability Flags ---
+
+    @Schema(description = "Requires unique serial number for each unit", example = "false")
+    private boolean isSerialized;
+
+    @Schema(description = "Tracked by Batch/Lot number", example = "false")
+    private boolean isBatchTracked;
 
     @NotBlank(message = "Category ID is required")
-    @Schema(
-            description = "The UUID of the assigned product category",
-            example = "550e8400-e29b-41d4-a716-446655440000",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
+    @Schema(description = "UUID of the associated product category")
     private String categoryId;
 }

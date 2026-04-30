@@ -31,7 +31,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
-@Tag(name = "6. Order Management", description = "Endpoints for managing outbound customer orders and fulfillment")
+@Tag(name = "6. SellingOrder Management", description = "Endpoints for managing outbound customer orders and fulfillment")
 public class OrderController {
 
     private final OrderService orderService;
@@ -49,7 +49,7 @@ public class OrderController {
     @Operation(summary = "Create an outbound order",
             description = "Initializes a new customer order. Stock is validated against the warehouse inventory.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Order created successfully"),
+            @ApiResponse(responseCode = "201", description = "SellingOrder created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid SKU or insufficient stock"),
             @ApiResponse(responseCode = "401", description = "Unauthorized: Authentication required"),
             @ApiResponse(responseCode = "403", description = "Forbidden: Insufficient permissions")
@@ -64,7 +64,7 @@ public class OrderController {
      * Retrieves specific order details by ID.
      *
      * @param id The unique identifier of the order.
-     * @return Order details including items and fulfillment status.
+     * @return SellingOrder details including items and fulfillment status.
      */
     @Operation(summary = "Get order by ID", description = "Retrieves full details of a specific outbound order.")
     @GetMapping("/{id}")

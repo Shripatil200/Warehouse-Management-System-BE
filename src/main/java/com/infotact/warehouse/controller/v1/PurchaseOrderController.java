@@ -40,17 +40,17 @@ public class PurchaseOrderController {
     private final PurchaseOrderService poService;
 
     /**
-     * Registers a new Purchase Order in the system.
+     * Registers a new Purchase SellingOrder in the system.
      * <p>
      * Logic: Creates an expectation of stock. The PO must reference an existing
      * supplier and valid product SKUs. The initial status is always 'PLACED'.
      * </p>
      *
      * @param request Data containing supplier ID and the list of items/quantities.
-     * @return The created Purchase Order details.
+     * @return The created Purchase SellingOrder details.
      */
     @Operation(
-            summary = "Create a Purchase Order",
+            summary = "Create a Purchase SellingOrder",
             description = "Registers a new inbound order. This document is required before inventory can be received."
     )
     @ApiResponses({
@@ -60,12 +60,12 @@ public class PurchaseOrderController {
     })
     @PostMapping
     public ResponseEntity<PurchaseOrderResponse> createPurchaseOrder(@Valid @RequestBody PurchaseOrderRequest request) {
-        log.info("REST request to create Purchase Order for supplier: {}", request.supplierId());
+        log.info("REST request to create Purchase SellingOrder for supplier: {}", request.supplierId());
         return new ResponseEntity<>(poService.createPurchaseOrder(request), HttpStatus.CREATED);
     }
 
     /**
-     * Retrieves full details of a specific Purchase Order.
+     * Retrieves full details of a specific Purchase SellingOrder.
      *
      * @param id The unique identifier (UUID) of the PO.
      * @return Purchase order details including line items and current status.

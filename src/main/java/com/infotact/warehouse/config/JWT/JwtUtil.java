@@ -5,7 +5,6 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -14,31 +13,18 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-/**
- * Utility service for managing JSON Web Tokens (JWT).
- * <p>
- * This class provides methods to generate, parse, and validate JWTs using
- * the HMAC SHA-256 signing algorithm.
- * </p>
- */
 @Service
 public class JwtUtil {
 
     @Value("${app.jwt.secret:mySuperSecretKeyForJwtGeneration12345}")
     private String secret;
 
-    /**
-     * Extracts the subject (username/email) from the token.
-     */
     public String extractUsername(String token) {
         return extractClaims(token, Claims::getSubject);
     }
 
-    /**
-     * Extracts the expiration date from the token.
-     */
-    public Date extractExpiration(String token) {
-        return extractClaims(token, Claims::getExpiration);
+    public String extractWarehouseId(String token) {
+        return extractClaims(token, claims -> claims.get("warehouseId", String.class));
     }
 
     public <T> T extractClaims(String token, Function<Claims, T> claimsResolver) {
@@ -46,9 +32,6 @@ public class JwtUtil {
         return claimsResolver.apply(claims);
     }
 
-    /**
-     * Parses the JWT using the secret key to retrieve all stored claims.
-     */
     public Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
@@ -57,20 +40,14 @@ public class JwtUtil {
                 .getBody();
     }
 
-    private Boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
     /**
-     * Creates a new JWT with the user's role and email.
-     * * @param username The user's email address.
-     * @param role The user's assigned Role (ADMIN/MANAGER).
-     * @return A signed JWT string.
+     * Updated: Generates token using the UserPrincipal to include warehouseId.
      */
-    public String generateToken(String username, String role) {
+    public String generateToken(UserPrincipal principal) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("role", role);
-        return createToken(claims, username);
+        claims.put("role", principal.getAuthorities().iterator().next().getAuthority());
+        claims.put("warehouseId", principal.getWarehouseId());
+        return createToken(claims, principal.getUsername());
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
@@ -78,16 +55,17 @@ public class JwtUtil {
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10)) // 10 Hours
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
                 .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)), SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    /**
-     * Validates if the token belongs to the user and has not expired.
-     */
-    public Boolean validateToken(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    public Boolean validateToken(String token, String username) {
+        final String extractedUsername = extractUsername(token);
+        return (extractedUsername.equals(username) && !isTokenExpired(token));
+    }
+
+    private Boolean isTokenExpired(String token) {
+        return extractClaims(token, Claims::getExpiration).before(new Date());
     }
 }

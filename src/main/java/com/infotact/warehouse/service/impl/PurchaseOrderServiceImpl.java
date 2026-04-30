@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,6 +29,11 @@ import java.util.stream.Collectors;
  * This service orchestrates the procurement process, allowing managers to forecast
  * incoming stock and track vendor fulfillment performance. It acts as the primary
  * ledger for "Expected Inventory" within a specific facility.
+ * </p>
+ * <p>
+ * <b>Update:</b> Now incorporates <b>Financial Capture</b> logic, locking in the
+ * agreed unit cost per item to ensure accurate batch-level inventory valuation
+ * upon receipt.
  * </p>
  */
 @Slf4j
@@ -56,8 +62,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
      * <b>Implementation Details:</b>
      * <ul>
      * <li><b>Supplier Audit:</b> Verifies the vendor exists before initializing the contract.</li>
-     * <li><b>Forecasting:</b> Automatically applies a default 7-day lead time for expected delivery.</li>
-     * <li><b>Multi-tenant Scoping:</b> Anchors the PO directly to the manager's {@link Warehouse}.</li>
+     * <li><b>Cost Capture:</b> Maps the unitCost from the request to lock in the purchase price.</li>
+     * <li><b>Multi-tenant Scoping:</b> Anchors the PO directly to the manager's Warehouse.</li>
      * </ul>
      */
     @Override
@@ -77,28 +83,26 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         po.setStatus(PurchaseOrderStatus.PENDING);
 
         List<PurchaseOrderItem> items = request.items().stream().map(itemRequest -> {
-            Product product = productRepository.findBySku(itemRequest.sku())
-                    .orElseThrow(() -> new EntityNotFoundException("Product SKU not found: " + itemRequest.sku()));
+            Product product = productRepository.findBySkuAndActiveTrue(itemRequest.sku())
+                    .orElseThrow(() -> new EntityNotFoundException("Active Product SKU not found: " + itemRequest.sku()));
 
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(po);
             item.setProduct(product);
             item.setQuantity(itemRequest.quantity());
+
+            // Financial Capture: Set the unitCost (10rs vs 12rs logic)
+            item.setUnitCost(itemRequest.unitCost());
+
             return item;
-        }).toList();
+        }).collect(Collectors.toList());
 
         po.setItems(items);
         log.info("Procurement: New PO created for Supplier '{}' at Warehouse '{}'", supplier.getName(), manager.getWarehouse().getName());
         return mapToResponse(poRepository.save(po));
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Security Guardrail:</b> Ensures that a manager can only view POs
-     * belonging strictly to their assigned facility.
-     * </p>
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "purchaseOrders", key = "#id")
@@ -109,13 +113,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return mapToResponse(po);
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Operational View:</b> Provides filtered access to the procurement queue.
-     * Results are cached by status to accelerate dashboard rendering.
-     * </p>
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
@@ -135,24 +133,45 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     /**
-     * Maps the persistent PO entity to a detailed Response DTO.
+     * Maps the persistent PO entity to a detailed Response DTO Record.
+     * <p>
+     * <b>Financial Logic:</b> Aggregates item-level line totals to provide
+     * a total order value for administrative reporting and inventory valuation.
+     * </p>
+     */
+    /**
+     * Maps the persistent PO entity to a detailed Response DTO Record.
      */
     private PurchaseOrderResponse mapToResponse(PurchaseOrder po) {
+        // Calculate the total order value for the response header
+        BigDecimal totalValue = po.getItems().stream()
+                .map(item -> item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Map line items including calculated line totals
+        List<PurchaseOrderResponse.OrderItemDetail> itemDetails = po.getItems().stream()
+                .map(item -> {
+                    BigDecimal lineTotal = item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()));
+                    return new PurchaseOrderResponse.OrderItemDetail(
+                            item.getProduct().getId(),
+                            item.getProduct().getName(),
+                            item.getProduct().getSku(),
+                            item.getQuantity(),
+                            item.getUnitCost(),
+                            lineTotal
+                    );
+                }).collect(Collectors.toList());
+
+        // Use GETTERS here to avoid private access errors
         return new PurchaseOrderResponse(
                 po.getId(),
                 po.getSupplier().getName(),
                 po.getStatus().name(),
-                po.getWarehouse().getId(),
                 po.getWarehouse().getName(),
-                po.getOrderDate(),
-                po.getExpectedDate(),
-                po.getItems().stream()
-                        .map(item -> new PurchaseOrderResponse.OrderItemDetail(
-                                item.getProduct().getId(),
-                                item.getProduct().getName(),
-                                item.getProduct().getSku(),
-                                item.getQuantity()
-                        )).toList()
+                totalValue,
+                po.getOrderDate(),     // Changed from po.orderDate
+                po.getExpectedDate(),  // Changed from po.expectedDate
+                itemDetails
         );
     }
 }

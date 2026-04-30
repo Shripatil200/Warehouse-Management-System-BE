@@ -2,24 +2,13 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Persistence entity representing a hierarchical classification for products.
- * <p>
- * This entity supports a recursive tree structure (parent-child) and includes
- * operational metadata like 'preferredZoneId' to assist in automated
- * put-away logic.
- * </p>
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -37,56 +26,42 @@ public class ProductCategory extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false)
     private String name;
 
-    /**
-     * Operational status for the category.
-     * <p>
-     * Logic: Inactive categories hide all associated products from the
-     * main browsing view, effectively acting as a bulk soft-delete.
-     * </p>
-     */
+    private String description;
+
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
     /**
-     * Self-referencing link to the parent classification.
-     * <p>
-     * Null indicates this is a top-level (root) category.
-     * </p>
+     * Parent category link.
+     * Top-level categories will have this as NULL.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_category_id")
+    @ToString.Exclude // Prevent circular dependency in logs
     private ProductCategory parentCategory;
 
-    /**
-     * DENORMALIZATION: Direct link to Warehouse.
-     * <p>
-     * Isolation: Ensures that category trees are facility-specific, preventing
-     * a manager in Warehouse A from seeing the custom category logic of Warehouse B.
-     * </p>
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
 
-    /**
-     * Optimization Hint: The UUID of the zone where products of this
-     * category are ideally stored (e.g., 'Cold Storage' for Perishables).
+    /** * UUID of the preferred zone (e.g., "Chemical Zone" for cleaning supplies).
+     * Useful for automated put-away suggestions.
      */
     @Column(name = "preferred_zone_id")
     private String preferredZoneId;
 
-    /**
-     * List of nested sub-categories.
-     */
-    @OneToMany(mappedBy = "parentCategory")
+    @OneToMany(mappedBy = "parentCategory", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProductCategory> subCategories = new ArrayList<>();
 
-    /**
-     * List of products belonging directly to this category level.
-     */
     @OneToMany(mappedBy = "category")
     private List<Product> products = new ArrayList<>();
+
+    // Helper method for adding subcategories
+    public void addSubCategory(ProductCategory subCategory) {
+        subCategories.add(subCategory);
+        subCategory.setParentCategory(this);
+    }
 }

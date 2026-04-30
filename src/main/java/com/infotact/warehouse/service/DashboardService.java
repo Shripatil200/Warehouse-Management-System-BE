@@ -17,7 +17,7 @@ public interface DashboardService {
      * <p>
      * <b>Data Aggregation Logic:</b>
      * 1. <b>Inventory Health:</b> Calculates total stock volume and identifies low-stock alerts.
-     * 2. <b>Order Velocity:</b> Summarizes pending vs. shipped orders for the current period.
+     * 2. <b>SellingOrder Velocity:</b> Summarizes pending vs. shipped orders for the current period.
      * 3. <b>Facility Utilization:</b> Computes the percentage of occupied storage bins relative to total capacity.
      * 4. <b>Procurement Status:</b> Tracks incoming shipments and identifies overdue purchase orders.
      * </p>

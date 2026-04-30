@@ -1,31 +1,21 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
+import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.BinStatus;
-import com.infotact.warehouse.entity.InventoryItem;
-import com.infotact.warehouse.entity.Product;
-import com.infotact.warehouse.entity.StorageBin;
+import com.infotact.warehouse.entity.enums.TransactionType;
 import com.infotact.warehouse.exception.InsufficientStorageException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
-import com.infotact.warehouse.repository.BinRepository;
-import com.infotact.warehouse.repository.InventoryRepository;
-import com.infotact.warehouse.repository.ProductRepository;
+import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * Implementation of {@link InventoryService} focusing on intelligent stock placement.
- * <p>
- * This service implements the 'Smart Putaway' algorithm, which optimizes warehouse
- * space by prioritizing product affinity zones before searching for global
- * fallback locations.
- * </p>
- */
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -34,99 +24,84 @@ public class InventoryServiceImpl implements InventoryService {
     private final BinRepository binRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final InventoryTransactionRepository transactionRepository;
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li><b>Affinity Logic:</b> Attempts to locate bins within the product's
-     * Category-defined preferred zone to keep similar items together.</li>
-     * <li><b>Fallback Mechanism:</b> If the preferred zone is saturated, the system
-     * performs an automated global search for any available bin with sufficient capacity.</li>
-     * <li><b>Transactional Integrity:</b> Ensures that if an {@link InsufficientStorageException}
-     * is thrown, no partial stock updates occur.</li>
-     * </ul>
-     */
     @Override
     @Transactional
     public void receiveShipment(ReceivingRequest request) {
-        log.info("Starting optimized receiving for Product ID: {} | Qty: {}",
-                request.getProductId(), request.getQuantity());
-
-        // 1. Validate Product & Category
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        String preferredZoneId = product.getCategory().getPreferredZoneId();
+        Double totalVolume = (product.getLength() * product.getWidth() * product.getHeight()) * request.getQuantity();
+        Double totalWeight = product.getWeight() * request.getQuantity();
+
         StorageBin targetBin = null;
 
-        // 2. PHASE 1: Try Preferred Zone (Consolidation + Product Affinity)
-        if (preferredZoneId != null) {
-            List<StorageBin> preferredBins = binRepository.findSmartPutawayBins(
-                    product.getId(), preferredZoneId, request.getQuantity());
+        // Priority 1: User-specified Bin (Manual Placement/Scanning)
+        if (request.getStorageBinId() != null && !request.getStorageBinId().isBlank()) {
+            targetBin = binRepository.findById(request.getStorageBinId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Specified Bin not found"));
 
-            if (!preferredBins.isEmpty()) {
-                targetBin = preferredBins.get(0);
-                log.info("Preferred Zone Match: Selected Bin {}", targetBin.getBinCode());
+            if (!targetBin.canAccommodate(totalVolume, totalWeight)) {
+                throw new InsufficientStorageException("Specified bin " + targetBin.getBinCode() + " cannot fit this shipment.");
             }
         }
 
-        // 3. PHASE 2: Fallback - Global Search
+        // Priority 2: Smart Putaway Engine (Directed Placement)
         if (targetBin == null) {
-            log.warn("Preferred zone {} is FULL or not defined. Searching all zones...", preferredZoneId);
+            String preferredZoneId = product.getCategory().getPreferredZoneId();
+            List<StorageBin> bins = binRepository.findSmartPutawayBins(
+                    product.getId(), preferredZoneId, totalVolume, totalWeight);
 
-            List<StorageBin> alternativeBins = binRepository.findSmartPutawayBins(
-                    product.getId(), null, request.getQuantity());
-
-            if (alternativeBins.isEmpty()) {
-                throw new InsufficientStorageException("CRITICAL: Warehouse is 100% full. No space found.");
+            if (bins.isEmpty()) {
+                bins = binRepository.findSmartPutawayBins(product.getId(), null, totalVolume, totalWeight);
             }
 
-            targetBin = alternativeBins.get(0);
-            log.info("Force Putaway: Product diverted to Zone: {} | Bin: {}",
-                    targetBin.getAisle().getZone().getName(), targetBin.getBinCode());
+            if (bins.isEmpty()) {
+                throw new InsufficientStorageException("No suitable storage location found for this shipment footprint.");
+            }
+            targetBin = bins.get(0);
         }
 
-        // 4. Atomic Updates
-        processPutaway(targetBin, product, request.getQuantity());
+        processPutaway(targetBin, product, request);
     }
 
-    /**
-     * Executes the physical-to-digital state transition.
-     * <p>
-     * This helper handles the dual-update of the {@link StorageBin} occupancy
-     * and the {@link InventoryItem} ledger.
-     * </p>
-     * @param bin The resolved target location.
-     * @param product The product being received.
-     * @param quantity The incoming amount.
-     */
-    private void processPutaway(StorageBin bin, Product product, Integer quantity) {
-        // Update Bin Occupancy
-        int newOccupancy = bin.getCurrentOccupancy() + quantity;
-        bin.setCurrentOccupancy(newOccupancy);
+    private void processPutaway(StorageBin bin, Product product, ReceivingRequest request) {
+        int quantity = request.getQuantity();
+        Double totalVol = (product.getLength() * product.getWidth() * product.getHeight()) * quantity;
+        Double totalWeight = product.getWeight() * quantity;
 
-        // Auto-toggle bin status if capacity is reached
-        if (newOccupancy >= bin.getCapacity()) {
+        bin.setCurrentVolumeOccupied(bin.getCurrentVolumeOccupied() + totalVol);
+        bin.setCurrentWeightLoad(bin.getCurrentWeightLoad() + totalWeight);
+
+        if (bin.getCurrentVolumeOccupied() >= (bin.getMaxVolume() * 0.95)) {
             bin.setStatus(BinStatus.FULL);
         }
         binRepository.save(bin);
 
-        // Update/Upsert Inventory Item using an upsert pattern
         InventoryItem item = inventoryRepository.findByProductIdAndStorageBinId(product.getId(), bin.getId())
                 .orElseGet(() -> {
                     InventoryItem newItem = new InventoryItem();
                     newItem.setProduct(product);
                     newItem.setStorageBin(bin);
                     newItem.setQuantity(0);
+                    newItem.setBatchNumber(request.getBatchNumber() != null ? request.getBatchNumber() : "NONE");
+                    newItem.setExpiryDate(request.getExpiryDate());
+                    newItem.setPurchasePrice(request.getUnitCost() != null ? request.getUnitCost() :
+                            (product.getCostPrice() != null ? product.getCostPrice() : BigDecimal.ZERO));
                     return newItem;
                 });
 
         item.setQuantity(item.getQuantity() + quantity);
         inventoryRepository.save(item);
 
-        log.info("Putaway Complete: SKU {} -> Bin {} (New Occupancy: {})",
-                product.getSku(), bin.getBinCode(), newOccupancy);
+        InventoryTransaction transaction = new InventoryTransaction();
+        transaction.setInventoryItem(item);
+        transaction.setType(TransactionType.INBOUND);
+        transaction.setQuantityChange((long) quantity);
+        transaction.setUnitPrice(item.getPurchasePrice());
+        transaction.setReferenceId(request.getBatchNumber());
+        transaction.setReasonCode("GOODS_RECEIPT");
+        transactionRepository.save(transaction);
     }
 }

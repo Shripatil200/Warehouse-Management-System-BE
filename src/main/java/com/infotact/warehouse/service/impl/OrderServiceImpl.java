@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -27,6 +28,11 @@ import java.util.List;
  * This service handles the transition of customer demand into actionable warehouse tasks.
  * It enforces multi-tenant data isolation by anchoring every order to the manager's
  * assigned warehouse context.
+ * </p>
+ * <p>
+ * <b>Update:</b> Now incorporates <b>Financial Snapshotting</b> logic, capturing
+ * the product selling price at the moment of order placement to preserve
+ * historical revenue data.
  * </p>
  */
 @Slf4j
@@ -53,8 +59,8 @@ public class OrderServiceImpl implements OrderService {
      * <b>Implementation Details:</b>
      * <ul>
      * <li><b>SKU Resolution:</b> Translates SKU strings into Product entities.</li>
+     * <li><b>Price Snapshot:</b> Captures the current Product sellingPrice for the order item.</li>
      * <li><b>SLA Management:</b> Sets <code>expectedShipDate</code> (current + 48hrs).</li>
-     * <li><b>Cache Eviction:</b> Flushes the 'orders' cache to update shipping queues.</li>
      * </ul>
      */
     @Override
@@ -64,23 +70,25 @@ public class OrderServiceImpl implements OrderService {
         User manager = getAuthenticatedUser();
         log.info("Processing outbound order {} for Warehouse: {}", request.getOrderNumber(), manager.getWarehouse().getName());
 
-        Order order = new Order();
+        SellingOrder order = new SellingOrder();
         order.setOrderNumber(request.getOrderNumber());
         order.setStatus(OrderStatus.PENDING);
         order.setWarehouse(manager.getWarehouse());
         order.setCreatedAt(LocalDateTime.now());
-
-        // Logical default: Flag as delayed if not shipped within 2 days.
         order.setExpectedShipDate(LocalDateTime.now().plusDays(2));
 
-        List<OrderItem> items = request.getItems().stream().map(itemReq -> {
-            Product product = productRepository.findBySku(itemReq.getSku())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + itemReq.getSku()));
+        List<SellingOrderItem> items = request.getItems().stream().map(itemReq -> {
+            Product product = productRepository.findBySkuAndActiveTrue(itemReq.getSku())
+                    .orElseThrow(() -> new ResourceNotFoundException("Active product not found: " + itemReq.getSku()));
 
-            OrderItem item = new OrderItem();
+            SellingOrderItem item = new SellingOrderItem();
             item.setOrder(order);
             item.setProduct(product);
             item.setQuantity(itemReq.getQuantity());
+
+            // Financial Snapshot: Capture the selling price at this exact moment
+            item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+
             return item;
         }).toList();
 
@@ -104,7 +112,7 @@ public class OrderServiceImpl implements OrderService {
         User manager = getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
-        List<Order> orders;
+        List<SellingOrder> orders;
         if (status != null && !status.isBlank()) {
             OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
             orders = orderRepository.findAllByWarehouseIdAndStatus(warehouseId, orderStatus);
@@ -115,21 +123,37 @@ public class OrderServiceImpl implements OrderService {
         return orders.stream().map(this::mapToResponse).toList();
     }
 
-    private OrderResponse mapToResponse(Order entity) {
+    /**
+     * Maps the SellingOrder entity to a response DTO with financial calculations.
+     */
+    private OrderResponse mapToResponse(SellingOrder entity) {
         List<OrderResponse.OrderItemDetail> itemDetails = entity.getItems().stream()
-                .map(item -> OrderResponse.OrderItemDetail.builder()
-                        .productId(item.getProduct().getId())
-                        .productName(item.getProduct().getName())
-                        .sku(item.getProduct().getSku())
-                        .quantity(item.getQuantity())
-                        .build())
+                .map(item -> {
+                    BigDecimal lineTotal = item.getSellPriceAtTimeOfOrder()
+                            .multiply(BigDecimal.valueOf(item.getQuantity()));
+
+                    return OrderResponse.OrderItemDetail.builder()
+                            .productId(item.getProduct().getId())
+                            .productName(item.getProduct().getName())
+                            .sku(item.getProduct().getSku())
+                            .quantity(item.getQuantity())
+                            .sellPriceAtTimeOfOrder(item.getSellPriceAtTimeOfOrder())
+                            .lineTotal(lineTotal)
+                            .build();
+                })
                 .toList();
+
+        // Calculate total order value
+        BigDecimal totalAmount = itemDetails.stream()
+                .map(OrderResponse.OrderItemDetail::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return OrderResponse.builder()
                 .id(entity.getId())
                 .orderNumber(entity.getOrderNumber())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
+                .totalAmount(totalAmount)
                 .warehouseName(entity.getWarehouse().getName())
                 .items(itemDetails)
                 .build();

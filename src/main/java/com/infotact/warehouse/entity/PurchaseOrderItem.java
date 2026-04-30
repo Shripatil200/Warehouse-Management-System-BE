@@ -7,8 +7,10 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
+import java.math.BigDecimal;
+
 /**
- * Persistence entity representing a specific product line item in a Purchase Order.
+ * Persistence entity representing a specific product line item in a Purchase SellingOrder.
  * <p>
  * This entity defines the quantity of a product expected from a supplier.
  * During the receiving process, these records are used as a checklist to
@@ -29,7 +31,7 @@ public class PurchaseOrderItem {
     private String id;
 
     /**
-     * The parent Purchase Order this line item is associated with.
+     * The parent Purchase SellingOrder this line item is associated with.
      * <p>
      * Logic: Standard many-to-one relationship. Inbound stock logic
      * aggregates these items to determine total pending inventory.
@@ -59,4 +61,14 @@ public class PurchaseOrderItem {
      */
     @Column(nullable = false)
     private Integer quantity;
+
+    /**
+     * The purchase price per unit for this specific order.
+     * <p>
+     * Logic: Captures the "Agreed" cost. This value is transferred to the
+     * purchasePrice field in InventoryItem upon successful receipt.
+     * </p>
+     */
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal unitCost;
 }

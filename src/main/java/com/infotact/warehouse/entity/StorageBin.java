@@ -28,7 +28,7 @@ import java.util.List;
         @Index(name = "idx_bin_status", columnList = "status"),
         @Index(name = "idx_bin_warehouse", columnList = "warehouse_id")
 })
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, exclude = {"aisle", "warehouse", "inventoryItems"})
 @Builder
 public class StorageBin extends BaseEntity {
 

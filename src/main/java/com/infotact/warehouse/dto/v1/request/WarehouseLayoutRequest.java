@@ -81,4 +81,5 @@ public class WarehouseLayoutRequest {
             @Positive
             Double defaultMaxWeight
     ) {}
+
 }

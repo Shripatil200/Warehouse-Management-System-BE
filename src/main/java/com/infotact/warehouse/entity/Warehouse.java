@@ -28,7 +28,7 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "warehouses")
-@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true, exclude = {"zones"})
 public class Warehouse extends BaseEntity {
 
     @Id

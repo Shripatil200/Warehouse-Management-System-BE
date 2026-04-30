@@ -161,10 +161,10 @@ public class DashboardServiceImpl implements DashboardService {
 
     private Double calculateUtilization(String warehouseId) {
         Double totalCapacity = warehouseRepository.findTotalCapacityByWarehouseId(warehouseId);
-        Long currentOccupancy = productRepository.sumCurrentOccupancyByWarehouseId(warehouseId);
+        double currentOccupancy = productRepository.sumCurrentOccupancyByWarehouseId(warehouseId);
 
         double capacity = Optional.ofNullable(totalCapacity).orElse(0.0);
-        long occupancy = Optional.ofNullable(currentOccupancy).orElse(0L);
+        double occupancy = Optional.ofNullable(currentOccupancy).orElse(0.0);
 
         if (capacity <= 0.0) return 0.0;
         return Math.min(Math.max(0.0, (occupancy / capacity) * 100.0), 100.0);

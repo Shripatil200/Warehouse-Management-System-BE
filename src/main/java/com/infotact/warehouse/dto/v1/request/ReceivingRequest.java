@@ -3,14 +3,18 @@ package com.infotact.warehouse.dto.v1.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * Data Transfer Object for confirming the physical receipt of goods.
  * <p>
  * Transitions stock from 'Inbound PO' state to 'Available' Inventory.
- * <b>Update:</b> Now requires Bin and Batch details to satisfy inventory
- * tracking and batch-based cost segregation.
+ * <b>Update:</b> Added Expiry Date for FEFO tracking and Unit Cost for
+ * precise inventory valuation.
  * </p>
  */
 @Data
@@ -36,6 +40,7 @@ public class ReceivingRequest {
     )
     private String storageBinId;
 
+    @NotNull(message = "Quantity is required")
     @Min(value = 1, message = "Quantity must be at least 1")
     @Schema(
             description = "The physical count of units received",
@@ -47,9 +52,21 @@ public class ReceivingRequest {
 
     @NotBlank(message = "Batch number is required")
     @Schema(
-            description = "Manufacturer or internal batch/lot identifier (e.g., PO ID or Date)",
+            description = "Manufacturer or internal batch/lot identifier",
             example = "LOT-2026-04-A",
             requiredMode = Schema.RequiredMode.REQUIRED
     )
     private String batchNumber;
+
+    @Schema(
+            description = "Expiration date of the specific batch (Crucial for FEFO picking)",
+            example = "2027-12-31"
+    )
+    private LocalDate expiryDate;
+
+    @Schema(
+            description = "The unit purchase price for this specific receipt. Defaults to product cost if null.",
+            example = "850.50"
+    )
+    private BigDecimal unitCost;
 }

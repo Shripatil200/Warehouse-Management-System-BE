@@ -10,12 +10,11 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.util.List;
 
 /**
- * Persistence entity representing the smallest physical storage unit in the warehouse.
+ * Persistence entity representing the smallest physical storage unit in the facility.
  * <p>
- * This entity tracks the physical capacity and real-time occupancy of a specific slot.
- * It is the final destination for products in the <b>Warehouse -> Zone -> Aisle -> Bin</b>
- * hierarchy. To ensure data integrity during simultaneous stock movements, it implements
- * Optimistic Locking.
+ * This entity tracks real-time occupancy based on physical dimensions (cm³)
+ * and weight limits (KG). It implements Optimistic Locking to prevent capacity
+ * overruns during simultaneous stock movements.
  * </p>
  */
 @Data
@@ -26,7 +25,8 @@ import java.util.List;
 @Entity
 @Table(name = "storage_bins", indexes = {
         @Index(name = "idx_bin_aisle", columnList = "aisle_id"),
-        @Index(name = "idx_bin_status", columnList = "status")
+        @Index(name = "idx_bin_status", columnList = "status"),
+        @Index(name = "idx_bin_warehouse", columnList = "warehouse_id")
 })
 @EqualsAndHashCode(callSuper = true)
 @Builder
@@ -37,70 +37,70 @@ public class StorageBin extends BaseEntity {
     private String id;
 
     /**
-     * Unique alphanumeric code for the bin.
-     * <p>
-     * Example: "BIN-A01-S1-01". This code is typically printed as a barcode
-     * on the physical shelf to be scanned during picking and put-away.
-     * </p>
+     * Unique alphanumeric code for the bin (e.g., "A1-S02-B05").
+     * Typically matches the physical barcode label on the shelf.
      */
     @Column(nullable = false, unique = true)
     private String binCode;
 
-    /** * The maximum volume or unit count this bin is engineered to hold.
+    /** * The engineered volume limit of the bin in cubic centimeters (cm³).
      */
     @Column(nullable = false)
-    private Integer capacity;
+    private Double maxVolume;
 
-    /** * The running total of items currently stored in this bin.
-     * Logic: Updated dynamically by the InventoryService during stock movements.
+    /** * Running total of volume currently occupied by products.
      */
     @Builder.Default
     @Column(nullable = false)
-    private Integer currentOccupancy = 0;
+    private Double currentVolumeOccupied = 0.0;
 
-    /** * Operational state of the bin.
-     * <p>
-     * Values include AVAILABLE (for put-away), FULL (at capacity),
-     * BLOCKED (maintenance/damage), or RESERVED (staged for picking).
-     * </p>
+    /** * The maximum weight load this bin can support in Kilograms (KG).
+     */
+    @Column(nullable = false)
+    private Double maxWeightCapacity;
+
+    /** * Total weight currently resting in the bin.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Double currentWeightLoad = 0.0;
+
+    /** * State of the bin (AVAILABLE, FULL, BLOCKED, etc.).
      */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BinStatus status;
 
-    /** * Soft-delete flag. Inactive bins are excluded from system-suggested
-     * put-away logic.
-     */
     @Builder.Default
     private boolean active = true;
 
-    /** * The parent aisle containing this bin.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "aisle_id", nullable = false)
     private Aisle aisle;
 
-    /** * The actual inventory items (Product + Batch) currently residing in this bin.
+    /**
+     * Multi-Tenant Isolation: Direct link to the parent Warehouse.
      */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @OneToMany(mappedBy = "storageBin", cascade = CascadeType.ALL)
     private List<InventoryItem> inventoryItems;
 
-    /**
-     * Optimistic Locking version.
-     * <p>
-     * Prevents race conditions where two workers might try to 'Put-Away' items
-     * into the same bin at the same time, potentially exceeding capacity.
-     * </p>
-     */
     @Version
     private Long version;
 
     /**
-     * Business Logic: Validates if the bin has sufficient remaining space.
-     * * @param quantity The number of units intended to be added.
-     * @return true if the bin is active and has enough volume available.
+     * Validates if the bin can physically accommodate new stock.
+     * * @param volume Required volume in cm³
+     * @param weight Required weight in KG
+     * @return true if the bin is active, available, and has remaining capacity.
      */
-    public boolean canAccommodate(int quantity) {
-        return active && (currentOccupancy + quantity <= capacity);
+    public boolean canAccommodate(Double volume, Double weight) {
+        return active &&
+                status == BinStatus.AVAILABLE &&
+                (currentVolumeOccupied + volume <= maxVolume) &&
+                (currentWeightLoad + weight <= maxWeightCapacity);
     }
 }

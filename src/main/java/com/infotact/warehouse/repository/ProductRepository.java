@@ -14,103 +14,110 @@ import java.util.Optional;
 /**
  * Data Access Object for the Product Catalog and Stock Intelligence.
  * <p>
- * <b>Update (v2.2):</b> Synchronized with the Volumetric & Weight-based capacity model.
- * All capacity analytics now target 'currentVolumeOccupied' and return Double
- * to prevent precision loss during dashboard calculations.
+ * This repository manages the master product list and provides critical analytics
+ * for warehouse operations, including low-stock monitoring and volumetric occupancy.
+ * </p>
+ * <p>
+ * <b>Security & Isolation:</b> All methods are designed to respect warehouse-level
+ * multi-tenancy. Uniqueness checks and lookups are scoped to a specific facility
+ * to support the "One Warehouse per Admin" model.
  * </p>
  *
- * @author Gemini
- * @version 2.2
  */
 @Repository
 public interface ProductRepository extends JpaRepository<Product, String> {
 
-    /**
-     * Prevents duplicate SKU entry regardless of letter casing.
-     * @param sku The Stock Keeping Unit to check.
-     * @return true if the SKU already exists.
-     */
-    boolean existsBySkuIgnoreCase(String sku);
+    // --- Scoped Uniqueness & Lookups ---
 
     /**
-     * Retrieves an operational product by its SKU.
-     * @param sku The product SKU.
+     * Verifies if a SKU exists within a specific warehouse.
+     * <p>
+     * Logic: Prevents duplicate SKU entries within the same facility while allowing
+     * the same SKU to exist in different independent warehouses.
+     * </p>
+     * @param sku The Stock Keeping Unit to check.
+     * @param warehouseId The UUID of the facility context.
+     * @return true if the SKU is already registered in this warehouse.
+     */
+    boolean existsBySkuIgnoreCaseAndWarehouseId(String sku, String warehouseId);
+
+    /**
+     * Retrieves an active product by its SKU within a specific warehouse.
+     * @param sku The business-level SKU.
+     * @param warehouseId The UUID of the facility context.
      * @return An Optional containing the active product if found.
      */
-    Optional<Product> findBySkuAndActiveTrue(String sku);
+    Optional<Product> findBySkuAndWarehouseIdAndActiveTrue(String sku, String warehouseId);
 
     /**
-     * Provides a paginated view of all non-archived products.
-     * @param pageable Pagination and sorting information.
-     * @return A page of active products.
-     */
-    Page<Product> findAllByActiveTrue(Pageable pageable);
-
-    /**
-     * Internal lookup including inactive products.
-     * @param sku The product SKU.
+     * Retrieves a product by ID only if it belongs to the specified warehouse.
+     * @param id The UUID of the product.
+     * @param warehouseId The UUID of the facility context.
      * @return An Optional containing the product.
      */
-    Optional<Product> findBySku(String sku);
+    Optional<Product> findByIdAndWarehouseId(String id, String warehouseId);
+
+    // --- Scoped Pagination ---
 
     /**
-     * Facility Metric: Total unique SKUs registered in a specific warehouse.
-     * @param warehouseId The UUID of the warehouse.
-     * @return Count of distinct product entries for this facility.
+     * Provides a paginated view of all non-archived products for a specific warehouse.
+     * @param warehouseId The facility identifier.
+     * @param pageable Pagination and sorting parameters.
+     * @return A page of active products belonging to the warehouse.
      */
-    Long countByWarehouseId(String warehouseId);
+    Page<Product> findAllByWarehouseIdAndActiveTrue(String warehouseId, Pageable pageable);
 
     /**
-     * THRESHOLD MONITOR: Counts products needing replenishment.
+     * Provides a paginated view of all products (including inactive) for a specific warehouse.
+     * @param warehouseId The facility identifier.
+     * @param pageable Pagination and sorting parameters.
+     * @return A page of all products belonging to the warehouse.
+     */
+    Page<Product> findAllByWarehouseId(String warehouseId, Pageable pageable);
+
+    // --- Stock Intelligence & Threshold Monitoring ---
+
+    /**
+     * Counts products requiring replenishment within a facility.
      * <p>
-     * <b>Logic:</b> Identifies products where the aggregate quantity across all bins
-     * is less than or equal to the defined {@code minThreshold}.
+     * <b>Logic:</b> Sums current quantities from {@code InventoryItem} and compares
+     * against the product's {@code minThreshold}.
      * </p>
      * @param warehouseId The UUID of the warehouse.
-     * @return Count of products currently in low-stock status.
+     * @return Count of active products currently at or below their safety stock level.
      */
     @Query("SELECT COUNT(p) FROM Product p WHERE p.warehouse.id = :id AND p.active = true AND p.id IN (" +
             "SELECT i.product.id FROM InventoryItem i GROUP BY i.product.id HAVING SUM(i.quantity) <= p.minThreshold)")
     Long countLowStock(@Param("id") String warehouseId);
 
     /**
-     * REPLENISHMENT LIST: Fetches full product details for low-stock items.
-     * <p>
-     * <b>Usage:</b> Primarily used to generate 'Reorder Reports' or automated
-     * Purchase Order drafts.
-     * </p>
+     * Generates a replenishment list for a specific warehouse.
      * @param warehouseId The UUID of the warehouse.
-     * @return List of Product entities that have hit or fallen below their threshold.
+     * @return List of Product entities that have hit their safety stock threshold.
      */
     @Query("SELECT p FROM Product p WHERE p.warehouse.id = :id AND p.active = true AND p.id IN (" +
             "SELECT i.product.id FROM InventoryItem i GROUP BY i.product.id HAVING SUM(i.quantity) <= p.minThreshold)")
     List<Product> findLowStockProducts(@Param("id") String warehouseId);
 
-    /**
-     * CAPACITY ANALYTICS: Total units currently in stock.
-     * <p>
-     * <b>Logic:</b> Traverses the hierarchy from Warehouse -> Zone -> Aisle -> Bin -> Item
-     * to sum up every single unit physically present in the facility.
-     * </p>
-     * @param id The UUID of the warehouse.
-     * @return Total quantity of all units (Integer sum).
-     */
-    @Query("SELECT COALESCE(SUM(i.quantity), 0L) FROM InventoryItem i WHERE i.storageBin.aisle.zone.warehouse.id = :id")
-    Long sumCurrentStockByWarehouseId(@Param("id") String id);
+    // --- Capacity Analytics ---
 
     /**
-     * CAPACITY ANALYTICS: Total volumetric occupancy (cm³).
+     * Facility Metric: Total physical units currently stored in the warehouse.
+     * @param warehouseId The UUID of the warehouse.
+     * @return Sum of all quantities across all bins.
+     */
+    @Query("SELECT COALESCE(SUM(i.quantity), 0L) FROM InventoryItem i WHERE i.storageBin.aisle.zone.warehouse.id = :warehouseId")
+    Long sumCurrentStockByWarehouseId(@Param("warehouseId") String warehouseId);
+
+    /**
+     * Total volumetric occupancy analysis.
      * <p>
-     * <b>Logic:</b> Sums the 'currentVolumeOccupied' field across all storage bins
-     * in the warehouse hierarchy.
-     * </p>
-     * <p>
-     * <b>Critical Fix:</b> Updated attribute name from 'currentOccupancy' to
-     * 'currentVolumeOccupied' and changed return type to Double to prevent
-     * UnsatisfiedDependencyException during Spring Boot startup.
+     * <b>Unit:</b> Cubic Centimeters (cm³).
+     * <b>Logic:</b> Aggregates the {@code currentVolumeOccupied} from all storage bins
+     * within the facility hierarchy.
      * </p>
      * @param warehouseId The UUID of the warehouse.
-     * @return Total volume currently occupied in cubic centimeters (cm³).
+     * @return Total volume currently occupied as a Double.
      */
     @Query("SELECT COALESCE(SUM(b.currentVolumeOccupied), 0.0) FROM StorageBin b " +
             "WHERE b.aisle.zone.warehouse.id = :warehouseId")

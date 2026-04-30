@@ -31,12 +31,12 @@ import java.util.stream.Collectors;
  * Implementation of {@link ProductService} for core catalog orchestration.
  * <p>
  * This service manages the lifecycle of warehouse inventory items. It enforces
- * data integrity via SKU uniqueness checks and bridges human-readable master
- * data with physical inventory tracking.
+ * strict multi-tenant isolation by scoping all operations to the authenticated
+ * manager's warehouse.
  * </p>
  * <p>
- * <b>Update:</b> Supports advanced logistics (Dimensions, UOM) and
- * traceability flags (Serialized/Batch) for warehouse optimization.
+ * Features include volumetric data pre-calculation, safety stock monitoring,
+ * and vendor sourcing visibility.
  * </p>
  */
 @Slf4j
@@ -50,25 +50,38 @@ public class ProductServiceImpl implements ProductService {
     private final UserRepository userRepository;
     private final ProductSupplierRepository productSupplierRepository;
 
+    /**
+     * Internal helper to extract the authenticated user and their facility context.
+     * @return The currently logged-in {@link User}.
+     * @throws UnauthorizedException if the security context is missing or invalid.
+     */
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Authenticated user profile not found."));
     }
+
     /**
      * {@inheritDoc}
+     * <p>
+     * <b>Validation:</b> Enforces SKU uniqueness within the specific warehouse.
+     * Verifies that the assigned category belongs to the same facility.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse addProduct(ProductRequest request) {
-        if (productRepository.existsBySkuIgnoreCase(request.getSku())) {
-            throw new AlreadyExistsException("Product with SKU " + request.getSku() + " already exists");
+        User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
+
+        if (productRepository.existsBySkuIgnoreCaseAndWarehouseId(request.getSku(), warehouseId)) {
+            throw new AlreadyExistsException("Product with SKU " + request.getSku() + " already exists in this facility.");
         }
 
-        User manager = getAuthenticatedUser();
-        ProductCategory category = categoryRepository.findByIdAndActiveTrue(request.getCategoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("Specified Category is either inactive or does not exist."));
+        // Verify category exists and belongs to the same warehouse
+        ProductCategory category = categoryRepository.findByIdAndWarehouseId(request.getCategoryId(), warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Specified Category is invalid or belongs to another warehouse."));
 
         Product product = new Product();
         updateProductFields(product, request);
@@ -76,47 +89,67 @@ public class ProductServiceImpl implements ProductService {
         product.setWarehouse(manager.getWarehouse());
         product.setActive(true);
 
-        log.info("Catalog Update: Product '{}' (SKU: {}) registered for facility.", product.getName(), product.getSku());
+        log.info("Catalog Update: Product '{}' (SKU: {}) registered for warehouse ID: {}",
+                product.getName(), product.getSku(), warehouseId);
+
         return mapToResponse(productRepository.save(product));
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Performs a warehouse-scoped lookup to prevent cross-tenant data leakage.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
     public ProductResponse getProductById(String id) {
-        return productRepository.findById(id)
+        User manager = getAuthenticatedUser();
+        return productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Product record not found for ID: " + id));
     }
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Optimized for high-speed scanning and barcode lookups.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#sku")
     public ProductResponse getProductBySku(String sku) {
-        return productRepository.findBySkuAndActiveTrue(sku)
+        User manager = getAuthenticatedUser();
+        return productRepository.findBySkuAndWarehouseIdAndActiveTrue(sku, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Active product with SKU '" + sku + "' not found."));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Updates product metadata. If the SKU is modified, uniqueness is re-validated
+     * within the warehouse context.
+     * </p>
+     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse updateProduct(String id, ProductRequest request) {
-        Product product = productRepository.findById(id)
+        User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
+
+        Product product = productRepository.findByIdAndWarehouseId(id, warehouseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
         if (!product.getSku().equalsIgnoreCase(request.getSku()) &&
-                productRepository.existsBySkuIgnoreCase(request.getSku())) {
-            throw new AlreadyExistsException("Collision detected: SKU " + request.getSku() + " is assigned to another product.");
+                productRepository.existsBySkuIgnoreCaseAndWarehouseId(request.getSku(), warehouseId)) {
+            throw new AlreadyExistsException("Collision detected: SKU " + request.getSku() + " is already assigned to another item.");
         }
 
-        ProductCategory category = categoryRepository.findByIdAndActiveTrue(request.getCategoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("New category assignment is invalid or inactive."));
+        ProductCategory category = categoryRepository.findByIdAndWarehouseId(request.getCategoryId(), warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("New category assignment is invalid for this facility."));
 
         updateProductFields(product, request);
         product.setCategory(category);
@@ -126,23 +159,35 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Returns a paginated view of the catalog specific to the current facility.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #includeInactive")
     public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
+        User manager = getAuthenticatedUser();
+        String whId = manager.getWarehouse().getId();
+
         Page<Product> products = includeInactive ?
-                productRepository.findAll(pageable) :
-                productRepository.findAllByActiveTrue(pageable);
+                productRepository.findAllByWarehouseId(whId, pageable) :
+                productRepository.findAllByWarehouseIdAndActiveTrue(whId, pageable);
+
         return products.map(this::mapToResponse);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse deleteProduct(String id) {
-        Product product = productRepository.findById(id)
+        User manager = getAuthenticatedUser();
+        Product product = productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
         product.setActive(false);
         return mapToResponse(productRepository.save(product));
     }
@@ -154,8 +199,10 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse activateProduct(String id) {
-        Product product = productRepository.findById(id)
+        User manager = getAuthenticatedUser();
+        Product product = productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
         product.setActive(true);
         return mapToResponse(productRepository.save(product));
     }
@@ -163,8 +210,8 @@ public class ProductServiceImpl implements ProductService {
     /**
      * Synchronizes DTO fields to the JPA entity.
      * <p>
-     * <b>Update:</b> Now handles financial valuation (costPrice) and
-     * volumetric data (L/W/H) required for bin-capacity calculations.
+     * Note: Volumetric data (unitVolume) is automatically recalculated
+     * via @PrePersist/@PreUpdate listeners in the Entity.
      * </p>
      */
     private void updateProductFields(Product product, ProductRequest request) {
@@ -194,7 +241,14 @@ public class ProductServiceImpl implements ProductService {
         product.setBatchTracked(request.isBatchTracked());
     }
 
+    /**
+     * Maps Entity to Response DTO including dynamic stock health checks.
+     */
     private ProductResponse mapToResponse(Product entity) {
+        // Calculate current stock levels for the low stock flag
+        long currentStock = entity.getInventoryItems() != null ?
+                entity.getInventoryItems().stream().mapToLong(i -> (long) i.getQuantity()).sum() : 0L;
+
         ProductResponse response = ProductResponse.builder()
                 .id(entity.getId())
                 .name(entity.getName())
@@ -207,10 +261,12 @@ public class ProductServiceImpl implements ProductService {
                 .length(entity.getLength())
                 .width(entity.getWidth())
                 .height(entity.getHeight())
+                .unitVolume(entity.getUnitVolume()) // Mapped from entity pre-calculation
                 .barcode(entity.getBarcode())
                 .active(entity.isActive())
                 .minThreshold(entity.getMinThreshold())
                 .maxThreshold(entity.getMaxThreshold())
+                .isLowStock(currentStock <= entity.getMinThreshold()) // Dynamic health check
                 .isSerialized(entity.isSerialized())
                 .isBatchTracked(entity.isBatchTracked())
                 .categoryId(entity.getCategory().getId())
@@ -219,6 +275,7 @@ public class ProductServiceImpl implements ProductService {
                 .updatedAt(entity.getUpdatedAt())
                 .build();
 
+        // Map Suppliers
         response.setSourcingOptions(
                 productSupplierRepository.findByProductId(entity.getId()).stream()
                         .map(ps -> ProductSupplierResponse.builder()

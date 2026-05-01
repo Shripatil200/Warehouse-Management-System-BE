@@ -12,9 +12,19 @@ import java.util.Set;
  * Data Transfer Object representing the complete physical hierarchy of a warehouse.
  * <p>
  * This response follows a parent-child nesting pattern: <b>Warehouse -> Zones -> Aisles -> Bins</b>.
- * <b>Update:</b> Now includes volumetric and weight-based occupancy metrics to support
- * real-time dashboard progress bars.
+ * It is optimized for a drill-down UI where structural metadata (Capacities and Counts)
+ * is provided upfront, while granular data (Bins) can be lazy-loaded.
  * </p>
+ * <p>
+ * <b>Update Highlights:</b>
+ * <ul>
+ *     <li>Included <b>binCount</b> in AisleSummary to support UI badges without loading full bin lists.</li>
+ *     <li>Maintains volumetric and weight-based occupancy metrics for real-time progress bars.</li>
+ * </ul>
+ * </p>
+ *
+ * @author Gemini
+ * @version 3.1
  */
 @Data
 @Builder
@@ -22,7 +32,7 @@ import java.util.Set;
 @AllArgsConstructor
 @Schema(
         name = "WarehouseLayoutResponse",
-        description = "Hierarchical model of the physical warehouse structure with volumetric occupancy metrics"
+        description = "Hierarchical model of the physical warehouse structure with volumetric occupancy and bin counts"
 )
 public class WarehouseLayoutResponse implements Serializable {
     @Serial
@@ -34,17 +44,17 @@ public class WarehouseLayoutResponse implements Serializable {
     @Schema(description = "The registered business name of the facility", example = "Central Hub Berlin")
     private String name;
 
-    @Schema(description = "Total volumetric capacity (cm³) across all zones", example = "1000000")
+    @Schema(description = "Total volumetric capacity (cm³) across all zones", example = "1000000.0")
     private Double totalCapacity;
 
-    @Schema(description = "Total volumetric units occupied across all zones", example = "450000")
+    @Schema(description = "Total volumetric units occupied across all zones", example = "450000.0")
     private Double currentOccupancy;
 
     @Schema(description = "List of operational zones within the warehouse")
     private List<ZoneSummary> zones;
 
     /**
-     * Summary of a specific functional area.
+     * Summary of a specific functional area (e.g., Cold Storage, Inbound).
      */
     @Data
     @Builder
@@ -58,10 +68,10 @@ public class WarehouseLayoutResponse implements Serializable {
         @Schema(description = "The display name of the zone", example = "High-Value Goods")
         private String name;
 
-        @Schema(description = "Indicates if the zone is active", example = "true")
+        @Schema(description = "Indicates if the zone is active and available for operations", example = "true")
         private boolean active;
 
-        @Schema(description = "Sum of all aisle volumes in this zone (cm³)")
+        @Schema(description = "Sum of all aisle capacities in this zone (cm³)")
         private Double totalCapacity;
 
         @Schema(description = "Sum of all occupied volume in this zone (cm³)")
@@ -72,39 +82,42 @@ public class WarehouseLayoutResponse implements Serializable {
     }
 
     /**
-     * Summary of a physical row/aisle.
+     * Summary of a physical row or aisle.
      */
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Schema(description = "Storage aisle details with row-level volumetric occupancy")
+    @Schema(description = "Storage aisle details with row-level metrics and bin counts")
     public static class AisleSummary {
         @Schema(description = "The unique UUID of the aisle")
         private String id;
 
-        @Schema(description = "The alphanumeric identifier", example = "A-01")
+        @Schema(description = "The alphanumeric identifier for the aisle", example = "A-01")
         private String code;
 
-        @Schema(description = "Indicates if the aisle is active", example = "true")
+        @Schema(description = "Indicates if the aisle is currently operational", example = "true")
         private boolean active;
 
-        @Schema(description = "Sum of all bin volumes in this aisle (cm³)")
+        @Schema(description = "Sum of all bin capacities in this aisle (cm³)")
         private Double totalCapacity;
 
-        @Schema(description = "Sum of all occupied volume in this row (cm³)")
+        @Schema(description = "Sum of all occupied volume in this specific row (cm³)")
         private Double currentOccupancy;
 
-        @Schema(description = "Set of specific storage bins in this aisle")
+        /**
+         * Total number of storage bins assigned to this aisle.
+         * Used to drive UI badges and determine if pagination is needed.
+         */
+        @Schema(description = "Total number of physical storage bins located in this aisle", example = "48")
+        private Integer binCount;
+
+        @Schema(description = "Set of specific storage bins. May be empty if using lazy-loading (drill-down) pattern.")
         private Set<BinSummary> bins;
     }
 
     /**
      * Detailed view of a specific storage slot (Bin).
-     * <p>
-     * <b>Update:</b> Added fillPercentage to drive dashboard progress bars and
-     * weightLoad metrics for secondary capacity tooltips.
-     * </p>
      */
     @Data
     @Builder
@@ -115,25 +128,25 @@ public class WarehouseLayoutResponse implements Serializable {
         @Schema(description = "The unique UUID of the storage bin")
         private String id;
 
-        @Schema(description = "The unique location code", example = "BIN-A1-001")
+        @Schema(description = "The unique location code for labeling and scanning", example = "BIN-A1-001")
         private String binCode;
 
-        @Schema(description = "Max physical volume (cm³)", example = "50000")
+        @Schema(description = "Maximum physical volume of the bin (cm³)", example = "50000.0")
         private Double capacity;
 
-        @Schema(description = "Current volume occupied (cm³)", example = "12000")
+        @Schema(description = "Current volume occupied by inventory (cm³)", example = "12000.0")
         private Double currentOccupancy;
 
-        @Schema(description = "Max weight limit (KG)", example = "500.0")
+        @Schema(description = "Maximum weight limit the bin can safely hold (KG)", example = "500.0")
         private Double maxWeight;
 
-        @Schema(description = "Current weight load (KG)", example = "45.5")
+        @Schema(description = "Current weight load based on stored items (KG)", example = "45.5")
         private Double currentWeight;
 
-        @Schema(description = "The highest utilization ratio (Volume vs Weight) for UI progress bars", example = "75")
+        @Schema(description = "The higher of Volume vs Weight utilization for UI progress bars (0-100)", example = "75")
         private Integer fillPercentage;
 
-        @Schema(description = "Indicates if the bin is usable", example = "true")
+        @Schema(description = "Indicates if the bin is active and usable for storage", example = "true")
         private boolean active;
     }
 }

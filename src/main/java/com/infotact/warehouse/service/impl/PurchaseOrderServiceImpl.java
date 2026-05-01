@@ -26,14 +26,8 @@ import java.util.stream.Collectors;
 /**
  * Implementation of {@link PurchaseOrderService} for inbound logistics management.
  * <p>
- * This service orchestrates the procurement process, allowing managers to forecast
- * incoming stock and track vendor fulfillment performance. It acts as the primary
- * ledger for "Expected Inventory" within a specific facility.
- * </p>
- * <p>
- * <b>Update:</b> Now incorporates <b>Financial Capture</b> logic, locking in the
- * agreed unit cost per item to ensure accurate batch-level inventory valuation
- * upon receipt.
+ * <b>Update v2.3:</b> Synchronized with the Multi-Tenant Product Repository.
+ * All SKU resolutions are now strictly bound to the manager's Warehouse ID.
  * </p>
  */
 @Slf4j
@@ -59,18 +53,16 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li><b>Supplier Audit:</b> Verifies the vendor exists before initializing the contract.</li>
-     * <li><b>Cost Capture:</b> Maps the unitCost from the request to lock in the purchase price.</li>
-     * <li><b>Multi-tenant Scoping:</b> Anchors the PO directly to the manager's Warehouse.</li>
-     * </ul>
+     * <b>Security Fix:</b> Product SKU lookup is now warehouse-scoped to prevent
+     * procurement of items belonging to other facilities.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "purchaseOrders", allEntries = true)
     public PurchaseOrderResponse createPurchaseOrder(PurchaseOrderRequest request) {
         User manager = getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
 
         Supplier supplier = supplierRepository.findById(request.supplierId())
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found"));
@@ -79,19 +71,18 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         po.setSupplier(supplier);
         po.setWarehouse(manager.getWarehouse());
         po.setOrderDate(LocalDateTime.now());
-        po.setExpectedDate(LocalDateTime.now().plusDays(7)); // Logic: Default supply chain lead time
+        po.setExpectedDate(LocalDateTime.now().plusDays(7));
         po.setStatus(PurchaseOrderStatus.PENDING);
 
         List<PurchaseOrderItem> items = request.items().stream().map(itemRequest -> {
-            Product product = productRepository.findBySkuAndActiveTrue(itemRequest.sku())
-                    .orElseThrow(() -> new EntityNotFoundException("Active Product SKU not found: " + itemRequest.sku()));
+            // FIX: Use warehouse-scoped search to resolve the product
+            Product product = productRepository.findBySkuAndWarehouseIdAndActiveTrue(itemRequest.sku(), warehouseId)
+                    .orElseThrow(() -> new EntityNotFoundException("Product SKU '" + itemRequest.sku() + "' not found in your facility."));
 
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(po);
             item.setProduct(product);
             item.setQuantity(itemRequest.quantity());
-
-            // Financial Capture: Set the unitCost (10rs vs 12rs logic)
             item.setUnitCost(itemRequest.unitCost());
 
             return item;
@@ -108,6 +99,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Cacheable(value = "purchaseOrders", key = "#id")
     public PurchaseOrderResponse getPurchaseOrder(String id) {
         User manager = getAuthenticatedUser();
+        // poRepository must implement findByIdAndWarehouseId to ensure isolation
         PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new EntityNotFoundException("Purchase Order not found or access denied."));
         return mapToResponse(po);
@@ -134,21 +126,12 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     /**
      * Maps the persistent PO entity to a detailed Response DTO Record.
-     * <p>
-     * <b>Financial Logic:</b> Aggregates item-level line totals to provide
-     * a total order value for administrative reporting and inventory valuation.
-     * </p>
-     */
-    /**
-     * Maps the persistent PO entity to a detailed Response DTO Record.
      */
     private PurchaseOrderResponse mapToResponse(PurchaseOrder po) {
-        // Calculate the total order value for the response header
         BigDecimal totalValue = po.getItems().stream()
                 .map(item -> item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Map line items including calculated line totals
         List<PurchaseOrderResponse.OrderItemDetail> itemDetails = po.getItems().stream()
                 .map(item -> {
                     BigDecimal lineTotal = item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()));
@@ -162,15 +145,14 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     );
                 }).collect(Collectors.toList());
 
-        // Use GETTERS here to avoid private access errors
         return new PurchaseOrderResponse(
                 po.getId(),
                 po.getSupplier().getName(),
                 po.getStatus().name(),
                 po.getWarehouse().getName(),
                 totalValue,
-                po.getOrderDate(),     // Changed from po.orderDate
-                po.getExpectedDate(),  // Changed from po.expectedDate
+                po.getOrderDate(),
+                po.getExpectedDate(),
                 itemDetails
         );
     }

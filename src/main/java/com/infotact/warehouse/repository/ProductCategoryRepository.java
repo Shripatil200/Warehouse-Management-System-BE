@@ -16,29 +16,18 @@ import java.util.Optional;
  * warehouses, ensuring each facility has its own customized catalog structure.
  * </p>
  */
-
 @Repository
 public interface ProductCategoryRepository extends JpaRepository<ProductCategory, String> {
 
-    /**
-     * Standard check for name uniqueness.
-     */
-    boolean existsByNameIgnoreCase(String name);
+    // CHANGE: Check if name exists ONLY within the specific warehouse
+    boolean existsByNameIgnoreCaseAndWarehouseId(String name, String warehouseId);
 
-    /**
-     * RESOLVED METHOD:
-     * This matches the naming convention [Property] + [Condition] + [Link] + [Property].
-     * Logic: WHERE warehouse_id = ?1 AND active = true
-     */
     Page<ProductCategory> findAllByWarehouseIdAndActiveTrue(String warehouseId, Pageable pageable);
 
-    /**
-     * Retrieves all categories for a warehouse, including inactive ones.
-     */
     Page<ProductCategory> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
-    /**
-     * Standard lookup that verifies the category is currently operational.
-     */
+    // CHANGE: Ensure lookup by ID also respects the warehouse boundary
+    Optional<ProductCategory> findByIdAndWarehouseId(String id, String warehouseId);
+
     Optional<ProductCategory> findByIdAndActiveTrue(String id);
 }

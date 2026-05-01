@@ -25,14 +25,8 @@ import java.util.List;
 /**
  * Implementation of {@link OrderService} managing the outbound fulfillment cycle.
  * <p>
- * This service handles the transition of customer demand into actionable warehouse tasks.
- * It enforces multi-tenant data isolation by anchoring every order to the manager's
- * assigned warehouse context.
- * </p>
- * <p>
- * <b>Update:</b> Now incorporates <b>Financial Snapshotting</b> logic, capturing
- * the product selling price at the moment of order placement to preserve
- * historical revenue data.
+ * Fixed to align with the Warehouse-Isolated Product Repository (v2.3).
+ * All SKU lookups now require the authenticated manager's Warehouse ID.
  * </p>
  */
 @Slf4j
@@ -56,19 +50,18 @@ public class OrderServiceImpl implements OrderService {
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Implementation Details:</b>
-     * <ul>
-     * <li><b>SKU Resolution:</b> Translates SKU strings into Product entities.</li>
-     * <li><b>Price Snapshot:</b> Captures the current Product sellingPrice for the order item.</li>
-     * <li><b>SLA Management:</b> Sets <code>expectedShipDate</code> (current + 48hrs).</li>
-     * </ul>
+     * <b>Update:</b> SKU resolution is now scoped to the manager's warehouse to
+     * prevent cross-facility order injection.
+     * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "orders", allEntries = true)
     public OrderResponse createOrder(OrderRequest request) {
         User manager = getAuthenticatedUser();
-        log.info("Processing outbound order {} for Warehouse: {}", request.getOrderNumber(), manager.getWarehouse().getName());
+        String warehouseId = manager.getWarehouse().getId();
+
+        log.info("Creating Order {} for Facility: {}", request.getOrderNumber(), manager.getWarehouse().getName());
 
         SellingOrder order = new SellingOrder();
         order.setOrderNumber(request.getOrderNumber());
@@ -78,15 +71,14 @@ public class OrderServiceImpl implements OrderService {
         order.setExpectedShipDate(LocalDateTime.now().plusDays(2));
 
         List<SellingOrderItem> items = request.getItems().stream().map(itemReq -> {
-            Product product = productRepository.findBySkuAndActiveTrue(itemReq.getSku())
-                    .orElseThrow(() -> new ResourceNotFoundException("Active product not found: " + itemReq.getSku()));
+            // FIX: Use the new warehouse-scoped repository method
+            Product product = productRepository.findBySkuAndWarehouseIdAndActiveTrue(itemReq.getSku(), warehouseId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Product SKU '" + itemReq.getSku() + "' not found in your warehouse."));
 
             SellingOrderItem item = new SellingOrderItem();
             item.setOrder(order);
             item.setProduct(product);
             item.setQuantity(itemReq.getQuantity());
-
-            // Financial Snapshot: Capture the selling price at this exact moment
             item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
 
             return item;
@@ -96,13 +88,24 @@ public class OrderServiceImpl implements OrderService {
         return mapToResponse(orderRepository.save(order));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * <b>Security:</b> Validates that the requested order belongs to the
+     * manager's warehouse context.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "orders", key = "#id")
     public OrderResponse getOrder(String id) {
+        User manager = getAuthenticatedUser();
+
+        // We assume OrderRepository also has a warehouse-aware find method
         return orderRepository.findById(id)
+                .filter(o -> o.getWarehouse().getId().equals(manager.getWarehouse().getId()))
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or access denied."));
     }
 
     @Override
@@ -143,7 +146,6 @@ public class OrderServiceImpl implements OrderService {
                 })
                 .toList();
 
-        // Calculate total order value
         BigDecimal totalAmount = itemDetails.stream()
                 .map(OrderResponse.OrderItemDetail::getLineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

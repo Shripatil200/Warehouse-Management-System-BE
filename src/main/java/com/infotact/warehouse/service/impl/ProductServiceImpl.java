@@ -14,6 +14,7 @@ import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.repository.ProductSupplierRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.ProductService;
+import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -49,17 +50,8 @@ public class ProductServiceImpl implements ProductService {
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final ProductSupplierRepository productSupplierRepository;
+    private final UserService userService;
 
-    /**
-     * Internal helper to extract the authenticated user and their facility context.
-     * @return The currently logged-in {@link User}.
-     * @throws UnauthorizedException if the security context is missing or invalid.
-     */
-    private User getAuthenticatedUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("Authenticated user profile not found."));
-    }
 
     /**
      * {@inheritDoc}
@@ -72,7 +64,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse addProduct(ProductRequest request) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         if (productRepository.existsBySkuIgnoreCaseAndWarehouseId(request.getSku(), warehouseId)) {
@@ -104,7 +96,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public ProductResponse getProductById(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         return productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Product record not found for ID: " + id));
@@ -120,7 +112,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#sku")
     public ProductResponse getProductBySku(String sku) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         return productRepository.findBySkuAndWarehouseIdAndActiveTrue(sku, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Active product with SKU '" + sku + "' not found."));
@@ -137,7 +129,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse updateProduct(String id, ProductRequest request) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         Product product = productRepository.findByIdAndWarehouseId(id, warehouseId)
@@ -167,7 +159,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #includeInactive")
     public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String whId = manager.getWarehouse().getId();
 
         Page<Product> products = includeInactive ?
@@ -184,7 +176,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse deleteProduct(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         Product product = productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
@@ -199,7 +191,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @CacheEvict(value = "products", allEntries = true)
     public ProductResponse activateProduct(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         Product product = productRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 

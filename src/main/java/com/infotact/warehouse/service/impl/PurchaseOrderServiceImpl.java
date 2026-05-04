@@ -8,6 +8,7 @@ import com.infotact.warehouse.exception.EntityNotFoundException;
 import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.PurchaseOrderService;
+import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -40,15 +41,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final UserService userService;
 
-    /**
-     * Resolves the current manager's profile to maintain facility-scoped data integrity.
-     */
-    private User getAuthenticatedUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new UnauthorizedException("User profile not found."));
-    }
+
 
     /**
      * {@inheritDoc}
@@ -61,7 +56,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional
     @CacheEvict(value = "purchaseOrders", allEntries = true)
     public PurchaseOrderResponse createPurchaseOrder(PurchaseOrderRequest request) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         Supplier supplier = supplierRepository.findById(request.supplierId())
@@ -98,7 +93,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(readOnly = true)
     @Cacheable(value = "purchaseOrders", key = "#id")
     public PurchaseOrderResponse getPurchaseOrder(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         // poRepository must implement findByIdAndWarehouseId to ensure isolation
         PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new EntityNotFoundException("Purchase Order not found or access denied."));
@@ -110,7 +105,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(readOnly = true)
     @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
     public List<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         List<PurchaseOrder> pos;

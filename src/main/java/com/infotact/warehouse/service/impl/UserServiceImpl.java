@@ -101,10 +101,7 @@ public class UserServiceImpl implements UserService {
                 predicates.add(cb.equal(root.get("role"), role));
             }
 
-            // 5. Exact Match Status Filter
-            if (status != null) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
+
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
@@ -291,6 +288,7 @@ public class UserServiceImpl implements UserService {
      * @return The authenticated user entity.
      * @throws UnauthorizedException if no profile is found in the repository.
      */
+    @Override
     public User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return getCachedUser(auth.getName());

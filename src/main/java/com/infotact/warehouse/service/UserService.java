@@ -3,6 +3,7 @@ package com.infotact.warehouse.service;
 import com.infotact.warehouse.dto.v1.request.UserRequest;
 import com.infotact.warehouse.dto.v1.request.UserUpdate;
 import com.infotact.warehouse.dto.v1.response.UserResponse;
+import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import jakarta.validation.Valid;
@@ -107,4 +108,6 @@ public interface UserService {
      * @return A {@link Page} of user profiles.
      */
     Page<UserResponse> getAllUser(Pageable pageable);
+
+    User getAuthenticatedUser();
 }

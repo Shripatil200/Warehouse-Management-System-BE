@@ -16,9 +16,8 @@ import java.util.List;
 /**
  * Data Transfer Object representing the detailed state of an outbound customer order.
  * <p>
- * This response provides a financial and operational snapshot of a sale.
- * It includes denormalized names and price snapshots to ensure
- * historical data integrity even if the master catalog prices change.
+ * Industry-Ready: Includes physical picking directions (Bin Codes) and inventory layer
+ * tracking to bridge the digital order to the physical warehouse floor.
  * </p>
  */
 @Data
@@ -27,7 +26,7 @@ import java.util.List;
 @AllArgsConstructor
 @Schema(
         name = "OrderResponse",
-        description = "Detailed view of an outbound order including financial snapshots and fulfillment status"
+        description = "Detailed view of an outbound order including financial snapshots and physical picking directions"
 )
 public class OrderResponse implements Serializable {
 
@@ -56,18 +55,18 @@ public class OrderResponse implements Serializable {
             example = "Pune Main Warehouse")
     private String warehouseName;
 
-    @Schema(description = "List of specific products and quantities included in the order")
+    @Schema(description = "List of specific products and picking directions for the order")
     private List<OrderItemDetail> items;
 
     /**
      * Detail view of a single product within an outbound order.
-     * Includes the price snapshot for historical accuracy.
+     * Updated to support mobile scan verification and physical picking.
      */
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    @Schema(description = "Detailed information for a single order line item including price snapshots")
+    @Schema(description = "Detailed information for an order line item including physical storage locations")
     public static class OrderItemDetail {
 
         @Schema(description = "The internal UUID of the product",
@@ -78,7 +77,7 @@ public class OrderResponse implements Serializable {
                 example = "iPhone 17 256GB")
         private String productName;
 
-        @Schema(description = "The Stock Keeping Unit (SKU) for picking",
+        @Schema(description = "The Stock Keeping Unit (SKU) for picking stickers",
                 example = "APP-IP17-256-BLK")
         private String sku;
 
@@ -92,5 +91,19 @@ public class OrderResponse implements Serializable {
         @Schema(description = "Line item total (Quantity * Sell Price)",
                 example = "159998.00")
         private BigDecimal lineTotal;
+
+        // --- INDUSTRY-READY PICKING DIRECTIONS ---
+
+        @Schema(description = "The human-readable code on the physical rack for the picker",
+                example = "ZONE-A-AISLE-01-BIN-005")
+        private String binCode;
+
+        @Schema(description = "The internal UUID of the suggested bin for verification scans",
+                example = "bin_uuid_123")
+        private String suggestedBinId;
+
+        @Schema(description = "The specific inventory layer (batch/expiry) reserved for this pick",
+                example = "inv_item_uuid_456")
+        private String inventoryItemId;
     }
 }

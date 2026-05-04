@@ -11,6 +11,7 @@ import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.CategoryService;
+import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -40,15 +41,9 @@ public class CategoryServiceImpl implements CategoryService {
 
     private final ProductCategoryRepository categoryRepository;
     private final UserRepository userRepository;
+    private final UserService userService;
 
-    /**
-     * Context-helper to retrieve the currently authenticated user and their warehouse.
-     */
-    private User getAuthenticatedUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new UnauthorizedException("Authenticated user context not found."));
-    }
+
 
     /**
      * {@inheritDoc}
@@ -61,7 +56,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public ProductCategoryResponse addCategory(ProductCategoryRequest request) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         log.info("Attempting to create category '{}' for warehouse: {}", request.getName(), warehouseId);
@@ -95,7 +90,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional(readOnly = true)
     @Cacheable(value = "categories", key = "#id")
     public ProductCategoryResponse getCategory(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         return categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found or access denied."));
@@ -111,7 +106,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional(readOnly = true)
     @Cacheable(value = "categories", key = "'list-' + #includeInactive + '-' + #pageable.pageNumber")
     public Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         Page<ProductCategory> categories = includeInactive ?
@@ -132,7 +127,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public void deleteCategory(String id) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found for deletion."));
 
@@ -159,7 +154,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     @CacheEvict(value = "categories", allEntries = true)
     public ProductCategoryResponse updateCategory(String id, ProductCategoryRequest request) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
         ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, warehouseId)
@@ -239,7 +234,7 @@ public class CategoryServiceImpl implements CategoryService {
      * Shared logic for status toggles.
      */
     private ProductCategoryResponse updateStatus(String id, boolean status) {
-        User manager = getAuthenticatedUser();
+        User manager = userService.getAuthenticatedUser();
         ProductCategory category = categoryRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found."));
         category.setActive(status);

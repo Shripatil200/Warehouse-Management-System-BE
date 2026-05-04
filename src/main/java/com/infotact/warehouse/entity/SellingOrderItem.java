@@ -74,4 +74,17 @@ public class SellingOrderItem {
      */
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal sellPriceAtTimeOfOrder;
+
+    /**
+     * The ID of the bin where the picker is physically directed.
+     */
+    @Column(name = "suggested_bin_id")
+    private String suggestedBinId;
+
+    /**
+     * The specific stock layer (InventoryItem) reserved for this order.
+     */
+    @Column(name = "inventory_item_id")
+    private String inventoryItemId;
+
 }

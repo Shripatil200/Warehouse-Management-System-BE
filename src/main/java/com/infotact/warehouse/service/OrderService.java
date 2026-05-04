@@ -5,6 +5,9 @@ import com.infotact.warehouse.dto.v1.response.OrderResponse;
 import com.infotact.warehouse.entity.SellingOrder;
 import com.infotact.warehouse.entity.SellingOrderItem;
 import com.infotact.warehouse.entity.enums.OrderStatus;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -54,6 +57,9 @@ public interface OrderService {
      * @return A list of orders belonging strictly to the authenticated user's warehouse.
      */
     List<OrderResponse> getWarehouseOrders(String status);
+
+
+    void verifyAndPack(String orderId, String scannedSku, String scannedBinCode);
 
     /**
      * Transitions an order through its operational lifecycle and triggers associated inventory actions.

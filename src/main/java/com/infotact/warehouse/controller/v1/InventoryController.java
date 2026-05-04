@@ -4,46 +4,87 @@ import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controller for handling inventory-related operations such as
- * receiving shipments and stock adjustments.
+ * REST controller for managing physical stock movements and inventory integrity.
+ * <p>
+ * Provides endpoints for high-concurrency stock acquisition, audit corrections,
+ * and secure fulfillment verification.
+ * </p>
  */
 @RestController
 @RequestMapping(path="/api/v1/inventory")
 @RequiredArgsConstructor
-@Tag(name = "Inventory Controller", description = "Endpoints for managing warehouse stock")
+@Tag(name = "3. Inventory Management", description = "Endpoints for managing stock levels and movement verification")
 public class InventoryController {
 
     private final InventoryService inventoryService;
 
     /**
-     * Processes an incoming shipment and updates the inventory records.
-     * * @param request The shipment details including items, quantities, and origin.
-     * @return 204 No Content on success.
+     * Processes an incoming shipment.
+     * <p>
+     * <b>Process:</b> Triggers smart putaway logic and updates volumetric bin metrics.
+     * </p>
      */
-    @Operation(
-            summary = "Receive a new shipment",
-            description = "Validates the incoming request and triggers the background inventory update logic."
-    )
-    @ApiResponse(responseCode = "204", description = "Shipment processed successfully")
-    @ApiResponse(responseCode = "400", description = "Invalid request body (Validation failed)")
+    @Operation(summary = "Receive shipment", description = "Registers inbound goods and identifies storage locations.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Shipment received and metrics updated"),
+            @ApiResponse(responseCode = "400", description = "Validation error or insufficient storage capacity")
+    })
     @PostMapping(path="/receive")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> receiveShipment(@Valid @RequestBody ReceivingRequest request){
         inventoryService.receiveShipment(request);
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Adjust stock levels", description = "Manually correct stock for damages or audit corrections.")
+    /**
+     * Manual stock correction.
+     * <p>
+     * <b>Process:</b> Employs pessimistic locking to ensure audit accuracy during high-traffic.
+     * </p>
+     */
+    @Operation(summary = "Adjust stock levels", description = "Manual correction for damaged, lost, or found items.")
     @PatchMapping("/adjust")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> adjustStock(@Valid @RequestBody InventoryAdjustmentRequest request) {
         inventoryService.adjustStock(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * <b>Industry-Ready Feature: Secure Fulfillment Pick.</b>
+     * <p>
+     * Used by mobile scanners to commit a pick only after physical verification.
+     * Bridges the digital record with the physical barcode scans of both the bin and the SKU.
+     * </p>
+     */
+    @Operation(
+            summary = "Commit pick with verification",
+            description = "Validates physical scans of Bin and SKU before decrementing digital inventory."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Pick verified and committed"),
+            @ApiResponse(responseCode = "400", description = "Scan mismatch: Incorrect Bin or Product scanned")
+    })
+    @PostMapping("/pick/verify")
+    @PreAuthorize("hasAnyRole('ADMIN', 'WORKER')")
+    public ResponseEntity<Void> commitPickWithVerification(
+            @Parameter(description = "Internal Inventory Item ID") @RequestParam String inventoryItemId,
+            @Parameter(description = "Raw scan data from physical bin label") @RequestParam String scannedBinCode,
+            @Parameter(description = "Raw scan data from product sticker") @RequestParam String scannedSku,
+            @Parameter(description = "Physical quantity picked") @RequestParam Integer quantity) {
+
+        inventoryService.commitPickWithVerification(inventoryItemId, scannedBinCode, scannedSku, quantity);
         return ResponseEntity.noContent().build();
     }
 }

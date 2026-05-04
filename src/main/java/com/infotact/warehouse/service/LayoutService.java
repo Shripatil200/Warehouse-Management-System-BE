@@ -107,4 +107,15 @@ public interface LayoutService {
      * @param isActive True for usable, False for under repair/blocked.
      */
     void updateBinStatus(String binId, boolean isActive);
+
+    /**
+     * Retrieves the scannable barcode image for a specific storage bin.
+     * <p>
+     * This bridges the Layout module with the Barcode module, allowing
+     * for physical label printing of rack locations.
+     * </p>
+     */
+    byte[] getBinBarcode(String binId);
+
+    boolean verifyBinScan(String scannedCode, String expectedBinId);
 }

@@ -4,6 +4,7 @@ import com.infotact.warehouse.dto.v1.request.OrderRequest;
 import com.infotact.warehouse.dto.v1.response.OrderResponse;
 import com.infotact.warehouse.entity.SellingOrder;
 import com.infotact.warehouse.entity.SellingOrderItem;
+import com.infotact.warehouse.entity.enums.OrderStatus;
 
 import java.util.List;
 
@@ -53,4 +54,33 @@ public interface OrderService {
      * @return A list of orders belonging strictly to the authenticated user's warehouse.
      */
     List<OrderResponse> getWarehouseOrders(String status);
+
+    /**
+     * Transitions an order through its operational lifecycle and triggers associated inventory actions.
+     * <p>
+     * <b>State Machine & Inventory Integration:</b>
+     * <ul>
+     *     <li><b>PENDING &rarr; PICKING:</b> Validates that the order is ready for warehouse staff to begin work.</li>
+     *     <li><b>PICKING &rarr; PACKED:</b> Triggers {@code inventoryService.commitPick()}. This physically deducts
+     *     quantities from {@code InventoryItem} records and synchronizes {@code StorageBin} occupancy.</li>
+     *     <li><b>PACKED &rarr; SHIPPED:</b> Finalizes the fulfillment process for outbound logistics.</li>
+     *     <li><b>ANY &rarr; CANCELLED:</b> Triggers {@code inventoryService.releaseReservation()}. This reverses
+     *     the "soft-lock" on stock, returning it to the available pool for other orders.[cite: 1]</li>
+     * </ul>
+     * </p>
+     * <p>
+     * <b>Security & Validation:</b>
+     * 1. <b>Facility Isolation:</b> Ensures the order belongs to the authenticated manager's warehouse.[cite: 1]
+     * 2. <b>Sequential Integrity:</b> Prevents skipping states (e.g., cannot move from PENDING to SHIPPED).[cite: 1]
+     * 3. <b>Atomic Transactions:</b> If an inventory deduction fails during the PACKED transition, the
+     * status change is rolled back to maintain data consistency.[cite: 1]
+     * </p>
+     *
+     * @param orderId    The UUID of the order to transition.[cite: 1]
+     * @param nextStatus The target {@link OrderStatus} for the fulfillment stage.[cite: 1]
+     * @return The updated order details with the new status and timestamp.[cite: 1]
+     * @throws com.infotact.warehouse.exception.IllegalOperationException if the status transition is logically invalid.[cite: 1]
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if the order does not exist or is outside the user's scope.[cite: 1]
+     */
+    OrderResponse updateOrderStatus(String orderId, OrderStatus nextStatus);
 }

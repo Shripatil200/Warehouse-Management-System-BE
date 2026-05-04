@@ -3,23 +3,13 @@ package com.infotact.warehouse.entity;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/**
- * Persistence entity representing specific physical stock at a location.
- * <p>
- * Tracks quantities, batch details, and individual serial numbers. Uses
- * Optimistic Locking to handle high-concurrency picking/receiving operations.
- * </p>
- */
 @Data
 @Entity
 @DynamicUpdate
@@ -31,14 +21,16 @@ import java.time.LocalDate;
         name = "inventory_items",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_product_bin_status_batch_serial",
-                        columnNames = {"product_id", "storage_bin_id", "status", "batch_number", "serial_number"}
+                        name = "uk_product_bin_batch_price_expiry",
+                        // REMOVED 'status' and 'serial_number' from uniqueness
+                        // ADDED 'expiry_date' to ensure layers are distinct
+                        columnNames = {"product_id", "storage_bin_id", "batch_number", "purchase_price", "expiry_date"}
                 )
         },
         indexes = {
-                @Index(name = "idx_inv_product", columnList = "product_id"),
-                @Index(name = "idx_inv_bin", columnList = "storage_bin_id"),
-                @Index(name = "idx_inv_expiry", columnList = "expiryDate")
+                // Optimized for FEFO picking (Product + Expiry)
+                @Index(name = "idx_inv_product_expiry", columnList = "product_id, expiryDate"),
+                @Index(name = "idx_inv_bin", columnList = "storage_bin_id")
         }
 )
 public class InventoryItem extends BaseEntity {
@@ -68,32 +60,32 @@ public class InventoryItem extends BaseEntity {
     @Column(nullable = false, length = 20)
     private InventoryStatus status = InventoryStatus.AVAILABLE;
 
-    /** * Manufacturer batch identifier. Default is "NONE".
-     */
     @Column(name = "batch_number", nullable = false)
     private String batchNumber = "NONE";
 
-    /** * Unique unit identifier. Required if product.isSerialized is true.
+    /**
+     * Serial number support:
+     * Note: If you use Serial Numbers, you usually store quantity as 1.
+     * For bulk stock, this remains null.
      */
     @Column(name = "serial_number")
     private String serialNumber;
 
-    /** * Crucial for FEFO (First-Expired, First-Out) logic.
-     */
+    @Column(name = "expiry_date")
     private LocalDate expiryDate;
 
-    /** * Historic purchase cost for this specific stock entry.
-     */
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal purchasePrice;
 
     /**
-     * Calculates net pickable stock.
+     * Helper to calculate pickable stock.
      */
-    public Long getAvailableQuantity() {
+    public Integer getAvailableQuantity() {
+        // If status is not AVAILABLE, nothing is pickable
         if (this.status != InventoryStatus.AVAILABLE) {
-            return 0L;
+            return 0;
         }
-        return Math.max(0L, (long) this.quantity - this.reservedQuantity);
+        // Logic: Physical minus Reserved, but never less than zero[cite: 1]
+        return Math.max(0, this.quantity - this.reservedQuantity);
     }
 }

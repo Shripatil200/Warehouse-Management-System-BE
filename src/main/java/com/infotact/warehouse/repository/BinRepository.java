@@ -1,9 +1,11 @@
 package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.StorageBin;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -40,8 +42,9 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
      * 2. <b>Physical Fit:</b> Checks BOTH (maxVolume - currentVolume) AND (maxWeight - currentWeight).
      * 3. <b>Consolidation:</b> Prioritizes bins that are already partially full to save empty bins.
      * </p>
+     *
      * @param productId ID of item to receive.
-     * @param zoneId Optional zone filter.
+     * @param zoneId    Optional zone filter.
      * @param reqVolume Total volume of the shipment (qty * L * W * H).
      * @param reqWeight Total weight of the shipment (qty * weight).
      */
@@ -64,4 +67,18 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
             @Param("reqWeight") Double reqWeight);
 
     Optional<StorageBin> findByBinCodeAndActiveTrue(String binCode);
+
+    /**
+     * CRITICAL: Pessimistic Lock for Capacity Management.
+     * <p>
+     * Locks the bin record to prevent concurrent transactions from calculating
+     * 'currentVolumeOccupied' or 'currentWeightLoad' based on stale data.
+     * </p>
+     *
+     * @param id The internal UUID of the storage bin.
+     * @return An Optional containing the locked StorageBin.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM StorageBin b WHERE b.id = :id")
+    Optional<StorageBin> findByIdWithLock(@Param("id") String id);
 }

@@ -3,33 +3,25 @@ package com.infotact.warehouse.service.impl;
 import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.entity.*;
-import com.infotact.warehouse.entity.enums.BinStatus;
-import com.infotact.warehouse.entity.enums.InventoryStatus;
-import com.infotact.warehouse.entity.enums.TransactionType;
+import com.infotact.warehouse.entity.enums.*;
 import com.infotact.warehouse.exception.*;
 import com.infotact.warehouse.repository.*;
+import com.infotact.warehouse.service.BarcodeAuditService;
 import com.infotact.warehouse.service.InventoryService;
+import com.infotact.warehouse.service.LayoutService;
+import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementation of {@link InventoryService} handling core stock movements.
- * <p>
- * This service orchestrates the physical-to-digital synchronization of warehouse stock.
- * Features include:
- * <ul>
- *     <li><b>Serialized vs Bulk Tracking:</b> Dynamically switches between unit-level
- *     serial tracking and bulk cost-layering based on product configuration[cite: 1].</li>
- *     <li><b>FEFO Reservation:</b> Soft-locks stock for orders based on First-Expiry
- *     logic to minimize waste[cite: 1].</li>
- *     <li><b>Volumetric Putaway:</b> Validates bin capacity (Weight/Volume) in real-time
- *     during inbound shipments[cite: 1].</li>
- * </ul>
+ * Enhanced Implementation of {@link InventoryService} for Industry-Grade Operations.
+ * Integrates FEFO reservation logic and Barcode Audit tracking.
  */
 @Slf4j
 @Service
@@ -40,89 +32,20 @@ public class InventoryServiceImpl implements InventoryService {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryTransactionRepository transactionRepository;
+    private final LayoutService layoutService;
+    private final BarcodeAuditService auditService;
+    private final UserService userService;
 
     /**
-     * {@inheritDoc}
-     * <p>
-     * <b>Operational Logic:</b> If the product is serialized, it creates N individual
-     * records. If bulk, it utilizes cost-layering to group items with identical
-     * Price/Batch/Expiry[cite: 1].
+     * FEFO Reservation returns specific layers for picker guidance.
      */
     @Override
     @Transactional
-    public void receiveShipment(ReceivingRequest request) {
-        Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
-
-        int remainingQty = request.getQuantity();
-        BigDecimal cost = request.getUnitCost() != null ? request.getUnitCost() : product.getCostPrice();
-        String batch = request.getBatchNumber() != null ? request.getBatchNumber() : "NONE";
-
-        log.info("Processing receipt: {} units of SKU {}", remainingQty, product.getSku());
-
-        while (remainingQty > 0) {
-            StorageBin suggestedBin = findSuitableBin(product, request, product.getUnitVolume(), product.getWeight());
-            StorageBin lockedBin = binRepository.findByIdWithLock(suggestedBin.getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Bin unavailable"));
-
-            // Check if product requires individual serial tracking[cite: 1]
-            if (product.isSerialized()) {
-                // For serialized items, we put away 1 unit at a time[cite: 1]
-                processPutawaySlice(lockedBin, product, request, cost, batch, 1);
-                remainingQty -= 1;
-            } else {
-                // Bulk logic: Fill bin to capacity[cite: 1]
-                int binCapacityUnits = calculateMaxUnits(lockedBin, product);
-                int qtyToPutAway = Math.min(remainingQty, binCapacityUnits);
-
-                if (qtyToPutAway <= 0) {
-                    lockedBin.setStatus(BinStatus.FULL);
-                    binRepository.save(lockedBin);
-                    continue;
-                }
-
-                processPutawaySlice(lockedBin, product, request, cost, batch, qtyToPutAway);
-                remainingQty -= qtyToPutAway;
-            }
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Transactional
-    public void adjustStock(InventoryAdjustmentRequest request) {
-        if (request.getAdjustmentQuantity() == 0) return;
-
-        InventoryItem item = inventoryRepository.findByIdWithLock(request.getInventoryItemId())
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found"));
-
-        int newQty = item.getQuantity() + request.getAdjustmentQuantity();
-        if (newQty < 0) throw new IllegalOperationException("Adjustment leads to negative physical stock.");
-
-        StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
-
-        syncBinMetrics(bin, item.getProduct(), request.getAdjustmentQuantity());
-
-        item.setQuantity(newQty);
-        inventoryRepository.save(item);
-
-        logTransaction(item, TransactionType.ADJUSTMENT, request.getAdjustmentQuantity().longValue(), request.getReasonCode());
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Implements FEFO (First-Expiry-First-Out) to prioritize stock that expires soonest[cite: 1].
-     */
-    @Override
-    @Transactional
-    public void reserveStock(String productId, Integer quantityToReserve) {
+    public List<InventoryItem> reserveStock(String productId, Integer quantityToReserve) {
         if (quantityToReserve <= 0) throw new BadRequestException("Reservation quantity must be positive.");
 
         List<InventoryItem> items = inventoryRepository.findAvailableStockByProductFEFO(productId);
+        List<InventoryItem> reservedLayers = new ArrayList<>();
         int remainingToReserve = quantityToReserve;
 
         for (InventoryItem item : items) {
@@ -137,18 +60,156 @@ public class InventoryServiceImpl implements InventoryService {
 
                 lockedItem.setReservedQuantity(lockedItem.getReservedQuantity() + take);
                 inventoryRepository.save(lockedItem);
+
                 remainingToReserve -= take;
+                reservedLayers.add(lockedItem);
             }
         }
 
         if (remainingToReserve > 0) {
             throw new InsufficientStorageException("Shortage: Only " + (quantityToReserve - remainingToReserve) + " units available.");
         }
+
+        return reservedLayers;
     }
 
     /**
-     * {@inheritDoc}
+     * Industry-Ready Pick Commitment with Physical Verification and Audit Logging.
      */
+    @Override
+    @Transactional
+    public void commitPickWithVerification(String inventoryItemId, String scannedBinCode, String scannedSku, Integer quantity) {
+        User operator = userService.getAuthenticatedUser();
+        InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found"));
+
+        try {
+            // 1. Verify physical location barcode
+            boolean isCorrectBin = layoutService.verifyBinScan(scannedBinCode, item.getStorageBin().getId());
+            if (!isCorrectBin) {
+                throw new IllegalOperationException("Verification Failed: You are at the wrong bin location.");
+            }
+
+            // 2. Verify physical product barcode via SKU
+            if (!item.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
+                throw new IllegalOperationException("Verification Failed: Scanned product does not match SKU.");
+            }
+
+            // 3. Physical Deduction
+            commitPick(inventoryItemId, quantity);
+
+            // AUDIT SUCCESS
+            auditService.logSuccess(operator.getId(), operator.getWarehouse().getId(),
+                    item.getStorageBin().getId(), null, AuditAction.PICKING, scannedBinCode);
+
+        } catch (IllegalOperationException e) {
+            // AUDIT FAILURE
+            auditService.logFailure(operator.getId(), operator.getWarehouse().getId(),
+                    item.getStorageBin().getId(), null, AuditAction.PICKING, scannedBinCode, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Override
+    @Transactional
+    public void commitPick(String inventoryItemId, Integer quantity) {
+        InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found"));
+
+        if (!item.getProduct().isActive()) throw new IllegalOperationException("Product is deactivated.");
+        if (item.getStatus() != InventoryStatus.AVAILABLE) throw new IllegalOperationException("Stock status is " + item.getStatus());
+        if (item.getQuantity() < quantity) throw new IllegalOperationException("Physical stock shortage.");
+
+        item.setQuantity(item.getQuantity() - quantity);
+        item.setReservedQuantity(item.getReservedQuantity() - quantity);
+
+        StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
+
+        syncBinMetrics(bin, item.getProduct(), -quantity);
+
+        inventoryRepository.save(item);
+        logTransaction(item, TransactionType.OUTBOUND, (long) -quantity, "VERIFIED_FULFILLMENT");
+    }
+
+    @Override
+    @Transactional
+    public void receiveShipment(ReceivingRequest request) {
+        User operator = userService.getAuthenticatedUser();
+        Product product = productRepository.findById(request.getProductId())
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
+        try {
+            int remainingQty = request.getQuantity();
+            BigDecimal cost = request.getUnitCost() != null ? request.getUnitCost() : product.getCostPrice();
+            String batch = request.getBatchNumber() != null ? request.getBatchNumber() : "NONE";
+
+            while (remainingQty > 0) {
+                StorageBin suggestedBin = findSuitableBin(product, request, product.getUnitVolume(), product.getWeight());
+                StorageBin lockedBin = binRepository.findByIdWithLock(suggestedBin.getId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Bin unavailable"));
+
+                int qtyToPutAway;
+                if (product.isSerialized()) {
+                    qtyToPutAway = 1;
+                } else {
+                    int binCapacityUnits = calculateMaxUnits(lockedBin, product);
+                    qtyToPutAway = Math.min(remainingQty, binCapacityUnits);
+
+                    if (qtyToPutAway <= 0) {
+                        lockedBin.setStatus(BinStatus.FULL);
+                        binRepository.save(lockedBin);
+                        continue;
+                    }
+                }
+
+                processPutawaySlice(lockedBin, product, request, cost, batch, qtyToPutAway);
+                remainingQty -= qtyToPutAway;
+
+                // AUDIT SUCCESS for each slice
+                auditService.logSuccess(operator.getId(), operator.getWarehouse().getId(),
+                        lockedBin.getId(), null, AuditAction.RECEIVING, "SKU: " + product.getSku());
+            }
+        } catch (Exception e) {
+            auditService.logFailure(operator.getId(), operator.getWarehouse().getId(),
+                    request.getStorageBinId(), null, AuditAction.RECEIVING, "QTY: " + request.getQuantity(), e.getMessage());
+            throw e;
+        }
+    }
+
+    @Override
+    @Transactional
+    public void adjustStock(InventoryAdjustmentRequest request) {
+        User manager = userService.getAuthenticatedUser();
+        if (request.getAdjustmentQuantity() == 0) return;
+
+        InventoryItem item = inventoryRepository.findByIdWithLock(request.getInventoryItemId())
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found"));
+
+        try {
+            int newQty = item.getQuantity() + request.getAdjustmentQuantity();
+            if (newQty < 0) throw new IllegalOperationException("Adjustment results in negative stock.");
+
+            StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
+
+            syncBinMetrics(bin, item.getProduct(), request.getAdjustmentQuantity());
+
+            item.setQuantity(newQty);
+            inventoryRepository.save(item);
+
+            logTransaction(item, TransactionType.ADJUSTMENT, request.getAdjustmentQuantity().longValue(), request.getReasonCode());
+
+            auditService.logSuccess(manager.getId(), manager.getWarehouse().getId(),
+                    bin.getId(), null, AuditAction.STOCK_ADJUSTMENT, "Delta: " + request.getAdjustmentQuantity());
+
+        } catch (Exception e) {
+            auditService.logFailure(manager.getId(), manager.getWarehouse().getId(),
+                    item.getStorageBin().getId(), null, AuditAction.STOCK_ADJUSTMENT, "FAILED_ADJ", e.getMessage());
+            throw e;
+        }
+    }
+
     @Override
     @Transactional
     public void releaseReservation(String inventoryItemId, Integer quantity) {
@@ -156,41 +217,14 @@ public class InventoryServiceImpl implements InventoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found"));
 
         if (item.getReservedQuantity() < quantity) {
-            throw new IllegalOperationException("Cannot release more than currently reserved.");
+            throw new IllegalOperationException("Cannot release more than reserved.");
         }
 
         item.setReservedQuantity(item.getReservedQuantity() - quantity);
         inventoryRepository.save(item);
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Performs final validation to ensure product is still active and status is
-     * still 'AVAILABLE' before physical removal[cite: 1].
-     */
-    @Override
-    @Transactional
-    public void commitPick(String inventoryItemId, Integer quantity) {
-        InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found"));
-
-        // Final Safety Checks[cite: 1]
-        if (!item.getProduct().isActive()) throw new IllegalOperationException("Product is deactivated.");
-        if (item.getStatus() != InventoryStatus.AVAILABLE) throw new IllegalOperationException("Stock is no longer available (Status: " + item.getStatus() + ")");
-        if (item.getQuantity() < quantity) throw new IllegalOperationException("Physical stock shortage during commit.");
-
-        item.setQuantity(item.getQuantity() - quantity);
-        item.setReservedQuantity(item.getReservedQuantity() - quantity);
-
-        StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId()).get();
-        syncBinMetrics(bin, item.getProduct(), -quantity);
-
-        inventoryRepository.save(item);
-        logTransaction(item, TransactionType.OUTBOUND, (long) -quantity, "ORDER_FULFILLMENT");
-    }
-
-    // --- Private Helper Methods ---
+    // --- Private Utility Helpers ---
 
     private void processPutawaySlice(StorageBin bin, Product product, ReceivingRequest req, BigDecimal cost, String batch, int qty) {
         InventoryItem item = inventoryRepository
@@ -204,12 +238,12 @@ public class InventoryServiceImpl implements InventoryService {
                     newItem.setBatchNumber(batch);
                     newItem.setExpiryDate(req.getExpiryDate());
                     newItem.setPurchasePrice(cost);
+                    newItem.setStatus(InventoryStatus.AVAILABLE);
                     return newItem;
                 });
 
         item.setQuantity(item.getQuantity() + qty);
         inventoryRepository.save(item);
-
         syncBinMetrics(bin, product, qty);
         logTransaction(item, TransactionType.INBOUND, (long) qty, "GOODS_RECEIPT");
     }
@@ -239,12 +273,12 @@ public class InventoryServiceImpl implements InventoryService {
     private StorageBin findSuitableBin(Product product, ReceivingRequest request, double unitVol, double unitWeight) {
         if (request.getStorageBinId() != null && !request.getStorageBinId().isBlank()) {
             return binRepository.findById(request.getStorageBinId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Requested bin not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
         }
         String zoneId = product.getCategory().getPreferredZoneId();
         return binRepository.findSmartPutawayBins(product.getId(), zoneId, unitVol, unitWeight)
                 .stream().findFirst()
-                .orElseThrow(() -> new InsufficientStorageException("No capacity found in preferred zones."));
+                .orElseThrow(() -> new InsufficientStorageException("No capacity in preferred zones."));
     }
 
     private void logTransaction(InventoryItem item, TransactionType type, Long change, String reason) {

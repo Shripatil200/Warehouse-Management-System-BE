@@ -118,4 +118,10 @@ public interface LayoutService {
     byte[] getBinBarcode(String binId);
 
     boolean verifyBinScan(String scannedCode, String expectedBinId);
+
+    /**
+     * Resolves a human-readable bin code from a bin UUID.
+     * Used for displaying pick locations to operators.
+     */
+    String getBinCodeById(String binId);
 }

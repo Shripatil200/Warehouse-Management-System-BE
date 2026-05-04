@@ -22,19 +22,14 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Service implementation for warehouse layout orchestration.
+ * Industry-Grade Service implementation for warehouse layout orchestration.
  * <p>
- * Manages the structural hierarchy (Warehouse -> Zone -> Aisle -> Bin).
- * Optimized for high-performance UI rendering through:
+ * Key Production Features:
  * <ul>
- *     <li><b>Consolidated Aggregation:</b> One query fetches all structural metrics.</li>
- *     <li><b>Lazy Loading:</b> Granular bin data is only fetched when a user selects an aisle.</li>
- *     <li><b>Null Safety:</b> Guaranteed default values (0.0 or 0) to prevent UI breakage.</li>
+ *     <li><b>Hardware Safety:</b> Blocks barcode generation for inactive/broken equipment.</li>
+ *     <li><b>Scan Optimization:</b> O(1) verification logic for mobile pickers.</li>
+ *     <li><b>Aggregated Metrics:</b> Real-time capacity calculation for the Digital Twin UI.</li>
  * </ul>
- * </p>
- *
- * @author Gemini
- * @version 3.2
  */
 @Slf4j
 @Service
@@ -45,32 +40,19 @@ public class LayoutServiceImpl implements LayoutService {
     private final ZoneRepository zoneRepository;
     private final AisleRepository aisleRepository;
     private final WarehouseRepository warehouseRepository;
-
     private final BarcodeService barcodeService;
-    /**
-     * Retrieves the structural layout with pre-calculated metrics (Capacity, Occupancy, Bin Count).
-     * <p>
-     * <b>Update Note:</b> Uses explicit entity joins in the repository to ensure bin counts
-     * are never returned as null.
-     * </p>
-     *
-     * @param id The Warehouse UUID.
-     * @return WarehouseLayoutResponse containing hierarchical summaries.
-     */
+
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "warehouseLayouts", key = "#id")
     public WarehouseLayoutResponse getWarehouseLayout(String id) {
         log.info("Generating layout metrics for Warehouse: {}", id);
 
-        // 1. Fetch Structural Skeleton (Warehouse -> Zones -> Aisles)
         Warehouse warehouse = warehouseRepository.findOptimizedLayout(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found: " + id));
 
-        // 2. Fetch Aggregated Metrics (Capacity, Occupancy, Bin Count)
         List<Object[]> metricsResults = warehouseRepository.findAllAisleMetricsByWarehouseId(id);
 
-        // 3. Map Metrics for O(1) lookup during DTO construction
         Map<String, AisleMetrics> metricsMap = metricsResults.stream().collect(Collectors.toMap(
                 row -> (String) row[0],
                 row -> new AisleMetrics(
@@ -81,7 +63,6 @@ public class LayoutServiceImpl implements LayoutService {
                 (existing, replacement) -> existing
         ));
 
-        // 4. Build hierarchical DTO
         List<WarehouseLayoutResponse.ZoneSummary> zoneDtos = warehouse.getZones().stream()
                 .map(zone -> mapToZoneDto(zone, metricsMap))
                 .sorted(Comparator.comparing(WarehouseLayoutResponse.ZoneSummary::getName))
@@ -96,9 +77,6 @@ public class LayoutServiceImpl implements LayoutService {
                 .build();
     }
 
-    /**
-     * Provides drill-down access to specific bins.
-     */
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
@@ -106,63 +84,6 @@ public class LayoutServiceImpl implements LayoutService {
         log.debug("Drilling down into bins for Aisle: {}", aisleId);
         return binRepository.findByAisleId(aisleId, pageable)
                 .map(this::mapToBinSummary);
-    }
-
-    /**
-     * Maps a Zone and its child Aisles into a DTO summary.
-     */
-    private WarehouseLayoutResponse.ZoneSummary mapToZoneDto(Zone zone, Map<String, AisleMetrics> metricsMap) {
-        Set<WarehouseLayoutResponse.AisleSummary> aisleDtos = zone.getAisles().stream()
-                .map(aisle -> {
-                    // Fetch metric record or use a default 'empty' record to ensure no nulls
-                    AisleMetrics m = metricsMap.getOrDefault(aisle.getId(), new AisleMetrics(0.0, 0.0, 0L));
-
-                    return WarehouseLayoutResponse.AisleSummary.builder()
-                            .id(aisle.getId())
-                            .code(aisle.getCode())
-                            .active(aisle.isActive())
-                            .bins(Collections.emptySet()) // Bins are lazy-loaded via getBinsByAisle
-                            .totalCapacity(m.capacity())
-                            .currentOccupancy(m.occupancy())
-                            // Convert Long count from DB to Integer for DTO
-                            .binCount(m.binCount() != null ? m.binCount().intValue() : 0)
-                            .build();
-                })
-                .collect(Collectors.toSet());
-
-        return WarehouseLayoutResponse.ZoneSummary.builder()
-                .id(zone.getId())
-                .name(zone.getName())
-                .active(zone.isActive())
-                .aisles(aisleDtos)
-                .totalCapacity(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getTotalCapacity).sum())
-                .currentOccupancy(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getCurrentOccupancy).sum())
-                .build();
-    }
-
-    /**
-     * Maps granular bin data with utilization logic.
-     */
-    private WarehouseLayoutResponse.BinSummary mapToBinSummary(StorageBin bin) {
-        double volUsage = (bin.getMaxVolume() > 0)
-                ? (bin.getCurrentVolumeOccupied() / bin.getMaxVolume()) * 100 : 0;
-
-        double weightUsage = (bin.getMaxWeightCapacity() > 0)
-                ? (bin.getCurrentWeightLoad() / bin.getMaxWeightCapacity()) * 100 : 0;
-
-        // Take the highest occupancy ratio to represent 'fill' state
-        int finalFillPercent = (int) Math.round(Math.max(volUsage, weightUsage));
-
-        return WarehouseLayoutResponse.BinSummary.builder()
-                .id(bin.getId())
-                .binCode(bin.getBinCode())
-                .capacity(bin.getMaxVolume())
-                .currentOccupancy(bin.getCurrentVolumeOccupied())
-                .maxWeight(bin.getMaxWeightCapacity())
-                .currentWeight(bin.getCurrentWeightLoad())
-                .fillPercentage(finalFillPercent)
-                .active(bin.isActive())
-                .build();
     }
 
     @Override
@@ -270,35 +191,89 @@ public class LayoutServiceImpl implements LayoutService {
         binRepository.save(bin);
     }
 
+    /**
+     * Retrieves high-resolution printable PNG data for a bin label.
+     * Industry Guard: Prevents generating labels for inactive/broken equipment.
+     */
     @Override
     @Transactional(readOnly = true)
     public byte[] getBinBarcode(String binId) {
-        // Audit check: Ensure the bin exists and is active before providing a label[cite: 1]
         StorageBin bin = binRepository.findById(binId)
                 .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
 
         if (!bin.isActive()) {
-            throw new IllegalOperationException("Cannot generate labels for inactive storage locations.");
+            throw new IllegalOperationException("Physical label generation blocked: Bin " + bin.getBinCode() + " is currently Under Maintenance.");
         }
 
         return barcodeService.getBarcodeForBin(bin.getBinCode());
     }
 
     /**
-     * Industry-Ready Feature: Scanned barcode validation.
-     * Used by mobile scanners to verify the worker is at the correct rack.
+     * Mobile Verification Engine.
+     * Compares raw laser data from handheld scanners against the expected bin record.
      */
     @Override
+    @Transactional(readOnly = true)
     public boolean verifyBinScan(String scannedCode, String expectedBinId) {
-        StorageBin bin = binRepository.findById(expectedBinId)
-                .orElseThrow(() -> new ResourceNotFoundException("Expected bin not found"));
+        if (scannedCode == null || expectedBinId == null) return false;
 
-        return bin.getBinCode().equals(scannedCode);
+        return binRepository.findById(expectedBinId)
+                .map(bin -> bin.isActive() && bin.getBinCode().equalsIgnoreCase(scannedCode.trim()))
+                .orElse(false);
     }
 
-    /**
-     * Internal record to encapsulate aggregate aisle metrics.
-     * Use of records ensures immutability and thread-safety during mapping.
-     */
+    @Override
+    @Transactional(readOnly = true)
+    public String getBinCodeById(String binId) {
+        return binRepository.findById(binId)
+                .map(StorageBin::getBinCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Bin not found with ID: " + binId));
+    }
+
+    // --- Private Map Helpers ---
+
+    private WarehouseLayoutResponse.ZoneSummary mapToZoneDto(Zone zone, Map<String, AisleMetrics> metricsMap) {
+        Set<WarehouseLayoutResponse.AisleSummary> aisleDtos = zone.getAisles().stream()
+                .map(aisle -> {
+                    AisleMetrics m = metricsMap.getOrDefault(aisle.getId(), new AisleMetrics(0.0, 0.0, 0L));
+                    return WarehouseLayoutResponse.AisleSummary.builder()
+                            .id(aisle.getId())
+                            .code(aisle.getCode())
+                            .active(aisle.isActive())
+                            .bins(Collections.emptySet()) // Bins lazy-loaded via drill-down
+                            .totalCapacity(m.capacity())
+                            .currentOccupancy(m.occupancy())
+                            .binCount(m.binCount().intValue())
+                            .build();
+                })
+                .collect(Collectors.toSet());
+
+        return WarehouseLayoutResponse.ZoneSummary.builder()
+                .id(zone.getId())
+                .name(zone.getName())
+                .active(zone.isActive())
+                .aisles(aisleDtos)
+                .totalCapacity(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getTotalCapacity).sum())
+                .currentOccupancy(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getCurrentOccupancy).sum())
+                .build();
+    }
+
+    private WarehouseLayoutResponse.BinSummary mapToBinSummary(StorageBin bin) {
+        double volUsage = (bin.getMaxVolume() > 0) ? (bin.getCurrentVolumeOccupied() / bin.getMaxVolume()) * 100 : 0;
+        double weightUsage = (bin.getMaxWeightCapacity() > 0) ? (bin.getCurrentWeightLoad() / bin.getMaxWeightCapacity()) * 100 : 0;
+        int finalFillPercent = (int) Math.round(Math.max(volUsage, weightUsage));
+
+        return WarehouseLayoutResponse.BinSummary.builder()
+                .id(bin.getId())
+                .binCode(bin.getBinCode())
+                .capacity(bin.getMaxVolume())
+                .currentOccupancy(bin.getCurrentVolumeOccupied())
+                .maxWeight(bin.getMaxWeightCapacity())
+                .currentWeight(bin.getCurrentWeightLoad())
+                .fillPercentage(finalFillPercent)
+                .active(bin.isActive())
+                .build();
+    }
+
     private record AisleMetrics(Double capacity, Double occupancy, Long binCount) {}
 }

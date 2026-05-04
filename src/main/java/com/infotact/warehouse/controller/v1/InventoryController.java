@@ -1,5 +1,6 @@
 package com.infotact.warehouse.controller.v1;
 
+import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,10 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller for handling inventory-related operations such as
@@ -39,6 +37,13 @@ public class InventoryController {
     @PostMapping(path="/receive")
     public ResponseEntity<Void> receiveShipment(@Valid @RequestBody ReceivingRequest request){
         inventoryService.receiveShipment(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Adjust stock levels", description = "Manually correct stock for damages or audit corrections.")
+    @PatchMapping("/adjust")
+    public ResponseEntity<Void> adjustStock(@Valid @RequestBody InventoryAdjustmentRequest request) {
+        inventoryService.adjustStock(request);
         return ResponseEntity.noContent().build();
     }
 }

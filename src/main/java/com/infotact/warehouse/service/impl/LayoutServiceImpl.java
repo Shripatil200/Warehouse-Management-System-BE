@@ -6,6 +6,7 @@ import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.exception.*;
 import com.infotact.warehouse.repository.*;
+import com.infotact.warehouse.service.BarcodeService;
 import com.infotact.warehouse.service.LayoutService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class LayoutServiceImpl implements LayoutService {
     private final AisleRepository aisleRepository;
     private final WarehouseRepository warehouseRepository;
 
+    private final BarcodeService barcodeService;
     /**
      * Retrieves the structural layout with pre-calculated metrics (Capacity, Occupancy, Bin Count).
      * <p>
@@ -266,6 +268,32 @@ public class LayoutServiceImpl implements LayoutService {
         StorageBin bin = binRepository.findById(binId).orElseThrow(() -> new ResourceNotFoundException("Storage Bin not found"));
         bin.setActive(isActive);
         binRepository.save(bin);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] getBinBarcode(String binId) {
+        // Audit check: Ensure the bin exists and is active before providing a label[cite: 1]
+        StorageBin bin = binRepository.findById(binId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
+
+        if (!bin.isActive()) {
+            throw new IllegalOperationException("Cannot generate labels for inactive storage locations.");
+        }
+
+        return barcodeService.getBarcodeForBin(bin.getBinCode());
+    }
+
+    /**
+     * Industry-Ready Feature: Scanned barcode validation.
+     * Used by mobile scanners to verify the worker is at the correct rack.
+     */
+    @Override
+    public boolean verifyBinScan(String scannedCode, String expectedBinId) {
+        StorageBin bin = binRepository.findById(expectedBinId)
+                .orElseThrow(() -> new ResourceNotFoundException("Expected bin not found"));
+
+        return bin.getBinCode().equals(scannedCode);
     }
 
     /**

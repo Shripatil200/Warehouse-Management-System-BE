@@ -2,6 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.enums.BinStatus;
+import com.infotact.warehouse.entity.enums.BinType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -70,6 +71,10 @@ public class StorageBin extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BinStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "bin_type", nullable = false, length = 20)
+    private BinType binType = BinType.PICK_FACE; // Default value
 
     @Builder.Default
     private boolean active = true;

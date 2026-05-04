@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -53,18 +54,20 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
             "JOIN b.aisle a " +
             "JOIN a.zone z " +
             "WHERE b.active = true " +
-            "AND b.status = 'AVAILABLE' " +
+            "AND b.status = com.infotact.warehouse.entity.enums.BinStatus.AVAILABLE " +
+            "AND b.binType = :targetType " + // Filter by Bulk or Picking
             "AND (:zoneId IS NULL OR z.id = :zoneId) " +
             "AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume " +
             "AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight " +
             "ORDER BY " +
-            "  CASE WHEN ii.product.id IS NOT NULL THEN 0 ELSE 1 END ASC, " +
+            "  CASE WHEN ii.product.id IS NOT NULL THEN 0 ELSE 1 END ASC, " + // Favor bins already containing the product
             "  (b.maxVolume - b.currentVolumeOccupied) ASC")
     List<StorageBin> findSmartPutawayBins(
             @Param("productId") String productId,
             @Param("zoneId") String zoneId,
-            @Param("reqVolume") Double reqVolume,
-            @Param("reqWeight") Double reqWeight);
+            @Param("reqVolume") BigDecimal reqVolume,
+            @Param("reqWeight") Double reqWeight,
+            @Param("targetType") com.infotact.warehouse.entity.enums.BinType targetType);
 
     Optional<StorageBin> findByBinCodeAndActiveTrue(String binCode);
 

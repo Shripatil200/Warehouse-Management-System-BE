@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -50,6 +51,13 @@ public class Zone extends BaseEntity {
      * </p>
      */
     private boolean active = true;
+    /**
+     * Functional type of the zone.
+     * Determines the default behavior for bins created within it.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "zone_type", nullable = false, length = 20)
+    private ZoneType zoneType = ZoneType.PICKING;
 
     /**
      * The parent warehouse facility containing this zone.

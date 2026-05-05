@@ -39,7 +39,7 @@ import java.util.List;
  * </p>
  *
  * @author Gemini
- * @version 1.2
+ * @version 1.3
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -59,9 +59,8 @@ public class UserServiceImpl implements UserService {
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Implementation Note:</b> This method utilizes the JPA Criteria API through {@link Specification}
-     * to dynamically generate the SQL {@code WHERE} clause. It automatically injects the
-     * current user's warehouse ID to prevent cross-tenant data leakage.
+     * <b>Implementation Note:</b> Utilizes JPA Criteria API. Injects current user's warehouse ID.
+     * Restricted to MANAGER and ADMIN roles only.
      * </p>
      */
     @Override
@@ -76,23 +75,21 @@ public class UserServiceImpl implements UserService {
             // 1. Mandatory Silo Filter
             predicates.add(cb.equal(root.get("warehouse").get("id"), currentUser.getWarehouse().getId()));
 
-            // 1. Status Filtering (STRICT)
-
+            // 2. Status Filtering
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
             } else {
-                // default behavior → hide deleted
                 predicates.add(cb.notEqual(root.get("status"), UserStatus.DELETED));
             }
 
-            // 3. Dynamic Fuzzy Search (Name or Email)
+            // 3. Dynamic Fuzzy Search
             if (query != null && !query.isBlank()) {
                 String pattern = "%" + query.toLowerCase() + "%";
                 predicates.add(cb.or(
                         cb.like(cb.lower(root.get("name")), pattern),
                         cb.like(cb.lower(root.get("email")), pattern),
                         cb.like(cb.lower(root.get("contactNumber")), pattern),
-                        cb.like(cb.lower(root.get("id")),pattern)
+                        cb.like(cb.lower(root.get("id")), pattern)
                 ));
             }
 
@@ -100,8 +97,6 @@ public class UserServiceImpl implements UserService {
             if (role != null) {
                 predicates.add(cb.equal(root.get("role"), role));
             }
-
-
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
@@ -122,7 +117,6 @@ public class UserServiceImpl implements UserService {
 
     /**
      * {@inheritDoc}
-     * <p><b>RBAC:</b> Users can retrieve themselves; Managers/Admins can retrieve anyone in their warehouse silo.</p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -150,23 +144,24 @@ public class UserServiceImpl implements UserService {
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Implementation Note:</b> Password generation uses the {@code phone.substring} strategy
-     * to provide a deterministic temp password. Triggers asynchronous email dispatch.
+     * <b>RBAC:</b> Managers can create EMPLOYEE or OPERATOR. ADMIN can create any role.
      * </p>
      */
     @Override
     @Transactional
     @CacheEvict(value = "userProfiles", allEntries = true)
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public String createUser(UserRequest request) {
         User currentUser = getAuthenticatedUser();
         Role targetRole = Role.valueOf(request.getRole().toUpperCase());
 
-        // 1. Hierarchy Check
-        if (targetRole != Role.EMPLOYEE && !hasRole(ROLE_ADMIN)) {
+        // Hierarchy Check
+        boolean isStaffRole = (targetRole == Role.EMPLOYEE || targetRole == Role.OPERATOR);
+        if (!isStaffRole && !hasRole(ROLE_ADMIN)) {
             throw new UnauthorizedException("Insufficient Privilege: Only Admins can provision management accounts.");
         }
 
-        // 2. Silo Check
+        // Silo Check
         if (!currentUser.getWarehouse().getId().equals(request.getWarehouseId())) {
             throw new UnauthorizedException("Multi-tenancy Error: Warehouse assignment mismatch.");
         }
@@ -197,10 +192,6 @@ public class UserServiceImpl implements UserService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Implementation Note:</b> Unique constraint fields (Email/Phone) are validated
-     * before persistence to prevent {@code DataIntegrityViolationException}.
-     * </p>
      */
     @Override
     @Transactional
@@ -231,10 +222,6 @@ public class UserServiceImpl implements UserService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <b>Soft-Delete Strategy:</b> Sets status to {@code DELETED} and appends a timestamp
-     * to unique identifiers (Email/Contact) to allow future re-registration of the same values.
-     * </p>
      */
     @Override
     @Transactional
@@ -283,22 +270,12 @@ public class UserServiceImpl implements UserService {
 
     // --- CACHING & AUTHENTICATION HELPERS ---
 
-    /**
-     * Retrieves the {@link User} entity for the current session.
-     * @return The authenticated user entity.
-     * @throws UnauthorizedException if no profile is found in the repository.
-     */
     @Override
     public User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return getCachedUser(auth.getName());
     }
 
-    /**
-     * Helper to resolve user profiles with caching support.
-     * @param email Primary key (email) for lookup.
-     * @return Cached or fresh User entity.
-     */
     @Cacheable(value = "userProfiles", key = "#email")
     public User getCachedUser(String email) {
         return userRepository.findByEmail(email).orElseThrow(() -> new UnauthorizedException("User profile not found."));
@@ -317,8 +294,10 @@ public class UserServiceImpl implements UserService {
 
     private void validateHierarchy(User targetUser) {
         if (hasRole(ROLE_MANAGER) && !hasRole(ROLE_ADMIN)) {
+            // Updated Logic: Managers can manage EMPLOYEE and OPERATOR roles.
+            // Managers are blocked from modifying ADMIN or other MANAGER accounts.
             if (targetUser.getRole() == Role.ADMIN || targetUser.getRole() == Role.MANAGER) {
-                throw new UnauthorizedException("Hierarchy Violation: Managers can only manage Employees.");
+                throw new UnauthorizedException("Hierarchy Violation: Managers can only manage Operators and Employees.");
             }
         }
     }

@@ -60,13 +60,14 @@ app:
     api:
       key: ${SMS_API_KEY}
   jwt:
-    # High-entropy production key fallback[cite: 1]
-    secret: ${JWT_SECRETE_KEY:T09FSTQzRk9MUE05U0hWRU5ZQUxLSlNER0hKS0xNUDI0NjgxMzU3OQ==}
+    # Ensure this matches the .env variable name exactly
+    secret: ${JWT_SECRET_KEY:zdtlY0p3YjVxOHYvYj9FKEgrS2JQZVNnSmtWbk9xM3Q2dzl6JEMmRikpSk1OalFmVGpXbiZyNHU3eCF6JUMqRg==}
 
-# Logging Levels[cite: 1]
+# Logging Levels
 logging:
   level:
     org:
       springframework:
         core:
           env: DEBUG
+        security: INFO

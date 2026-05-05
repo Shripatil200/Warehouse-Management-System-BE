@@ -62,8 +62,8 @@ public class Zone extends BaseEntity {
     /**
      * The parent warehouse facility containing this zone.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
     /**

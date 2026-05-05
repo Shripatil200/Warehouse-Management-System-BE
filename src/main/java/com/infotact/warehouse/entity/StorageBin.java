@@ -86,8 +86,8 @@ public class StorageBin extends BaseEntity {
     /**
      * Multi-Tenant Isolation: Direct link to the parent Warehouse.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
     @OneToMany(mappedBy = "storageBin", cascade = CascadeType.ALL)

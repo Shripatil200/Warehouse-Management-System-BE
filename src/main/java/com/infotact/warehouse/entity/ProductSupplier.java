@@ -35,4 +35,7 @@ public class ProductSupplier extends BaseEntity {
 
     /** Expected days for delivery from this specific vendor. */
     private Integer leadTimeDays;
+
+    @ManyToOne
+    private Warehouse warehouse;
 }

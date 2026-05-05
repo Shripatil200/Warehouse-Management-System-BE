@@ -108,4 +108,8 @@ public class InventoryTransaction {
      */
     @Column(precision = 19, scale = 4)
     private BigDecimal unitPrice;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
 }

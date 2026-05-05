@@ -59,6 +59,9 @@ public class Aisle extends BaseEntity {
     @JoinColumn(name = "zone_id")
     private Zone zone;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    private Warehouse warehouse;
+
     /**
      * The collection of physical storage slots (bins) assigned to this aisle.
      */

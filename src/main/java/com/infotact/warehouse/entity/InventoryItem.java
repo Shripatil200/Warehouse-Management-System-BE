@@ -77,6 +77,10 @@ public class InventoryItem extends BaseEntity {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal purchasePrice;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
+
     /**
      * Helper to calculate pickable stock.
      */

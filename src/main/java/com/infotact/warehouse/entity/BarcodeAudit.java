@@ -27,6 +27,7 @@ public class BarcodeAudit extends BaseEntity {
     @Schema(description = "Internal unique identifier (UUID)")
     private String id; // Fixed: Added the missing primary key identifier
 
+    @ManyToOne(fetch = FetchType.LAZY)
     @Column(nullable = false)
     private String warehouseId;
 

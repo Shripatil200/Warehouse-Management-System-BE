@@ -20,74 +20,123 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Data Access Object for the physical 'StorageBin' infrastructure.
- * Refactored to eliminate hardcoded paths and optimize transactional integrity.
+ * Tenant-safe repository for StorageBin.
+ *
+ * <p>
+ * All queries are scoped by warehouseId to enforce strict multi-tenancy.
+ * </p>
  */
 @Repository
 public interface BinRepository extends JpaRepository<StorageBin, String> {
 
-    @Query(value = "SELECT b FROM StorageBin b JOIN FETCH b.aisle WHERE b.aisle.id = :aisleId",
-            countQuery = "SELECT count(b) FROM StorageBin b WHERE b.aisle.id = :aisleId")
-    Page<StorageBin> findByAisleId(@Param("aisleId") String aisleId, Pageable pageable);
+    // ============================================================
+    // PAGINATION (TENANT SAFE)
+    // ============================================================
 
-    boolean existsByBinCodeIgnoreCase(String binCode);
+    @Query(value = """
+        SELECT b FROM StorageBin b 
+        JOIN FETCH b.aisle a 
+        WHERE a.id = :aisleId 
+        AND b.warehouse.id = :warehouseId
+    """,
+            countQuery = """
+        SELECT count(b) FROM StorageBin b 
+        WHERE b.aisle.id = :aisleId 
+        AND b.warehouse.id = :warehouseId
+    """)
+    Page<StorageBin> findByAisleIdAndWarehouseId(
+            @Param("aisleId") String aisleId,
+            @Param("warehouseId") String warehouseId,
+            Pageable pageable
+    );
 
-    Optional<StorageBin> findByBinCodeAndAisleId(String binCode, String aisleId);
+    // ============================================================
+    // UNIQUENESS (TENANT SAFE)
+    // ============================================================
 
-    @Query("SELECT b.binCode FROM StorageBin b WHERE b.aisle.id = :aisleId")
-    Set<String> findAllBinCodesByAisleId(@Param("aisleId") String aisleId);
+    boolean existsByBinCodeAndWarehouseId(String binCode, String warehouseId);
 
-    boolean existsByBinCode(String generatedCode);
+    boolean existsByBinCodeIgnoreCaseAndWarehouseId(String binCode, String warehouseId);
 
-    /**
-     * THE SMART PUTAWAY ENGINE
-     * Uses parameterized Enums to avoid hardcoded package strings.
-     *
-     * @param productId      The item being stored (for affinity check).
-     * @param zoneId         Optional zone restriction.
-     * @param reqVolume      Calculated volume of the incoming lot.
-     * @param reqWeight      Calculated weight of the incoming lot.
-     * @param targetType     Bulk vs Picking (Enum).
-     * @param activeStatus   Filter for status (typically BinStatus.AVAILABLE).
-     */
-    @Query("SELECT DISTINCT b FROM StorageBin b " +
-            "LEFT JOIN b.inventoryItems ii WITH ii.product.id = :productId " +
-            "JOIN FETCH b.aisle a " +
-            "JOIN FETCH a.zone z " +
-            "WHERE b.active = true " +
-            "AND b.status = :activeStatus " +
-            "AND b.binType = :targetType " +
-            "AND (:zoneId IS NULL OR z.id = :zoneId) " +
-            "AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume " +
-            "AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight " +
-            "ORDER BY " +
-            "  CASE WHEN ii.id IS NOT NULL THEN 0 ELSE 1 END ASC, " + // Product affinity
-            "  (b.maxVolume - b.currentVolumeOccupied) ASC")        // Consolidation logic
+    Optional<StorageBin> findByBinCodeAndAisleIdAndWarehouseId(
+            String binCode,
+            String aisleId,
+            String warehouseId
+    );
+
+    @Query("""
+        SELECT b.binCode FROM StorageBin b 
+        WHERE b.aisle.id = :aisleId 
+        AND b.warehouse.id = :warehouseId
+    """)
+    Set<String> findAllBinCodesByAisleIdAndWarehouseId(
+            @Param("aisleId") String aisleId,
+            @Param("warehouseId") String warehouseId
+    );
+
+    // ============================================================
+    // SMART PUTAWAY (TENANT SAFE)
+    // ============================================================
+
+    @Query("""
+        SELECT DISTINCT b FROM StorageBin b 
+        LEFT JOIN b.inventoryItems ii WITH ii.product.id = :productId 
+        JOIN FETCH b.aisle a 
+        JOIN FETCH a.zone z 
+        WHERE b.active = true 
+        AND b.status = :activeStatus 
+        AND b.binType = :targetType 
+        AND b.warehouse.id = :warehouseId
+        AND (:zoneId IS NULL OR z.id = :zoneId) 
+        AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume 
+        AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight 
+        ORDER BY 
+            CASE WHEN ii.id IS NOT NULL THEN 0 ELSE 1 END ASC,
+            (b.maxVolume - b.currentVolumeOccupied) ASC
+    """)
     List<StorageBin> findSmartPutawayBins(
             @Param("productId") String productId,
             @Param("zoneId") String zoneId,
             @Param("reqVolume") BigDecimal reqVolume,
             @Param("reqWeight") Double reqWeight,
             @Param("targetType") BinType targetType,
-            @Param("activeStatus") BinStatus activeStatus);
+            @Param("activeStatus") BinStatus activeStatus,
+            @Param("warehouseId") String warehouseId
+    );
 
-    /**
-     * Finds bin by code with SpEL constant for active state if preferred over params.
-     */
-    Optional<StorageBin> findByBinCodeAndActiveTrue(String binCode);
+    // ============================================================
+    // LOOKUPS (TENANT SAFE)
+    // ============================================================
 
-    /**
-     * CRITICAL: Pessimistic Lock for Capacity Management.
-     * Includes a 5-second timeout hint to prevent database deadlock hangs.
-     */
+    Optional<StorageBin> findByBinCodeAndActiveTrueAndWarehouseId(
+            String binCode,
+            String warehouseId
+    );
+
+    @Query("""
+        SELECT b.status FROM StorageBin b 
+        WHERE b.binCode = :binCode 
+        AND b.active = true 
+        AND b.warehouse.id = :warehouseId
+    """)
+    Optional<BinStatus> getBinStatusByCode(
+            @Param("binCode") String binCode,
+            @Param("warehouseId") String warehouseId
+    );
+
+    // ============================================================
+    // LOCKING (SAFE)
+    // ============================================================
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "5000")})
-    @Query("SELECT b FROM StorageBin b WHERE b.id = :id")
-    Optional<StorageBin> findByIdWithLock(@Param("id") String id);
-
-    /**
-     * Fast check for bin availability during scanning operations.
-     */
-    @Query("SELECT b.status FROM StorageBin b WHERE b.binCode = :binCode AND b.active = true")
-    Optional<BinStatus> getBinStatusByCode(@Param("binCode") String binCode);
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "5000"))
+    @Query("""
+        SELECT b FROM StorageBin b 
+        WHERE b.id = :id 
+        AND b.warehouse.id = :warehouseId
+    """)
+    Optional<StorageBin> findByIdWithLock(
+            @Param("id") String id,
+            @Param("warehouseId") String warehouseId
+    );
 }

@@ -5,5 +5,6 @@ public enum InventoryStatus {
     RESERVED,
     DAMAGED,
     QC_HOLD,
-    BLOCKED
+    BLOCKED,
+    EXPIRED
 }

@@ -59,7 +59,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         return DashboardSummaryResponse.builder()
                 .totalProducts(productRepository.countByWarehouseId(warehouseId))
-                .lowStockCount(productRepository.countLowStock(warehouseId))
+                .lowStockCount(productRepository.countGlobalLowStock(warehouseId))
                 .outboundOrders(orderRepository.countByWarehouseIdAndStatus(warehouseId, OrderStatus.PENDING))
                 .pendingPurchases(purchaseOrderRepository.countByWarehouseIdAndStatus(warehouseId, PurchaseOrderStatus.PENDING))
                 .totalWarehouses(userRepository.countAssignedWarehouseForUser(currentUser.getEmail()))
@@ -140,7 +140,7 @@ public class DashboardServiceImpl implements DashboardService {
      */
     private List<AlertDTO> getRecentAlerts(String warehouseId) {
         List<AlertDTO> alerts = new ArrayList<>();
-        productRepository.findLowStockProducts(warehouseId).stream().limit(2)
+        productRepository.findGlobalLowStockProducts(warehouseId).stream().limit(2)
                 .forEach(p -> alerts.add(new AlertDTO(p.getName() + " - Low Stock", "LOW_STOCK")));
 
         long delayed = orderRepository.countDelayedOrders(warehouseId);

@@ -76,10 +76,18 @@ public class ProductRequest {
     // --- Inventory Controls ---
 
     @Min(value = 0)
-    @Schema(description = "Safety stock level. Triggers replenishment alerts.", example = "10")
-    private Integer minThreshold = 5;
+    @Schema(description = "Safety stock level. Triggers global reorder alerts.", example = "100")
+    private Integer minThreshold = 10;
 
-    @Schema(description = "Maximum storage limit to prevent overstocking", example = "100")
+    @Min(value = 0)
+    @Schema(description = "Pick Face Trigger. When a Picking bin falls below this, replenishment starts.", example = "5")
+    private Integer minReplenishThreshold = 5; // Added
+
+    @Min(value = 1)
+    @Schema(description = "Target stock for the Picking face after replenishment.", example = "50")
+    private Integer maxPickFaceCapacity = 50; // Added
+
+    @Schema(description = "Maximum total storage limit to prevent overstocking", example = "1000")
     private Integer maxThreshold;
 
     // --- Traceability Flags ---

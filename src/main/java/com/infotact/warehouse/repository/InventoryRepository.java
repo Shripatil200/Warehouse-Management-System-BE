@@ -1,9 +1,12 @@
 package com.infotact.warehouse.repository;
 
+import com.infotact.warehouse.dto.v1.response.InventorySummaryResponse;
 import com.infotact.warehouse.entity.InventoryItem;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.enums.BinType;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -82,4 +85,26 @@ public interface InventoryRepository extends JpaRepository<InventoryItem, String
      * Find items that have expired for automated quarantine tasks.
      */
     List<InventoryItem> findAllByStatusAndExpiryDateBefore(InventoryStatus status, LocalDate date);
+
+    @Query("SELECT new com.infotact.warehouse.dto.v1.response.InventorySummaryResponse(" +
+            "i.product.sku, i.product.name, SUM(i.quantity), SUM(i.reservedQuantity), " +
+            "SUM(i.quantity - i.reservedQuantity), COUNT(DISTINCT i.storageBin.id), " +
+            "i.product.costPrice, i.product.sellingPrice, " +
+            "SUM(i.quantity * i.product.costPrice)) " +
+            "FROM InventoryItem i GROUP BY i.product.sku, i.product.name, i.product.costPrice, i.product.sellingPrice")
+    Page<InventorySummaryResponse> findGlobalInventorySummary(Pageable pageable);
+
+    @Query("SELECT i FROM InventoryItem i WHERE " +
+            "(:sku IS NULL OR i.product.sku = :sku) AND " +
+            "(:binCode IS NULL OR i.storageBin.binCode = :binCode)")
+    Page<InventoryItem> findDetailedInventory(String sku, String binCode, Pageable pageable);
+
+    @Query("SELECT new com.infotact.warehouse.dto.v1.response.InventorySummaryResponse(" +
+            "i.product.sku, i.product.name, SUM(i.quantity), SUM(i.reservedQuantity), " +
+            "SUM(i.quantity - i.reservedQuantity), COUNT(DISTINCT i.storageBin.id), " +
+            "i.product.costPrice, i.product.sellingPrice, " +
+            "SUM(i.quantity * i.product.costPrice)) " +
+            "FROM InventoryItem i GROUP BY i.product.sku, i.product.name, i.product.costPrice, i.product.sellingPrice " +
+            "HAVING SUM(i.quantity - i.reservedQuantity) <= :threshold")
+    Page<InventorySummaryResponse> findLowStockSummary(Integer threshold, Pageable pageable);
 }

@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
+ * {@inheritDoc}
  * Enhanced Implementation of {@link InventoryService} for Industry-Grade Operations.
  * <p>
  * Key Features:
@@ -45,6 +46,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final UserService userService;
 
     /**
+     * {@inheritDoc}
      * REFINED PICKING LOGIC: Only reserves stock from PICK_FACE bins to ensure
      * ground-level efficiency. Uses FEFO (First-Expiry-First-Out).
      */
@@ -85,33 +87,47 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
+     * {@inheritDoc}
      * INTERNAL TRANSFER: Moves stock from BULK_STORAGE to PICK_FACE for replenishment.
      * Synchronizes metrics for both source and target bins.
      */
+    @Override
     @Transactional
     public void internalStockTransfer(String sourceItemId, String targetBinId, Integer quantity) {
+        // 1. Secure source and target with Pessimistic Locking to prevent concurrent overfill
         InventoryItem source = inventoryRepository.findByIdWithLock(sourceItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Source stock not found"));
 
         StorageBin targetBin = binRepository.findByIdWithLock(targetBinId)
                 .orElseThrow(() -> new ResourceNotFoundException("Target bin not found"));
 
-        if (source.getQuantity() < quantity) throw new IllegalOperationException("Insufficient source stock.");
+        if (source.getQuantity() < quantity)
+            throw new IllegalOperationException("Insufficient source stock.");
 
-        // 1. Deduct from Source (Bulk)
+        // 2. Deduct from Source (e.g., Bulk Rack)
         source.setQuantity(source.getQuantity() - quantity);
         syncBinMetrics(source.getStorageBin(), source.getProduct(), -quantity);
         inventoryRepository.save(source);
-        logTransaction(source, TransactionType.ADJUSTMENT, (long) -quantity, "REPLENISHMENT_OUT");
 
-        // 2. Add to Target (Picking)
+        // CHANGE: Use TRANSFER type instead of ADJUSTMENT
+        logTransaction(source, TransactionType.TRANSFER, (long) -quantity, "REPLENISHMENT_OUT");
+
+        // 3. Add to Target (e.g., Picking Face)
         processPutawaySlice(targetBin, source.getProduct(), source.getPurchasePrice(),
                 source.getBatchNumber(), source.getExpiryDate(), quantity);
 
+        // ADDED: Log the inbound side of the transfer
+        logTransaction(source, TransactionType.TRANSFER, (long) quantity, "REPLENISHMENT_IN");
+
         log.info("Replenishment: Moved {} units of SKU {} from {} to {}",
-                quantity, source.getProduct().getSku(), source.getStorageBin().getBinCode(), targetBin.getBinCode());
+                quantity, source.getProduct().getSku(),
+                source.getStorageBin().getBinCode(), targetBin.getBinCode());
     }
 
+    /**
+     * {@inheritDoc}
+     * @param request Data containing Product ID, Quantity, and Batch metadata.
+     */
     @Override
     @Transactional
     public void receiveShipment(ReceivingRequest request) {
@@ -152,6 +168,13 @@ public class InventoryServiceImpl implements InventoryService {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * @param inventoryItemId The digital record ID.
+     * @param scannedBinCode The raw barcode text from the physical rack scan.
+     * @param scannedSku The raw barcode text from the product sticker scan.
+     * @param quantity The quantity physically picked.
+     */
     @Override
     @Transactional
     public void commitPickWithVerification(String inventoryItemId, String scannedBinCode, String scannedSku, Integer quantity) {
@@ -180,6 +203,12 @@ public class InventoryServiceImpl implements InventoryService {
         }
     }
 
+
+    /**
+     * {@inheritDoc}
+     * @param inventoryItemId The ID of the inventory record being picked.
+     * @param quantity The amount being removed from the warehouse.
+     */
     @Override
     @Transactional
     public void commitPick(String inventoryItemId, Integer quantity) {
@@ -201,6 +230,10 @@ public class InventoryServiceImpl implements InventoryService {
         logTransaction(item, TransactionType.OUTBOUND, (long) -quantity, "VERIFIED_FULFILLMENT");
     }
 
+    /**
+     * {@inheritDoc}
+     * @param request Payload containing Inventory UUID, adjustment delta, and reason.
+     */
     @Override
     @Transactional
     public void adjustStock(InventoryAdjustmentRequest request) {
@@ -223,6 +256,11 @@ public class InventoryServiceImpl implements InventoryService {
                 bin.getId(), null, AuditAction.STOCK_ADJUSTMENT, "Delta: " + request.getAdjustmentQuantity());
     }
 
+    /**
+     * {@inheritDoc}
+     * @param inventoryItemId The digital record ID to release.
+     * @param quantity The quantity to return to 'Available' status.
+     */
     @Override
     @Transactional
     public void releaseReservation(String inventoryItemId, Integer quantity) {

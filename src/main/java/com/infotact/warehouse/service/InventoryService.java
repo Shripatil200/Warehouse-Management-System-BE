@@ -115,4 +115,9 @@ public interface InventoryService {
      * @throws com.infotact.warehouse.exception.ResourceNotFoundException if IDs are invalid.
      */
     void internalStockTransfer(String sourceItemId, String targetBinId, Integer quantity);
+
+    /**
+     * Automated Replenishment Logic: Pulls from BULK_STORAGE to refill PICK_FACE.
+     */
+    void replenishPickingFace(String productId, String targetBinId, Integer desiredQty);
 }

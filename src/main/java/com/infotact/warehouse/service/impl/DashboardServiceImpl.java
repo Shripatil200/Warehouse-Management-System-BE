@@ -2,6 +2,7 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.response.*;
 import com.infotact.warehouse.entity.User;
+import com.infotact.warehouse.entity.enums.BinType;
 import com.infotact.warehouse.entity.enums.OrderStatus;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import com.infotact.warehouse.exception.UnauthorizedException;
@@ -24,9 +25,8 @@ import java.util.*;
  * Service implementation for high-performance dashboard analytics.
  *
  * Performance Features:
- * - Dashboard Caching: Stores summaries in RAM via @Cacheable for sub-10ms response times.
- * - Aggregate SQL: Reduces network overhead by performing summations at the DB level.
- * - Secure Scoping: Filters all metrics by the authenticated user's warehouse context.
+ * - Dashboard Caching: Stores summaries in RAM via @Cacheable.
+ * - Aggregate SQL: Refined to use Parameterized Enums for Type Safety.
  */
 @Service
 @Slf4j
@@ -40,12 +40,6 @@ public class DashboardServiceImpl implements DashboardService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final InventoryItemRepository inventoryItemRepository;
 
-    /**
-     * Generates a comprehensive snapshot of warehouse operations.
-     * Results are cached based on the Warehouse ID to ensure high performance.
-     *
-     * @return DashboardSummaryResponse containing real-time metrics and alerts.
-     */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "dashboardSummaries", key = "#root.target.getAuthenticatedUserWarehouseId()")
@@ -53,13 +47,15 @@ public class DashboardServiceImpl implements DashboardService {
         User currentUser = getAuthenticatedUser();
         String warehouseId = currentUser.getWarehouse().getId();
 
-        log.info("Generating industry-standard analytics for facility: {}", currentUser.getWarehouse().getName());
+        log.info("Generating analytics for facility: {}", currentUser.getWarehouse().getName());
 
         LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
 
         return DashboardSummaryResponse.builder()
                 .totalProducts(productRepository.countByWarehouseId(warehouseId))
                 .lowStockCount(productRepository.countGlobalLowStock(warehouseId))
+                // Refactored: Now passing BinType.PICK_FACE as a parameter
+                .replenishmentCount(productRepository.countProductsNeedingReplenishment(warehouseId, BinType.PICK_FACE))
                 .outboundOrders(orderRepository.countByWarehouseIdAndStatus(warehouseId, OrderStatus.PENDING))
                 .pendingPurchases(purchaseOrderRepository.countByWarehouseIdAndStatus(warehouseId, PurchaseOrderStatus.PENDING))
                 .totalWarehouses(userRepository.countAssignedWarehouseForUser(currentUser.getEmail()))
@@ -73,23 +69,12 @@ public class DashboardServiceImpl implements DashboardService {
 
     /**
      * Internal helper to resolve warehouse occupancy/utilization.
-     *
-     * Logic:
-     * 1. Fetches sum of max capacity and sum of current occupancy from StorageBins.
-     * 2. Uses Number.doubleValue() to safely cast DB numeric types.
-     * 3. Protects against Division by Zero.
-     *
-     * @param warehouseId The facility identifier
-     * @return Double representing percentage (0.0 to 100.0)
      */
     private Double calculateUtilization(String warehouseId) {
         List<Object[]> results = warehouseRepository.findWarehouseUtilization(warehouseId);
 
         if (results != null && !results.isEmpty()) {
             Object[] row = results.get(0);
-
-            // Index 0: sum(maxVolume), Index 1: sum(currentVolumeOccupied)
-            // We cast to Number first because DBs often return BigDecimal for SUM()
             Double capacity = (row[0] != null) ? ((Number) row[0]).doubleValue() : 0.0;
             Double occupancy = (row[1] != null) ? ((Number) row[1]).doubleValue() : 0.0;
 
@@ -105,17 +90,11 @@ public class DashboardServiceImpl implements DashboardService {
         return 0.0;
     }
 
-    /**
-     * Calculates the total financial value of all stock items in the warehouse.
-     */
     private BigDecimal calculateStockValue(String warehouseId) {
         return Optional.ofNullable(inventoryItemRepository.calculateTotalValueByWarehouse(warehouseId))
                 .orElse(BigDecimal.ZERO);
     }
 
-    /**
-     * Aggregates user accounts by their lifecycle status.
-     */
     private DashboardSummaryResponse.UserStatusCountDTO fetchUserStatusCounts() {
         List<Object[]> results = userRepository.countUsersByStatus();
         long active = 0, inactive = 0, suspended = 0, pending = 0;
@@ -140,25 +119,33 @@ public class DashboardServiceImpl implements DashboardService {
      */
     private List<AlertDTO> getRecentAlerts(String warehouseId) {
         List<AlertDTO> alerts = new ArrayList<>();
-        productRepository.findGlobalLowStockProducts(warehouseId).stream().limit(2)
-                .forEach(p -> alerts.add(new AlertDTO(p.getName() + " - Low Stock", "LOW_STOCK")));
 
-        long delayed = orderRepository.countDelayedOrders(warehouseId);
-        if (delayed > 0) alerts.add(new AlertDTO(delayed + " Orders Overdue", "DELAYED_ORDER"));
+        // 1. Procurement Alerts: Items missing from the entire warehouse
+        productRepository.findGlobalLowStockProducts(warehouseId).stream()
+                .limit(2)
+                .forEach(p -> alerts.add(new AlertDTO(p.getName() + " - Low Global Stock", "LOW_STOCK")));
+
+        // 2. Operational Alerts: Items available in Bulk but missing from Picking shelf
+        long replenishNeeded = productRepository.countProductsNeedingReplenishment(warehouseId, BinType.PICK_FACE);
+        if (replenishNeeded > 0) {
+            alerts.add(new AlertDTO(replenishNeeded + " Products require Picking Replenishment", "REPLENISHMENT"));
+        }
+
+        // 3. Logistics Alerts: Delayed outbound orders
+        List<OrderStatus> excluded = List.of(OrderStatus.SHIPPED, OrderStatus.DELIVERED);
+        long delayed = orderRepository.countDelayedOrders(warehouseId, excluded);
+
+        if (delayed > 0) {
+            alerts.add(new AlertDTO(delayed + " Orders Overdue", "DELAYED"));
+        }
 
         return alerts;
     }
 
-    /**
-     * Cache key helper to retrieve the warehouse ID for the current session.
-     */
     public String getAuthenticatedUserWarehouseId() {
         return getAuthenticatedUser().getWarehouse().getId();
     }
 
-    /**
-     * Security helper to fetch the current logged-in User entity.
-     */
     private User getAuthenticatedUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {

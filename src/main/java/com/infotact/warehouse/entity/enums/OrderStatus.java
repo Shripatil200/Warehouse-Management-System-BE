@@ -5,5 +5,6 @@ public enum OrderStatus {
     PICKING,   // Picking document generated
     PACKED,    // commitPick() executed
     SHIPPED,   // Physically left the building
-    CANCELLED  // releaseReservation() executed
+    CANCELLED,  // releaseReservation() executed
+    DELIVERED
 }

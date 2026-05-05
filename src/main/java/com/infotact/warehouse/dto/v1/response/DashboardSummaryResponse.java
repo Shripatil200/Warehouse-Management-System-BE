@@ -18,10 +18,6 @@ import java.util.List;
  * It combines real-time counts, performance metrics (utilization), and prioritized
  * lists for alerts and sales performance.
  * </p>
- * <p>
- * <b>Update:</b> Now includes <b>totalInventoryValue</b> to provide financial
- * visibility into the warehouse's current stock valuation based on batch costs.
- * </p>
  */
 @Data
 @Builder
@@ -38,8 +34,14 @@ public class DashboardSummaryResponse implements Serializable {
     @Schema(description = "Total number of unique products in the catalog", example = "1250")
     private Long totalProducts;
 
-    @Schema(description = "Count of products currently below their minimum stock threshold", example = "14")
+    @Schema(description = "Count of products currently below their minimum stock threshold (Procurement)", example = "14")
     private Long lowStockCount;
+
+    /**
+     * NEW: Count of products needing movement from Bulk to Picking area.
+     */
+    @Schema(description = "Count of products needing replenishment in Picking Bins (Operations)", example = "22")
+    private Long replenishmentCount;
 
     @Schema(description = "Number of active outbound customer orders requiring fulfillment", example = "45")
     private Long outboundOrders;
@@ -50,13 +52,6 @@ public class DashboardSummaryResponse implements Serializable {
     @Schema(description = "Total number of warehouses managed by the user", example = "1")
     private Long totalWarehouses;
 
-    /**
-     * Total monetary value of all physical stock currently in the warehouse.
-     * <p>
-     * Logic: Calculated as the sum of (InventoryItem.quantity * InventoryItem.purchasePrice).
-     * This accurately reflects batch-level costs (e.g., items bought at 10rs vs 12rs).
-     * </p>
-     */
     @Schema(description = "Total financial valuation of on-hand inventory", example = "2540500.00")
     private BigDecimal totalInventoryValue;
 

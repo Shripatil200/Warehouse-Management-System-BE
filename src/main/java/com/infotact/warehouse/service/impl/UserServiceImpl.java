@@ -117,7 +117,7 @@ public class UserServiceImpl implements UserService {
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public Page<UserResponse> getAllUser(Pageable pageable) {
         User currentUser = getAuthenticatedUser();
-        return userRepository.findAllByWarehouse(currentUser.getWarehouse().getId(), pageable).map(UserResponse::new);
+        return userRepository.findAllByWarehouse(currentUser.getWarehouse().getId(), UserStatus.DELETED, pageable).map(UserResponse::new);
     }
 
     /**

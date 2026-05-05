@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -50,9 +51,11 @@ public interface OrderRepository extends JpaRepository<SellingOrder, String> {
      */
     @Query("SELECT COUNT(o) FROM SellingOrder o WHERE o.warehouse.id = :warehouseId " +
             "AND o.expectedShipDate < CURRENT_TIMESTAMP " +
-            "AND o.status NOT IN (com.infotact.warehouse.entity.enums.OrderStatus.SHIPPED, " +
-            "com.infotact.warehouse.entity.enums.OrderStatus.DELIVERED)")
-    long countDelayedOrders(@Param("warehouseId") String warehouseId);
+            "AND o.status NOT IN :excludedStatuses")
+    long countDelayedOrders(
+            @Param("warehouseId") String warehouseId,
+            @Param("excludedStatuses") Collection<OrderStatus> excludedStatuses
+    );
 
     /**
      * ANALYTICS ENGINE: Aggregates units sold per product name.

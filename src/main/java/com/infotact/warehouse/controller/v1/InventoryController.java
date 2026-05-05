@@ -96,4 +96,14 @@ public class InventoryController {
         inventoryService.internalStockTransfer(sourceItemId, targetBinId, quantity);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/replenish")
+    @Operation(summary = "Manual Replenishment Trigger")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> replenish(@RequestParam String productId,
+                                          @RequestParam String targetBinId,
+                                          @RequestParam Integer quantity) {
+        inventoryService.replenishPickingFace(productId, targetBinId, quantity);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -16,7 +16,7 @@ import java.util.function.Function;
 @Service
 public class JwtUtil {
 
-    @Value("${app.jwt.secret:mySuperSecretKeyForJwtGeneration12345}")
+    @Value("${app.jwt.secret")
     private String secret;
 
     public String extractUsername(String token) {

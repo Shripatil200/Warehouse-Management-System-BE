@@ -34,9 +34,9 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
      * @return Optional containing the Warehouse entity with pre-loaded structure.
      */
     @Query("""
-        SELECT w FROM Warehouse w 
-        LEFT JOIN FETCH w.zones z 
-        LEFT JOIN FETCH z.aisles a 
+        SELECT w FROM Warehouse w
+        LEFT JOIN FETCH w.zones z
+        LEFT JOIN FETCH z.aisles a
         WHERE w.id = :id
     """)
     Optional<Warehouse> findOptimizedLayout(@Param("id") String id);
@@ -56,7 +56,7 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
      * @return List of aggregated numeric results.
      */
     @Query("""
-        SELECT COALESCE(SUM(b.maxVolume), 0.0), 
+        SELECT COALESCE(SUM(b.maxVolume), 0.0),
                COALESCE(SUM(b.currentVolumeOccupied), 0.0)
         FROM StorageBin b
         WHERE b.warehouse.id = :warehouseId
@@ -80,7 +80,7 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
      * @return A list of aisle-level operational metrics.
      */
     @Query("""
-        SELECT a.id, 
+        SELECT a.id,
                COALESCE(SUM(b.maxVolume), 0.0), 
                COALESCE(SUM(b.currentVolumeOccupied), 0.0),
                COUNT(b.id) 

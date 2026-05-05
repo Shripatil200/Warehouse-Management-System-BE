@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: warehouse
+
+  # Database Configuration
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA & Hibernate Settings
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        cache:
+          use_second_level_cache: true
+          region:
+            factory_class: org.hibernate.cache.jcache.internal.JCacheRegionFactory
+
+  # Mail Server Configuration (Gmail)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${SMTP_USER}
+    password: ${SMTP_PASS}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # Redis Infrastructure
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+
+# Custom Application Properties
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+  frontend:
+    url: ${APP_FRONTEND_URL}
+  sms:
+    api:
+      key: ${SMS_API_KEY}
+  jwt:
+    # High-entropy production key fallback[cite: 1]
+    secret: ${JWT_SECRETE_KEY:T09FSTQzRk9MUE05U0hWRU5ZQUxLSlNER0hKS0xNUDI0NjgxMzU3OQ==}
+
+# Logging Levels[cite: 1]
+logging:
+  level:
+    org:
+      springframework:
+        core:
+          env: DEBUG

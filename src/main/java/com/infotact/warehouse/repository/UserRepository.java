@@ -21,76 +21,64 @@ import java.util.Optional;
 
 /**
  * Data Access Object for Identity and Access Management (IAM).
- * <p>
- * This repository handles authentication lookups and facility-based staff management.
- * By extending {@link JpaSpecificationExecutor}, it supports dynamic, complex filtering
- * required for advanced warehouse staff searches.
- * </p>
  */
 @Repository
 public interface UserRepository extends JpaRepository<User, String>, JpaSpecificationExecutor<User> {
 
-    /**
-     * Primary lookup for the AuthenticationProvider during login.
-     */
     Optional<User> findByEmail(String email);
 
-    /**
-     * Unique contact lookup for registration and validation.
-     */
     Optional<User> findByContactNumber(String contactNumber);
 
     /**
-     * Retrieves a paginated list of non-deleted staff members for a specific facility.
-     * <p>
-     * <b>Optimization:</b> Uses 'JOIN FETCH' for the result list to prevent N+1 issues.
-     * </p>
+     * Retrieves non-deleted staff for a specific facility.
+     * REFACTORED: Removed hardcoded DELETED path.
      */
     @Query(value = "SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId " +
-            "AND u.status <> com.infotact.warehouse.entity.enums.UserStatus.DELETED",
+            "AND u.status <> :excludedStatus",
             countQuery = "SELECT count(u) FROM User u " +
                     "WHERE u.warehouse.id = :warehouseId " +
-                    "AND u.status <> com.infotact.warehouse.entity.enums.UserStatus.DELETED")
-    Page<User> findAllByWarehouse(@Param("warehouseId") String warehouseId, Pageable pageable);
+                    "AND u.status <> :excludedStatus")
+    Page<User> findAllByWarehouse(
+            @Param("warehouseId") String warehouseId,
+            @Param("excludedStatus") UserStatus excludedStatus,
+            Pageable pageable);
 
     /**
-     * Retrieves currently operational staff for a specific facility.
+     * Retrieves currently operational staff.
+     * REFACTORED: Now uses status parameter.
      */
     @Query("SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId " +
-            "AND u.status = com.infotact.warehouse.entity.enums.UserStatus.ACTIVE")
-    List<User> findActiveByWarehouse(@Param("warehouseId") String warehouseId);
+            "AND u.status = :status")
+    List<User> findByWarehouseAndStatus(
+            @Param("warehouseId") String warehouseId,
+            @Param("status") UserStatus status);
 
     /**
-     * Filters staff by specialized responsibility within a facility.
+     * Filters staff by specialized responsibility.
+     * REFACTORED: Standardized exclusion logic.
      */
     @Query("SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId AND u.role = :role " +
-            "AND u.status <> com.infotact.warehouse.entity.enums.UserStatus.DELETED")
-    List<User> findByWarehouseAndRole(@Param("warehouseId") String warehouseId, @Param("role") Role role);
+            "AND u.status <> :excludedStatus")
+    List<User> findByWarehouseAndRole(
+            @Param("warehouseId") String warehouseId,
+            @Param("role") Role role,
+            @Param("excludedStatus") UserStatus excludedStatus);
 
-    /**
-     * Global role lookup. Primarily used for system-wide administrative tasks.
-     */
     Collection<User> findByRole(Role role);
 
-    /**
-     * Checks if an email is already registered in the system.
-     */
     boolean existsByEmail(@Email @NotBlank String email);
 
-    /**
-     * Checks if a contact number is already registered in the system.
-     */
     boolean existsByContactNumber(@NotBlank @Size(min = 10, max = 15) @Pattern(regexp = "^\\d+$") String contactNumber);
 
-    /**
-     * Counts unique warehouses assigned to a specific email for multi-tenant validation.
-     */
     @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
     long countAssignedWarehouseForUser(@Param("email") String email);
 
+    /**
+     * Dashboard aggregation for user statuses.
+     */
     @Query("SELECT u.status, COUNT(u) FROM User u GROUP BY u.status")
     List<Object[]> countUsersByStatus();
 }

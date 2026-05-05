@@ -1,5 +1,6 @@
 package com.infotact.warehouse.repository;
 
+import com.infotact.warehouse.dto.v1.response.FinancialMetricResponse;
 import com.infotact.warehouse.entity.InventoryTransaction;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import org.springframework.data.domain.Page;
@@ -58,4 +59,23 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate,
             Pageable pageable);
+
+    @Query("SELECT new com.infotact.warehouse.dto.v1.response.FinancialMetricResponse(" +
+            "CAST(FUNCTION('DATE_FORMAT', t.transactionDate, :format) AS string), " +
+            "SUM(CAST(t.quantityChange * t.unitPrice AS double)), " +
+            "SUM(CAST(ABS(t.quantityChange) * t.unitPrice AS double)), " +
+            "SUM(CAST(CASE WHEN t.type = 'ADJUSTMENT' AND t.quantityChange < 0 THEN (ABS(t.quantityChange) * t.unitPrice) ELSE 0 END AS double)), " +
+            "SUM(CAST(CASE WHEN t.type = 'OUTBOUND' THEN (ABS(t.quantityChange) * (t.unitPrice - item.purchasePrice)) ELSE 0 END AS double))) " +
+            "FROM InventoryTransaction t JOIN t.inventoryItem item " +
+            "WHERE item.storageBin.warehouse.id = :warehouseId " +
+            "AND (:productId IS NULL OR item.product.id = :productId) " +
+            "AND t.transactionDate BETWEEN :startDate AND :endDate " +
+            "GROUP BY FUNCTION('DATE_FORMAT', t.transactionDate, :format) " +
+            "ORDER BY MIN(t.transactionDate) ASC")
+    List<FinancialMetricResponse> getFinancialAnalytics(
+            @Param("warehouseId") String warehouseId,
+            @Param("productId") String productId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            @Param("format") String format);
 }

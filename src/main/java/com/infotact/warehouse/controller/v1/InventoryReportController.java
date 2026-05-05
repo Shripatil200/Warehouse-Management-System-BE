@@ -1,9 +1,6 @@
 package com.infotact.warehouse.controller.v1;
 
-import com.infotact.warehouse.dto.v1.response.BarcodeAuditResponse;
-import com.infotact.warehouse.dto.v1.response.InventoryItemDetailResponse;
-import com.infotact.warehouse.dto.v1.response.InventorySummaryResponse;
-import com.infotact.warehouse.dto.v1.response.InventoryTransactionResponse;
+import com.infotact.warehouse.dto.v1.response.*;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import com.infotact.warehouse.service.InventoryReportService;
@@ -19,6 +16,9 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/inventory-reports")
@@ -87,5 +87,15 @@ public class InventoryReportController {
             @RequestParam(required = false) AuditStatus status,
             @PageableDefault(size = 50, sort = "timestamp", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(inventoryReportService.getBarcodeAuditLogs(userId, status, pageable));
+    }
+
+    @GetMapping("/products/{productId}/finance")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<List<FinancialMetricResponse>> getProductFinance(
+            @PathVariable String productId,
+            @RequestParam(defaultValue = "day") String granularity,
+            @RequestParam LocalDateTime start,
+            @RequestParam LocalDateTime end) {
+        return ResponseEntity.ok(inventoryReportService.getProductFinancialPerformance(productId, granularity, start, end));
     }
 }

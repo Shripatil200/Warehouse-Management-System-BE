@@ -39,6 +39,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final WarehouseRepository warehouseRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final InventoryItemRepository inventoryItemRepository;
+    private final InventoryTransactionRepository transactionRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -65,6 +66,16 @@ public class DashboardServiceImpl implements DashboardService {
                 .alerts(getRecentAlerts(warehouseId))
                 .topProducts(orderRepository.findTopSellingProductsMonthly(warehouseId, thirtyDaysAgo, PageRequest.of(0, 3)))
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FinancialMetricResponse> getWarehouseFinancialPerformance(String granularity, LocalDateTime start, LocalDateTime end) {
+        User currentUser = getAuthenticatedUser();
+        String warehouseId = currentUser.getWarehouse().getId();
+        String format = resolveFormat(granularity);
+
+        return transactionRepository.getFinancialAnalytics(warehouseId, null, start, end, format);
     }
 
     /**
@@ -153,5 +164,15 @@ public class DashboardServiceImpl implements DashboardService {
         }
         return userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new UnauthorizedException("User profile not found."));
+    }
+
+    private String resolveFormat(String granularity) {
+        return switch (granularity.toLowerCase()) {
+            case "day" -> "%Y-%m-%d";
+            case "week" -> "%Y-Week%u";
+            case "month" -> "%Y-%m";
+            case "year" -> "%Y";
+            default -> "%Y-%m-%d";
+        };
     }
 }

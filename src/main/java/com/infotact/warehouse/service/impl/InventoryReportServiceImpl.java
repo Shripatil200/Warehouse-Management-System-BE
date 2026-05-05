@@ -1,17 +1,22 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.response.*;
+import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import com.infotact.warehouse.repository.BarcodeAuditRepository;
 import com.infotact.warehouse.repository.InventoryRepository;
 import com.infotact.warehouse.repository.InventoryTransactionRepository;
 import com.infotact.warehouse.service.InventoryReportService;
+import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +26,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
     private final InventoryRepository inventoryRepository;
     private final InventoryTransactionRepository transactionRepository;
     private final BarcodeAuditRepository barcodeAuditRepository;
+    private final UserService userService;
 
     @Override
     public Page<InventorySummaryResponse> getGlobalSummary(Pageable pageable) {
@@ -86,5 +92,24 @@ public class InventoryReportServiceImpl implements InventoryReportService {
                         // You might need a BinRepository join here to get the actual Code
                         .binCode(audit.getBinId())
                         .build());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FinancialMetricResponse> getProductFinancialPerformance(String productId, String granularity, LocalDateTime start, LocalDateTime end) {
+        User currentUser = userService.getAuthenticatedUser(); // Or use your userService if injected
+        String warehouseId = currentUser.getWarehouse().getId();
+        String format = resolveFormat(granularity);
+
+        return transactionRepository.getFinancialAnalytics(warehouseId, productId, start, end, format);
+    }
+    private String resolveFormat(String granularity) {
+        return switch (granularity.toLowerCase()) {
+            case "day" -> "%Y-%m-%d";
+            case "week" -> "%Y-Week%u";
+            case "month" -> "%Y-%m";
+            case "year" -> "%Y";
+            default -> "%Y-%m-%d";
+        };
     }
 }

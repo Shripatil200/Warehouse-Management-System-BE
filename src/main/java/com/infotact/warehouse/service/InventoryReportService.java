@@ -1,15 +1,15 @@
 package com.infotact.warehouse.service;
 
-import com.infotact.warehouse.dto.v1.response.BarcodeAuditResponse;
-import com.infotact.warehouse.dto.v1.response.InventoryItemDetailResponse;
-import com.infotact.warehouse.dto.v1.response.InventorySummaryResponse;
-import com.infotact.warehouse.dto.v1.response.InventoryTransactionResponse;
+import com.infotact.warehouse.dto.v1.response.*;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-    /**
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
      * Service for handling complex inventory queries and management reports.
      * This service is read-only and optimized for high-performance data retrieval.
      */
@@ -68,4 +68,16 @@ import org.springframework.data.domain.Pageable;
          */
         Page<BarcodeAuditResponse> getBarcodeAuditLogs(String userId, AuditStatus status, Pageable pageable);
 
+        /**
+         * Retrieves dynamic financial performance metrics for a specific product.
+         * Enables deep-dive analysis into product-specific margins, inbound costs,
+         * and adjustment losses over time.
+         *
+         * @param productId   The unique identifier of the product to analyze
+         * @param granularity The time scale for grouping (day, week, month, year)
+         * @param start       The start of the reporting period
+         * @param end         The end of the reporting period
+         * @return A list of financial metrics specific to the product, aggregated by period
+         */
+        List<FinancialMetricResponse> getProductFinancialPerformance(String productId, String granularity, LocalDateTime start, LocalDateTime end);
 }

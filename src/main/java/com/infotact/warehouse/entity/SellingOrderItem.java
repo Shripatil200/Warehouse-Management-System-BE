@@ -1,9 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -20,7 +18,8 @@ import java.math.BigDecimal;
  * If the master Product price changes, this record preserves what the customer paid.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor

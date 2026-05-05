@@ -18,7 +18,8 @@ import java.util.List;
  * overruns during simultaneous stock movements.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor

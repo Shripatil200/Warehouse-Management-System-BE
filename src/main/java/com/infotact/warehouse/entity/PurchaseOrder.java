@@ -2,9 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -19,7 +17,8 @@ import java.util.List;
  * shipments physically arrive at the loading dock.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor

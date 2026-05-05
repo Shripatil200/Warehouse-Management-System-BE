@@ -18,7 +18,8 @@ import java.util.List;
  * sub-category counts without triggering N+1 select issues.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)

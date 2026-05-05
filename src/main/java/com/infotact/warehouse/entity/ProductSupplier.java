@@ -3,6 +3,9 @@ package com.infotact.warehouse.entity;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 
 /**
@@ -13,7 +16,8 @@ import java.math.BigDecimal;
  * make data-driven decisions on which supplier to use for new Purchase Orders.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "product_suppliers")
 public class ProductSupplier extends BaseEntity {

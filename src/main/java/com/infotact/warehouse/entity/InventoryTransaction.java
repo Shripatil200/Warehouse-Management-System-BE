@@ -2,9 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.enums.TransactionType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -23,7 +21,8 @@ import java.time.LocalDateTime;
  * For INBOUND, this is the purchase price; for OUTBOUND, it is the selling price.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor

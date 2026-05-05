@@ -16,7 +16,8 @@ import java.util.List;
  * Designed for multi-tenant isolation, ensuring SKUs are unique per warehouse.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)

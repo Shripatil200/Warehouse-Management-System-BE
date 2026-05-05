@@ -3,10 +3,7 @@ package com.infotact.warehouse.entity;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -21,7 +18,8 @@ import java.util.Set;
  * It acts as the primary parent for all physical rows (Aisles) within that area.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor

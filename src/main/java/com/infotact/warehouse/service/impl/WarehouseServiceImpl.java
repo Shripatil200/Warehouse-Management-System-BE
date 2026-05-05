@@ -1,6 +1,7 @@
 package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.common_wrappers.VerifiedProof;
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.dto.v1.request.CreateWarehouseRequest;
 import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
@@ -19,23 +20,17 @@ import com.infotact.warehouse.util.EmailUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 /**
- * Implementation of {@link WarehouseService} for facility lifecycle management.
+ * Production-grade implementation of {@link WarehouseService}.
+ *
  * <p>
- * This service implements a 'Single-Warehouse' provisioning tactic, anchoring
- * the SaaS multi-tenancy model. It orchestrates the simultaneous creation of
- * physical infrastructure (Warehouse) and the administrative identity (User)
- * required to manage it.
+ * Enforces strict tenant isolation: all operations are scoped to the
+ * currently authenticated warehouse via {@link TenantContext}.
  * </p>
  */
 @Slf4j
@@ -47,62 +42,66 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailUtils emailUtils;
-
     private final VerifiedProofRepository proofRepo;
+
+    // ============================================================
+    // CREATE WAREHOUSE (PUBLIC ONBOARDING)
+    // ============================================================
+
     /**
      * {@inheritDoc}
+     *
      * <p>
-     * <b>Updated Implementation:</b>
-     * <ul>
-     * <li><b>Proof Validation:</b> Verifies Redis tokens for both Email and Contact.</li>
-     * <li><b>Identity Guard:</b> Ensures the verified identifiers match the form data.</li>
-     * <li><b>Secure Passwords:</b> Uses the password provided by the user in the request.</li>
-     * </ul>
-     * Tokens are deleted immediately after successful persistence to prevent replay attacks.
+     * Performs secure onboarding:
+     * - Validates email & contact proof tokens
+     * - Ensures uniqueness of warehouse and admin identity
+     * - Creates warehouse + admin user atomically
+     * - Deletes verification tokens to prevent reuse
+     * </p>
      */
-
     @Override
     @Transactional
     public WarehouseResponse createWarehouse(@Valid CreateWarehouseRequest request) {
 
-        // 1. Validate and Fetch Email Proof from Redis
+        // 1. Validate Email Proof
         VerifiedProof emailProof = proofRepo.findById(request.getEmailToken())
                 .orElseThrow(() -> new BadRequestException("Email verification expired or invalid."));
 
         if (!emailProof.getIdentifier().equalsIgnoreCase(request.getAdminEmail())) {
-            throw new BadRequestException("Security Alert: The verified email does not match the provided admin email.");
+            throw new BadRequestException("Email mismatch with verification token.");
         }
 
-        // 2. Validate and Fetch Contact Proof from Redis
+        // 2. Validate Contact Proof
         VerifiedProof contactProof = proofRepo.findById(request.getContactToken())
                 .orElseThrow(() -> new BadRequestException("Contact verification expired or invalid."));
 
         if (!contactProof.getIdentifier().equals(request.getAdminContact())) {
-            throw new BadRequestException("Security Alert: The verified contact does not match the provided admin contact.");
+            throw new BadRequestException("Contact mismatch with verification token.");
         }
 
         // 3. Uniqueness Checks
-        // Business Rule: Duplicate names allowed only if locations are different
-        if (warehouseRepository.existsByNameIgnoreCaseAndLocationIgnoreCase(request.getName(), request.getLocation())) {
-            throw new AlreadyExistsException("A warehouse with this name already exists at this location.");
+        if (warehouseRepository.existsByNameIgnoreCaseAndLocationIgnoreCase(
+                request.getName(), request.getLocation())) {
+            throw new AlreadyExistsException("Warehouse already exists at this location.");
         }
 
         if (userRepository.existsByEmail(request.getAdminEmail())) {
-            throw new AlreadyExistsException("The admin email '" + request.getAdminEmail() + "' is already in use.");
+            throw new AlreadyExistsException("Admin email already in use.");
         }
 
-        if(userRepository.existsByContactNumber(request.getAdminContact())){
-            throw new AlreadyExistsException("The admin contact '"+ request.getAdminContact()+"' is already in use.");
+        if (userRepository.existsByContactNumber(request.getAdminContact())) {
+            throw new AlreadyExistsException("Admin contact already in use.");
         }
 
-        // 4. Persist the Warehouse Facility
+        // 4. Create Warehouse
         Warehouse warehouse = new Warehouse();
         warehouse.setName(request.getName());
         warehouse.setLocation(request.getLocation());
         warehouse.setActive(true);
+
         Warehouse savedWarehouse = warehouseRepository.save(warehouse);
 
-        // 5. Initialize the Primary Admin User
+        // 5. Create Admin User
         User admin = new User();
         admin.setName(request.getAdminName());
         admin.setEmail(request.getAdminEmail());
@@ -114,14 +113,13 @@ public class WarehouseServiceImpl implements WarehouseService {
 
         userRepository.save(admin);
 
-        // 6. STRICT CLEANUP: Delete proof tokens from Redis immediately
-        // This ensures the same tokens cannot be used to call this API again.
+        // 6. Cleanup Proof Tokens
         proofRepo.delete(emailProof);
         proofRepo.delete(contactProof);
 
-        log.info("Redis proof tokens consumed and deleted for: {}", admin.getEmail());
+        log.info("Warehouse '{}' created with Admin '{}'", savedWarehouse.getName(), admin.getEmail());
 
-        // 7. Asynchronous Welcome Notification
+        // 7. Send Welcome Email (non-blocking)
         try {
             emailUtils.sendWarehouseWelcomeEmail(
                     admin.getEmail(),
@@ -129,86 +127,114 @@ public class WarehouseServiceImpl implements WarehouseService {
                     savedWarehouse.getName()
             );
         } catch (Exception e) {
-            log.warn("Warehouse '{}' created, but welcome email failed for {}: {}",
-                    savedWarehouse.getName(), admin.getEmail(), e.getMessage());
+            log.warn("Email failed for {}: {}", admin.getEmail(), e.getMessage());
         }
-
-        log.info("SUCCESS: Verified Facility '{}' (ID: {}) initialized for Admin '{}'.",
-                savedWarehouse.getName(), savedWarehouse.getId(), admin.getEmail());
 
         return mapToResponse(savedWarehouse);
     }
 
-    /** {@inheritDoc} */
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    @Transactional
-    public void activateWarehouse(String id) {
-        Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
-        warehouse.setActive(true);
-        warehouseRepository.save(warehouse);
-        log.info("Security: Warehouse {} has been activated.", id);
-    }
+    // ============================================================
+    // TENANT-SCOPED OPERATIONS
+    // ============================================================
 
     /**
      * {@inheritDoc}
-     * <p><b>Note:</b> Deactivation effectively suspends all staff access to
-     * the facility while preserving historical transaction data.</p>
+     *
+     * <p>
+     * Retrieves the warehouse bound to the current authenticated user.
+     * </p>
      */
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    @Transactional
-    public void deactivateWarehouse(String id) {
-        Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
-        warehouse.setActive(false);
-        warehouseRepository.save(warehouse);
-        log.warn("Security: Warehouse {} has been deactivated.", id);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    @Transactional
-    public WarehouseResponse updateWarehouse(String id, WarehouseRequest request) {
-        Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
-
-        warehouse.setName(request.getName());
-        warehouse.setLocation(request.getLocation());
-        return mapToResponse(warehouseRepository.save(warehouse));
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
-    public WarehouseResponse getWarehouse(String id) {
-        Warehouse warehouse = warehouseRepository.findById(id)
+    public WarehouseResponse getCurrentWarehouse() {
+
+        Warehouse warehouse = warehouseRepository.findById(getCurrentWarehouseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+
         return mapToResponse(warehouse);
     }
 
     /**
      * {@inheritDoc}
-     * <p><b>Filtering:</b> Stream-based filtering is applied for the
-     * <code>includeInactive</code> toggle.</p>
+     *
+     * <p>
+     * Updates metadata of the current tenant warehouse.
+     * Only accessible by ADMIN users.
+     * </p>
      */
     @Override
-    @Transactional(readOnly = true)
-    public Page<WarehouseResponse> getAllWarehouses(Pageable pageable, boolean includeInactive) {
-        List<Warehouse> list = warehouseRepository.findAll();
-        List<WarehouseResponse> responses = list.stream()
-                .filter(w -> includeInactive || w.isActive())
-                .map(this::mapToResponse)
-                .toList();
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public WarehouseResponse updateWarehouse(@Valid WarehouseRequest request) {
 
-        return new PageImpl<>(responses, pageable, responses.size());
+        Warehouse warehouse = warehouseRepository.findById(getCurrentWarehouseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+
+        warehouse.setName(request.getName());
+        warehouse.setLocation(request.getLocation());
+
+        return mapToResponse(warehouseRepository.save(warehouse));
     }
 
     /**
-     * Maps the internal Warehouse entity to a builder-based Response DTO.
+     * {@inheritDoc}
+     *
+     * <p>
+     * Activates the current tenant warehouse.
+     * </p>
+     */
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public void activateWarehouse() {
+
+        Warehouse warehouse = warehouseRepository.findById(getCurrentWarehouseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+
+        warehouse.setActive(true);
+
+        log.info("Warehouse {} activated", warehouse.getId());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>
+     * Deactivates the current tenant warehouse.
+     * </p>
+     */
+    @Override
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public void deactivateWarehouse() {
+
+        Warehouse warehouse = warehouseRepository.findById(getCurrentWarehouseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+
+        warehouse.setActive(false);
+
+        log.warn("Warehouse {} deactivated", warehouse.getId());
+    }
+
+    // ============================================================
+    // INTERNAL UTILITIES
+    // ============================================================
+
+    /**
+     * Retrieves the current tenant warehouse ID from {@link TenantContext}.
+     */
+    private String getCurrentWarehouseId() {
+        String warehouseId = TenantContext.get();
+
+        if (warehouseId == null || warehouseId.isBlank()) {
+            throw new IllegalStateException("No tenant context found");
+        }
+
+        return warehouseId;
+    }
+
+    /**
+     * Maps entity to response DTO.
      */
     private WarehouseResponse mapToResponse(Warehouse entity) {
         return WarehouseResponse.builder()

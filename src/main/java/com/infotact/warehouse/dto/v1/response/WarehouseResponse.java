@@ -50,5 +50,5 @@ public class WarehouseResponse implements Serializable {
 
     @Schema(description = "The total number of operational zones defined within this facility",
             example = "5")
-    private int zoneCount;
+    private Integer zoneCount;
 }

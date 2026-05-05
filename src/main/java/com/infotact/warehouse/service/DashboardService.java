@@ -1,6 +1,10 @@
 package com.infotact.warehouse.service;
 
 import com.infotact.warehouse.dto.v1.response.DashboardSummaryResponse;
+import com.infotact.warehouse.dto.v1.response.FinancialMetricResponse;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Service interface for high-level business intelligence and operational metrics.
@@ -29,4 +33,15 @@ public interface DashboardService {
      * @return A consolidated {@link DashboardSummaryResponse} containing all key performance indicators (KPIs).
      */
     DashboardSummaryResponse getSummary();
+
+    /**
+     * Retrieves dynamic financial performance metrics for the entire warehouse.
+     * Used to power historical trend charts (e.g., Revenue vs. Cost) on the main dashboard.
+     *
+     * @param granularity The time scale for grouping (day, week, month, year)
+     * @param start       The start of the reporting period
+     * @param end         The end of the reporting period
+     * @return A list of financial metrics aggregated by the requested period
+     */
+    List<FinancialMetricResponse> getWarehouseFinancialPerformance(String granularity, LocalDateTime start, LocalDateTime end);
 }

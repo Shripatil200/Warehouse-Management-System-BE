@@ -87,4 +87,23 @@ public class InventoryController {
         inventoryService.commitPickWithVerification(inventoryItemId, scannedBinCode, scannedSku, quantity);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/transfer")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
+    public ResponseEntity<Void> transferStock(@RequestParam String sourceItemId,
+                                              @RequestParam String targetBinId,
+                                              @RequestParam Integer quantity) {
+        inventoryService.internalStockTransfer(sourceItemId, targetBinId, quantity);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/replenish")
+    @Operation(summary = "Manual Replenishment Trigger")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<Void> replenish(@RequestParam String productId,
+                                          @RequestParam String targetBinId,
+                                          @RequestParam Integer quantity) {
+        inventoryService.replenishPickingFace(productId, targetBinId, quantity);
+        return ResponseEntity.noContent().build();
+    }
 }

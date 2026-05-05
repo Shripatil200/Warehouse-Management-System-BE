@@ -1,6 +1,7 @@
 package com.infotact.warehouse.controller.v1;
 
 import com.infotact.warehouse.dto.v1.response.DashboardSummaryResponse;
+import com.infotact.warehouse.dto.v1.response.FinancialMetricResponse;
 import com.infotact.warehouse.service.DashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -11,7 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * REST controller for retrieving warehouse analytics and operational metrics.
@@ -52,5 +57,14 @@ public class DashboardController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<DashboardSummaryResponse> getSummary() {
         return ResponseEntity.ok(dashboardService.getSummary());
+    }
+
+    @GetMapping("/analytics/finance")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<List<FinancialMetricResponse>> getGlobalFinance(
+            @RequestParam(defaultValue = "month") String granularity,
+            @RequestParam LocalDateTime start,
+            @RequestParam LocalDateTime end) {
+        return ResponseEntity.ok(dashboardService.getWarehouseFinancialPerformance(granularity, start, end));
     }
 }

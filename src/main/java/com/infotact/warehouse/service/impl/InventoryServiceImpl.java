@@ -20,17 +20,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Enhanced Implementation of {@link InventoryService} for Industry-Grade Operations.
- * <p>
- * Key Features:
- * <ul>
- *     <li><b>Bulk-to-Picking Flow:</b> Prioritizes BULK for receipt and PICK_FACE for fulfillment.</li>
- *     <li><b>Internal Transfers:</b> Supports replenishment moves between storage types.</li>
- *     <li><b>Pessimistic Locking:</b> Prevents race conditions during high-concurrency picking.</li>
- * </ul>
- * </p>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -45,28 +34,54 @@ public class InventoryServiceImpl implements InventoryService {
     private final UserService userService;
 
     /**
-     * REFINED PICKING LOGIC: Only reserves stock from PICK_FACE bins to ensure
-     * ground-level efficiency. Uses FEFO (First-Expiry-First-Out).
+     * Enhanced Reservation Logic with Auto-Replenishment.
+     * If PICK_FACE stock is insufficient, it attempts to pull from BULK_STORAGE
+     * before finalizing the reservation.
      */
     @Override
     @Transactional
     public List<InventoryItem> reserveStock(String productId, Integer quantityToReserve) {
         if (quantityToReserve <= 0) throw new BadRequestException("Reservation quantity must be positive.");
 
-        // Repository filters specifically for BinType.PICK_FACE
-        List<InventoryItem> items = inventoryRepository.findAvailableStockForPicking(productId);
+        // 1. Initial check of Picking Face stock
+        List<InventoryItem> items = inventoryRepository.findAvailableStockForPicking(
+                productId, InventoryStatus.AVAILABLE, BinType.PICK_FACE);
+
+        int currentAvailable = items.stream().mapToInt(InventoryItem::getAvailableQuantity).sum();
+
+        // 2. TRIGGER REPLENISHMENT: If stock is low, pull from Bulk
+        if (currentAvailable < quantityToReserve) {
+            log.info("Low stock in Pick Face for SKU {}. Attempting auto-replenishment...", productId);
+
+            // Find a suitable target bin in the Picking Face to move stock into
+            StorageBin targetPickingBin = items.isEmpty() ?
+                    findPickingBinForProduct(productId) : items.get(0).getStorageBin();
+
+            int deficit = quantityToReserve - currentAvailable;
+
+            try {
+                replenishPickingFace(productId, targetPickingBin.getId(), deficit);
+
+                // Refresh the item list after replenishment is successful
+                items = inventoryRepository.findAvailableStockForPicking(
+                        productId, InventoryStatus.AVAILABLE, BinType.PICK_FACE);
+            } catch (InsufficientStorageException e) {
+                log.error("Auto-replenishment failed: No bulk stock available to cover deficit.");
+            }
+        }
+
+        // 3. Proceed with Reservation
         List<InventoryItem> reservedLayers = new ArrayList<>();
         int remainingToReserve = quantityToReserve;
 
         for (InventoryItem item : items) {
             if (remainingToReserve <= 0) break;
-
             int available = item.getAvailableQuantity();
             int take = Math.min(available, remainingToReserve);
 
             if (take > 0) {
                 InventoryItem lockedItem = inventoryRepository.findByIdWithLock(item.getId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Stock layer vanished during reservation"));
+                        .orElseThrow(() -> new ResourceNotFoundException("Stock record locked by another process"));
 
                 lockedItem.setReservedQuantity(lockedItem.getReservedQuantity() + take);
                 inventoryRepository.save(lockedItem);
@@ -76,40 +91,71 @@ public class InventoryServiceImpl implements InventoryService {
             }
         }
 
+        // Final check: if still short after replenishment attempt, throw exception
         if (remainingToReserve > 0) {
-            throw new InsufficientStorageException("Picking Face Shortage: Only " +
-                    (quantityToReserve - remainingToReserve) + " units available in accessible bins.");
+            throw new InsufficientStorageException("Absolute Stock Shortage: Total warehouse stock (Bulk + Pick) " +
+                    "cannot fulfill the requested " + quantityToReserve + " units.");
         }
 
         return reservedLayers;
     }
 
     /**
-     * INTERNAL TRANSFER: Moves stock from BULK_STORAGE to PICK_FACE for replenishment.
-     * Synchronizes metrics for both source and target bins.
+     * Helper to find a fallback Picking Bin if the product has no current stock in PICK_FACE.
      */
+    private StorageBin findPickingBinForProduct(String productId) {
+        return binRepository.findSmartPutawayBins(
+                        productId,
+                        null,
+                        BigDecimal.ZERO,
+                        0.0,
+                        BinType.PICK_FACE,
+                        BinStatus.AVAILABLE // Added this
+                )
+                .stream().findFirst()
+                .orElseThrow(() -> new InsufficientStorageException("No designated Picking Face bin found for replenishment."));
+    }
+
+    @Override
     @Transactional
     public void internalStockTransfer(String sourceItemId, String targetBinId, Integer quantity) {
         InventoryItem source = inventoryRepository.findByIdWithLock(sourceItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Source stock not found"));
-
         StorageBin targetBin = binRepository.findByIdWithLock(targetBinId)
                 .orElseThrow(() -> new ResourceNotFoundException("Target bin not found"));
 
         if (source.getQuantity() < quantity) throw new IllegalOperationException("Insufficient source stock.");
 
-        // 1. Deduct from Source (Bulk)
         source.setQuantity(source.getQuantity() - quantity);
         syncBinMetrics(source.getStorageBin(), source.getProduct(), -quantity);
         inventoryRepository.save(source);
-        logTransaction(source, TransactionType.ADJUSTMENT, (long) -quantity, "REPLENISHMENT_OUT");
 
-        // 2. Add to Target (Picking)
+        logTransaction(source, TransactionType.TRANSFER, (long) -quantity, "TRANSFER_OUT");
+
         processPutawaySlice(targetBin, source.getProduct(), source.getPurchasePrice(),
                 source.getBatchNumber(), source.getExpiryDate(), quantity);
 
-        log.info("Replenishment: Moved {} units of SKU {} from {} to {}",
-                quantity, source.getProduct().getSku(), source.getStorageBin().getBinCode(), targetBin.getBinCode());
+        logTransaction(source, TransactionType.TRANSFER, (long) quantity, "TRANSFER_IN");
+    }
+
+    @Override
+    @Transactional
+    public void replenishPickingFace(String productId, String targetBinId, Integer desiredQty) {
+        // FIXED: Using Enum parameters for the new Repository signature
+        List<InventoryItem> bulkSources = inventoryRepository.findBulkSourceForReplenishment(
+                productId, InventoryStatus.AVAILABLE, BinType.BULK_STORAGE);
+
+        if (bulkSources.isEmpty()) {
+            throw new InsufficientStorageException("Replenishment failed: No bulk stock available.");
+        }
+
+        int remainingToMove = desiredQty;
+        for (InventoryItem sourceItem : bulkSources) {
+            if (remainingToMove <= 0) break;
+            int take = Math.min(sourceItem.getQuantity(), remainingToMove);
+            internalStockTransfer(sourceItem.getId(), targetBinId, take);
+            remainingToMove -= take;
+        }
     }
 
     @Override
@@ -119,65 +165,45 @@ public class InventoryServiceImpl implements InventoryService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        try {
-            int remainingQty = request.getQuantity();
-            BigDecimal cost = request.getUnitCost() != null ? request.getUnitCost() : product.getCostPrice();
-            String batch = request.getBatchNumber() != null ? request.getBatchNumber() : "NONE";
+        int remainingQty = request.getQuantity();
+        BigDecimal cost = request.getUnitCost() != null ? request.getUnitCost() : product.getCostPrice();
+        String batch = request.getBatchNumber() != null ? request.getBatchNumber() : "NONE";
 
-            while (remainingQty > 0) {
-                // Modified findSuitableBin strictly enforces BinType.BULK_STORAGE
-                StorageBin suggestedBin = findSuitableBin(product, request, product.getUnitVolume(), product.getWeight());
-                StorageBin lockedBin = binRepository.findByIdWithLock(suggestedBin.getId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Bin unavailable"));
+        while (remainingQty > 0) {
+            StorageBin suggestedBin = findSuitableBin(product, request, product.getUnitVolume(), product.getWeight());
+            StorageBin lockedBin = binRepository.findByIdWithLock(suggestedBin.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Bin unavailable"));
 
-                int binCapacityUnits = calculateMaxUnits(lockedBin, product);
-                int qtyToPutAway = Math.min(remainingQty, binCapacityUnits);
+            int binCapacityUnits = calculateMaxUnits(lockedBin, product);
+            int qtyToPutAway = Math.min(remainingQty, binCapacityUnits);
 
-                if (qtyToPutAway <= 0) {
-                    lockedBin.setStatus(BinStatus.FULL);
-                    binRepository.save(lockedBin);
-                    continue;
-                }
-
-                processPutawaySlice(lockedBin, product, cost, batch, request.getExpiryDate(), qtyToPutAway);
-                remainingQty -= qtyToPutAway;
-
-                auditService.logSuccess(operator.getId(), operator.getWarehouse().getId(),
-                        lockedBin.getId(), null, AuditAction.RECEIVING, "SKU: " + product.getSku());
+            if (qtyToPutAway <= 0) {
+                lockedBin.setStatus(BinStatus.FULL);
+                binRepository.save(lockedBin);
+                continue;
             }
-        } catch (Exception e) {
-            auditService.logFailure(operator.getId(), operator.getWarehouse().getId(),
-                    request.getStorageBinId(), null, AuditAction.RECEIVING, "QTY: " + request.getQuantity(), e.getMessage());
-            throw e;
+
+            processPutawaySlice(lockedBin, product, cost, batch, request.getExpiryDate(), qtyToPutAway);
+            remainingQty -= qtyToPutAway;
+            auditService.logSuccess(operator.getId(), operator.getWarehouse().getId(),
+                    lockedBin.getId(), null, AuditAction.RECEIVING, "SKU: " + product.getSku());
         }
     }
 
     @Override
     @Transactional
     public void commitPickWithVerification(String inventoryItemId, String scannedBinCode, String scannedSku, Integer quantity) {
-        User operator = userService.getAuthenticatedUser();
-        InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found"));
+        InventoryItem item = inventoryRepository.findById(inventoryItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory not found"));
 
-        try {
-            if (!layoutService.verifyBinScan(scannedBinCode, item.getStorageBin().getId())) {
-                throw new IllegalOperationException("Verification Failed: Incorrect bin location barcode.");
-            }
-
-            if (!item.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
-                throw new IllegalOperationException("Verification Failed: Product SKU mismatch.");
-            }
-
-            commitPick(inventoryItemId, quantity);
-
-            auditService.logSuccess(operator.getId(), operator.getWarehouse().getId(),
-                    item.getStorageBin().getId(), null, AuditAction.PICKING, scannedBinCode);
-
-        } catch (IllegalOperationException e) {
-            auditService.logFailure(operator.getId(), operator.getWarehouse().getId(),
-                    item.getStorageBin().getId(), null, AuditAction.PICKING, scannedBinCode, e.getMessage());
-            throw e;
+        if (!layoutService.verifyBinScan(scannedBinCode, item.getStorageBin().getId())) {
+            throw new IllegalOperationException("Incorrect bin location barcode.");
         }
+        if (!item.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
+            throw new IllegalOperationException("Product SKU mismatch.");
+        }
+
+        commitPick(inventoryItemId, quantity);
     }
 
     @Override
@@ -186,56 +212,36 @@ public class InventoryServiceImpl implements InventoryService {
         InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found"));
 
-        if (!item.getProduct().isActive()) throw new IllegalOperationException("Product is deactivated.");
-        if (item.getStatus() != InventoryStatus.AVAILABLE) throw new IllegalOperationException("Stock status is " + item.getStatus());
-        if (item.getQuantity() < quantity) throw new IllegalOperationException("Physical stock shortage.");
-
         item.setQuantity(item.getQuantity() - quantity);
         item.setReservedQuantity(item.getReservedQuantity() - quantity);
-
-        StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
-
-        syncBinMetrics(bin, item.getProduct(), -quantity);
+        syncBinMetrics(item.getStorageBin(), item.getProduct(), -quantity);
         inventoryRepository.save(item);
-        logTransaction(item, TransactionType.OUTBOUND, (long) -quantity, "VERIFIED_FULFILLMENT");
+        logTransaction(item, TransactionType.OUTBOUND, (long) -quantity, "PICK_COMPLETE");
     }
 
     @Override
     @Transactional
     public void adjustStock(InventoryAdjustmentRequest request) {
-        User manager = userService.getAuthenticatedUser();
         InventoryItem item = inventoryRepository.findByIdWithLock(request.getInventoryItemId())
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory record not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory not found"));
 
-        int newQty = item.getQuantity() + request.getAdjustmentQuantity();
-        if (newQty < 0) throw new IllegalOperationException("Negative stock balance not permitted.");
-
-        StorageBin bin = binRepository.findByIdWithLock(item.getStorageBin().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
-
-        syncBinMetrics(bin, item.getProduct(), request.getAdjustmentQuantity());
-        item.setQuantity(newQty);
+        int delta = request.getAdjustmentQuantity();
+        item.setQuantity(item.getQuantity() + delta);
+        syncBinMetrics(item.getStorageBin(), item.getProduct(), delta);
         inventoryRepository.save(item);
-
-        logTransaction(item, TransactionType.ADJUSTMENT, request.getAdjustmentQuantity().longValue(), request.getReasonCode());
-        auditService.logSuccess(manager.getId(), manager.getWarehouse().getId(),
-                bin.getId(), null, AuditAction.STOCK_ADJUSTMENT, "Delta: " + request.getAdjustmentQuantity());
+        logTransaction(item, TransactionType.ADJUSTMENT, (long) delta, request.getReasonCode());
     }
 
     @Override
     @Transactional
     public void releaseReservation(String inventoryItemId, Integer quantity) {
         InventoryItem item = inventoryRepository.findByIdWithLock(inventoryItemId)
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found"));
-
-        if (item.getReservedQuantity() < quantity) throw new IllegalOperationException("Cannot release more than reserved.");
-
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory not found"));
         item.setReservedQuantity(item.getReservedQuantity() - quantity);
         inventoryRepository.save(item);
     }
 
-    // --- Private Industrial Helpers ---
+    // --- Helpers ---
 
     private void processPutawaySlice(StorageBin bin, Product product, BigDecimal cost, String batch, LocalDate expiry, int qty) {
         InventoryItem item = inventoryRepository
@@ -256,44 +262,37 @@ public class InventoryServiceImpl implements InventoryService {
         item.setQuantity(item.getQuantity() + qty);
         inventoryRepository.save(item);
         syncBinMetrics(bin, product, qty);
-        logTransaction(item, TransactionType.INBOUND, (long) qty, "STORAGE_UPDATE");
+        logTransaction(item, TransactionType.INBOUND, (long) qty, "PUTAWAY");
     }
 
     private void syncBinMetrics(StorageBin bin, Product product, int qtyChange) {
-        BigDecimal deltaVolume = product.getUnitVolume().multiply(BigDecimal.valueOf(qtyChange));
-        bin.setCurrentVolumeOccupied(bin.getCurrentVolumeOccupied() + deltaVolume.doubleValue());
+        BigDecimal deltaVol = product.getUnitVolume().multiply(BigDecimal.valueOf(qtyChange));
+        bin.setCurrentVolumeOccupied(bin.getCurrentVolumeOccupied() + deltaVol.doubleValue());
         bin.setCurrentWeightLoad(bin.getCurrentWeightLoad() + (product.getWeight() * qtyChange));
-
-        if (bin.getCurrentVolumeOccupied() >= (bin.getMaxVolume() * 0.95)) {
-            bin.setStatus(BinStatus.FULL);
-        } else if (bin.getCurrentVolumeOccupied() <= 0) {
-            bin.setStatus(BinStatus.EMPTY);
-        } else {
-            bin.setStatus(BinStatus.AVAILABLE);
-        }
         binRepository.save(bin);
     }
 
     private int calculateMaxUnits(StorageBin bin, Product p) {
         double freeVol = bin.getMaxVolume() - bin.getCurrentVolumeOccupied();
-        double freeWeight = bin.getMaxWeightCapacity() - bin.getCurrentWeightLoad();
         int volCap = (int) Math.floor(freeVol / p.getUnitVolume().doubleValue());
-        int weightCap = (int) Math.floor(freeWeight / p.getWeight());
-        return Math.max(0, Math.min(volCap, weightCap));
+        return Math.max(0, volCap);
     }
 
     private StorageBin findSuitableBin(Product product, ReceivingRequest request, BigDecimal unitVol, double unitWeight) {
         if (request.getStorageBinId() != null && !request.getStorageBinId().isBlank()) {
-            return binRepository.findById(request.getStorageBinId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Requested bin not found"));
+            return binRepository.findById(request.getStorageBinId()).orElseThrow();
         }
 
-        // Logic: New inbound stock always defaults to BULK STORAGE
-        BinType targetType = BinType.BULK_STORAGE;
-
-        return binRepository.findSmartPutawayBins(product.getId(), null, unitVol, unitWeight, targetType)
+        return binRepository.findSmartPutawayBins(
+                        product.getId(),
+                        null,
+                        unitVol,
+                        unitWeight,
+                        BinType.BULK_STORAGE,
+                        BinStatus.AVAILABLE // Added this
+                )
                 .stream().findFirst()
-                .orElseThrow(() -> new InsufficientStorageException("No capacity available in BULK STORAGE zones."));
+                .orElseThrow(() -> new InsufficientStorageException("No Bulk Capacity"));
     }
 
     private void logTransaction(InventoryItem item, TransactionType type, Long change, String reason) {

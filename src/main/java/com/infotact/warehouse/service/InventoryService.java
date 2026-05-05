@@ -91,4 +91,33 @@ public interface InventoryService {
      * @param quantity The amount being removed from the warehouse.
      */
     void commitPick(String inventoryItemId, Integer quantity);
+
+    /**
+     * Executes an internal stock transfer between physical locations.
+     * <p>
+     * <b>Industrial Use Case:</b> Primarily used for <i>Replenishment</i> (moving stock
+     * from BULK_STORAGE to PICK_FACE) or <i>Consolidation</i> (merging partially
+     * filled bins to optimize space).
+     * </p>
+     * <p>
+     * <b>Operational Logic:</b>
+     * 1. <b>Atomic Execution:</b> Uses transactional locking to prevent stock being
+     *    "double-picked" or "over-filled" during the move.
+     * 2. <b>Metric Synchronization:</b> Automatically updates the volume and weight
+     *    load for both the source and target bins.
+     * 3. <b>Traceability:</b> Generates a 'TRANSFER' type record in the immutable ledger.
+     * </p>
+     *
+     * @param sourceItemId The UUID of the specific stock layer (batch/cost) to move.
+     * @param targetBinId  The UUID of the destination bin.
+     * @param quantity     The number of units to transfer.
+     * @throws com.infotact.warehouse.exception.IllegalOperationException if source stock is insufficient.
+     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if IDs are invalid.
+     */
+    void internalStockTransfer(String sourceItemId, String targetBinId, Integer quantity);
+
+    /**
+     * Automated Replenishment Logic: Pulls from BULK_STORAGE to refill PICK_FACE.
+     */
+    void replenishPickingFace(String productId, String targetBinId, Integer desiredQty);
 }

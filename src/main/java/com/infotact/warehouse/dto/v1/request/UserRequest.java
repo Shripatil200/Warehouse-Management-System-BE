@@ -8,7 +8,7 @@ import lombok.Data;
  * Data Transfer Object for registering new warehouse personnel.
  * <p>
  * This request captures personal details and maps the user to a specific facility.
- * Security Note: Managers can only onboard 'EMPLOYEE' roles for their own warehouse,
+ * Security Note: Managers can only onboard 'EMPLOYEE' and 'OPERATOR' roles for their own warehouse,
  * while Admins have broader registration privileges.
  * </p>
  */
@@ -48,8 +48,8 @@ public class UserRequest {
 
     @Schema(
             description = "System role for the user. Defaults to 'EMPLOYEE' if not specified.",
-            example = "EMPLOYEE",
-            allowableValues = {"ADMIN", "MANAGER", "EMPLOYEE"}
+            example = "OPERATOR",
+            allowableValues = {"ADMIN", "MANAGER", "OPERATOR", "EMPLOYEE"}
     )
     private String role;
 

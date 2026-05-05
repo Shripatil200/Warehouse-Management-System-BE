@@ -1,77 +1,73 @@
-    package com.infotact.warehouse.repository;
+package com.infotact.warehouse.repository;
 
-    import com.infotact.warehouse.entity.InventoryItem;
-    import jakarta.persistence.LockModeType;
-    import org.springframework.data.jpa.repository.JpaRepository;
-    import org.springframework.data.jpa.repository.Lock;
-    import org.springframework.data.jpa.repository.Query;
-    import org.springframework.data.repository.query.Param;
-    import org.springframework.stereotype.Repository;
+import com.infotact.warehouse.entity.InventoryItem;
+import com.infotact.warehouse.entity.enums.InventoryStatus;
+import com.infotact.warehouse.entity.enums.BinType;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-    import java.math.BigDecimal;
-    import java.time.LocalDate;
-    import java.util.List;
-    import java.util.Optional;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface InventoryRepository extends JpaRepository<InventoryItem, String> {
 
     /**
-     * Data Access Object for 'InventoryItem' transactions.
-     * <p>
-     * This repository handles real-time stock levels. It implements Row-Level Locking
-     * (Pessimistic Write) to prevent race conditions during high-concurrency
-     * Putaway and Picking operations.
-     * </p>
+     * Locates a specific inventory layer based on cost and batch.
      */
-    @Repository
-    public interface InventoryRepository extends JpaRepository<InventoryItem, String> {
+    Optional<InventoryItem> findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePrice(
+            String productId, String binId, String batch, BigDecimal price);
 
-        /**
-         * Locates a specific inventory layer based on cost and batch.
-         * Essential for maintaining financial accuracy (valuation).
-         *
-         * @param productId The UUID of the product.
-         * @param binId     The UUID of the storage bin.
-         * @param batch     The batch/lot number.
-         * @param price     The specific purchase cost for this stock layer.
-         * @return An Optional containing the matching inventory record.
-         */
-        Optional<InventoryItem> findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePrice(
-                String productId, String binId, String batch, BigDecimal price);
+    /**
+     * CRITICAL TRANSACTIONAL LOCK: Pessimistic Write to prevent "lost updates".
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i WHERE i.id = :id")
+    Optional<InventoryItem> findByIdWithLock(@Param("id") String id);
 
-        /**
-         * CRITICAL TRANSACTIONAL LOCK: Pessimistic Write.
-         * <p>
-         * Locks the specific inventory record at the database level until the current
-         * transaction commits or rolls back. Use this for adjustments or picking
-         * to prevent "lost updates" in high-traffic environments.
-         * </p>
-         *
-         * @param id The internal UUID of the inventory item.
-         * @return The inventory item, exclusively locked.
-         */
-        @Lock(LockModeType.PESSIMISTIC_WRITE)
-        @Query("SELECT i FROM InventoryItem i WHERE i.id = :id")
-        Optional<InventoryItem> findByIdWithLock(@Param("id") String id);
+    /**
+     * Retrieves all storage locations for a specific product SKU.
+     */
+    List<InventoryItem> findAllByProductSku(String sku);
 
-        /**
-         * Retrieves all storage locations for a specific product SKU.
-         * Used by the Picking Engine to calculate optimal travel paths.
-         */
-        List<InventoryItem> findAllByProductSku(String sku);
+    /**
+     * Lists all products currently residing within a specific storage bin.
+     */
+    List<InventoryItem> findAllByStorageBinId(String binId);
 
-        /**
-         * Lists all products currently residing within a specific storage bin.
-         */
-        List<InventoryItem> findAllByStorageBinId(String binId);
+    Optional<InventoryItem> findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePriceAndExpiryDate(
+            String productId, String binId, String batch, BigDecimal cost, LocalDate expiryDate);
 
-        Optional<InventoryItem> findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePriceAndExpiryDate(String id, String id1, String batch, BigDecimal cost, LocalDate expiryDate);
+    /**
+     * REFINED PICKING QUERY: Only finds stock in PICK_FACE bins.
+     * Prioritized by Expiry Date (FEFO) then Created Date (FIFO).
+     */
+    @Query("SELECT i FROM InventoryItem i WHERE i.product.id = :productId " +
+            "AND i.status = com.infotact.warehouse.entity.enums.InventoryStatus.AVAILABLE " +
+            "AND i.storageBin.binType = com.infotact.warehouse.entity.enums.BinType.PICK_FACE " + // Essential industrial filter
+            "AND i.quantity > i.reservedQuantity " +
+            "ORDER BY i.expiryDate ASC, i.createdDate ASC")
+    List<InventoryItem> findAvailableStockForPicking(@Param("productId") String productId);
 
-        /**
-         * Finds available stock for a product, prioritized by Expiry Date (FEFO).
-         * Only considers items with 'AVAILABLE' status where physical qty > reserved qty.
-         */
-        @Query("SELECT i FROM InventoryItem i WHERE i.product.id = :productId " +
-                "AND i.status = com.infotact.warehouse.entity.enums.InventoryStatus.AVAILABLE " +
-                "AND i.quantity > i.reservedQuantity " +
-                "ORDER BY i.expiryDate ASC, i.createdDate ASC")
-        List<InventoryItem> findAvailableStockByProductFEFO(@Param("productId") String productId);
-    }
+    /**
+     * REPLENISHMENT SOURCE QUERY: Finds stock specifically in BULK_STORAGE.
+     * Used when the picking bins are low and need a refill from the racks.
+     */
+    @Query("SELECT i FROM InventoryItem i WHERE i.product.id = :productId " +
+            "AND i.status = com.infotact.warehouse.entity.enums.InventoryStatus.AVAILABLE " +
+            "AND i.storageBin.binType = com.infotact.warehouse.entity.enums.BinType.BULK_STORAGE " +
+            "AND i.quantity > i.reservedQuantity " +
+            "ORDER BY i.expiryDate ASC, i.createdDate ASC")
+    List<InventoryItem> findBulkSourceForReplenishment(@Param("productId") String productId);
+
+    /**
+     * Find items that have expired for automated quarantine tasks.[cite: 1]
+     */
+    List<InventoryItem> findAllByStatusAndExpiryDateBefore(InventoryStatus status, LocalDate date);
+}

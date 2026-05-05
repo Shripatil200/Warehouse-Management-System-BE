@@ -57,7 +57,7 @@ public class ProductResponse implements Serializable {
     private Double height;
 
     @Schema(description = "Calculated unit volume (cm³). Used for storage bin calculations.", example = "36000.0")
-    private Double unitVolume;
+    private BigDecimal unitVolume;
 
     private String barcode;
 
@@ -71,6 +71,8 @@ public class ProductResponse implements Serializable {
 
     private Integer minThreshold;
     private Integer maxThreshold;
+    private Integer minReplenishThreshold;
+    private Integer maxPickFaceCapacity;
 
     // --- Traceability ---
 
@@ -87,4 +89,7 @@ public class ProductResponse implements Serializable {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    @Schema(description = "True if any PICK_FACE bin is below minReplenishThreshold")
+    private boolean needsReplenishment;
 }

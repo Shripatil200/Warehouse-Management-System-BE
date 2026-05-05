@@ -1,5 +1,7 @@
 package com.infotact.warehouse.dto.v1.response;
 
+import com.infotact.warehouse.entity.enums.BinType;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
@@ -68,6 +70,9 @@ public class WarehouseLayoutResponse implements Serializable {
         @Schema(description = "The display name of the zone", example = "High-Value Goods")
         private String name;
 
+        @Schema(description = "The functional role of this zone", example = "BULK")
+        private ZoneType zoneType;
+
         @Schema(description = "Indicates if the zone is active and available for operations", example = "true")
         private boolean active;
 
@@ -130,6 +135,9 @@ public class WarehouseLayoutResponse implements Serializable {
 
         @Schema(description = "The unique location code for labeling and scanning", example = "BIN-A1-001")
         private String binCode;
+
+        @Schema(description = "The physical format of the bin", example = "PICK_FACE")
+        private BinType binType;
 
         @Schema(description = "Maximum physical volume of the bin (cm³)", example = "50000.0")
         private Double capacity;

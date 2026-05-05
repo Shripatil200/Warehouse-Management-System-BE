@@ -12,12 +12,8 @@ import java.util.List;
 /**
  * Persistence entity representing a master product in the catalog.
  * <p>
- * This entity stores physical, financial, and operational metadata. It is
- * designed for multi-tenant isolation, ensuring SKUs are unique per warehouse.
- * </p>
- * <p>
- * <b>Optimization:</b> Includes a cached {@code unitVolume} field to
- * accelerate bin-capacity calculations during putaway operations.
+ * Updated to include replenishment thresholds for automated Bulk-to-Picking moves.
+ * Designed for multi-tenant isolation, ensuring SKUs are unique per warehouse.
  * </p>
  */
 @Data
@@ -30,7 +26,6 @@ import java.util.List;
 @Table(
         name = "products",
         indexes = {
-                // Scoped index: SKU is unique WITHIN a warehouse
                 @Index(name = "idx_product_sku_warehouse", columnList = "sku, warehouse_id"),
                 @Index(name = "idx_product_active", columnList = "active"),
                 @Index(name = "idx_product_warehouse", columnList = "warehouse_id")
@@ -47,7 +42,6 @@ public class Product extends BaseEntity {
 
     /**
      * Stock Keeping Unit.
-     * Note: Unique constraint is now handled via the composite index with warehouse_id.
      */
     @Column(nullable = false)
     private String sku;
@@ -81,19 +75,36 @@ public class Product extends BaseEntity {
      * Used to verify if a Product fits into a StorageBin.
      */
     @Column(name = "unit_volume", precision = 19, scale = 4)
-    private Double unitVolume;
+    private BigDecimal unitVolume;
 
     /** Industry-standard barcode for scanner integration */
     private String barcode;
 
-    // --- Operational Controls ---
+    // --- Operational Controls & Replenishment Logic ---
 
     @Column(nullable = false)
     private boolean active = true;
 
-    /** Minimum stock level before triggering alert */
+    /**
+     * Global Safety Stock Level.
+     * Triggers a reorder alert to suppliers when total warehouse stock is low.
+     */
     @Column(nullable = false)
     private Integer minThreshold = 10;
+
+    /**
+     * Replenishment Trigger (Pick Face).
+     * When stock in a PICK_FACE bin falls below this, the system triggers a move from BULK_STORAGE.
+     */
+    @Column(name = "min_replenish_threshold", nullable = false)
+    private Integer minReplenishThreshold = 5;
+
+    /**
+     * Ideal Pick Face Quantity.
+     * The target quantity to move from BULK to PICKING during a replenishment task.
+     */
+    @Column(name = "max_pick_face_capacity", nullable = false)
+    private Integer maxPickFaceCapacity = 50;
 
     /** Maximum stock level to prevent overstocking */
     private Integer maxThreshold;
@@ -133,9 +144,10 @@ public class Product extends BaseEntity {
     @PreUpdate
     private void calculateUnitVolume() {
         if (length != null && width != null && height != null) {
-            this.unitVolume = length * width * height;
+            // Convert the Double calculation to BigDecimal
+            this.unitVolume = BigDecimal.valueOf(length * width * height);
         } else {
-            this.unitVolume = 0.0;
+            this.unitVolume = BigDecimal.ZERO;
         }
     }
 }

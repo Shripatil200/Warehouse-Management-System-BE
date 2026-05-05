@@ -13,10 +13,17 @@ import java.util.Optional;
 
 /**
  * Data Access Object for the Product Catalog and Stock Intelligence.
- *
- * Performance Features:
- * - Scoped Queries: Optimized for high-speed retrieval using indexed warehouse identifiers.
- * - Multi-Tenancy: Enforces isolation as per the "One Warehouse per Admin" rule.
+ * <p>
+ * This repository implements advanced stock health monitoring, distinguishing between
+ * procurement shortages (Global Low Stock) and operational shortages (Picking Replenishment).
+ * </p>
+ * <p>
+ * <b>Performance Features:</b>
+ * <ul>
+ *     <li><b>Scoped Queries:</b> Optimized for high-speed retrieval using indexed warehouse identifiers.</li>
+ *     <li><b>Multi-Tenancy:</b> Enforces isolation ensuring admins only see their assigned facility data.</li>
+ * </ul>
+ * </p>
  */
 @Repository
 public interface ProductRepository extends JpaRepository<Product, String> {
@@ -39,6 +46,7 @@ public interface ProductRepository extends JpaRepository<Product, String> {
 
     /**
      * Retrieves an active product by its SKU within a specific warehouse.
+     * Essential for scanner integrations during Receiving or Picking.
      */
     Optional<Product> findBySkuAndWarehouseIdAndActiveTrue(String sku, String warehouseId);
 
@@ -62,19 +70,48 @@ public interface ProductRepository extends JpaRepository<Product, String> {
     // --- Stock Intelligence & Threshold Monitoring ---
 
     /**
-     * Counts products requiring replenishment within a facility.
-     * Logic: Compares total inventory quantity against product safety thresholds.
+     * Procurement Metric: Counts products requiring a Purchase Order (Global Shortage).
+     * <p>
+     * Logic: Aggregates total inventory across ALL bins (Bulk + Picking) and compares
+     * against the product's global safety threshold.
+     * </p>
      */
     @Query("SELECT COUNT(p) FROM Product p WHERE p.warehouse.id = :id AND p.active = true AND p.id IN (" +
             "SELECT i.product.id FROM InventoryItem i GROUP BY i.product.id HAVING SUM(i.quantity) <= p.minThreshold)")
-    Long countLowStock(@Param("id") String warehouseId);
+    Long countGlobalLowStock(@Param("id") String warehouseId);
 
     /**
-     * Generates a replenishment list of products that have hit their safety stock level.
+     * Operational Metric: Counts products that need to be moved from BULK to PICKING.
+     * <p>
+     * Logic: Identifies products where at least one PICK_FACE bin has fallen below
+     * its specific replenishment trigger.
+     * </p>
+     */
+    @Query("SELECT COUNT(DISTINCT p) FROM Product p JOIN p.inventoryItems i " +
+            "WHERE p.warehouse.id = :id " +
+            "AND i.storageBin.binType = com.infotact.warehouse.entity.enums.BinType.PICK_FACE " +
+            "AND i.quantity < p.minReplenishThreshold")
+    Long countProductsNeedingReplenishment(@Param("id") String warehouseId);
+
+    /**
+     * Generates a replenishment list for the internal movement queue.
+     * <p>
+     * Used by the ReplenishmentService to generate tasks for forklift operators
+     * to move stock from high-racks to ground-level bins.
+     * </p>
+     */
+    @Query("SELECT DISTINCT p FROM Product p JOIN p.inventoryItems i " +
+            "WHERE p.warehouse.id = :id AND p.active = true " +
+            "AND i.storageBin.binType = com.infotact.warehouse.entity.enums.BinType.PICK_FACE " +
+            "AND i.quantity < p.minReplenishThreshold")
+    List<Product> findProductsNeedingReplenishment(@Param("id") String warehouseId);
+
+    /**
+     * Procurement List: Products hitting safety stock levels.
      */
     @Query("SELECT p FROM Product p WHERE p.warehouse.id = :id AND p.active = true AND p.id IN (" +
             "SELECT i.product.id FROM InventoryItem i GROUP BY i.product.id HAVING SUM(i.quantity) <= p.minThreshold)")
-    List<Product> findLowStockProducts(@Param("id") String warehouseId);
+    List<Product> findGlobalLowStockProducts(@Param("id") String warehouseId);
 
     // --- Capacity Analytics (Used by Movement & Inventory Services) ---
 

@@ -6,13 +6,12 @@ import com.infotact.warehouse.dto.v1.response.ProductSupplierResponse;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.entity.User;
+import com.infotact.warehouse.entity.enums.BinType;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
-import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.repository.ProductSupplierRepository;
-import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.service.ProductService;
 import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +20,6 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,8 +34,11 @@ import java.util.stream.Collectors;
  * manager's warehouse.
  * </p>
  * <p>
- * Features include volumetric data pre-calculation, safety stock monitoring,
- * and vendor sourcing visibility.
+ * <b>Update Highlights (v3.2):</b>
+ * <ul>
+ *     <li><b>Replenishment Logic:</b> Captures {@code minReplenishThreshold} and {@code maxPickFaceCapacity} for automated Bulk-to-Picking moves.</li>
+ *     <li><b>Picking Health:</b> Dynamic response mapping now identifies if a product requires internal movement (needsReplenishment).</li>
+ * </ul>
  * </p>
  */
 @Slf4j
@@ -48,15 +49,13 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
-    private final UserRepository userRepository;
     private final ProductSupplierRepository productSupplierRepository;
     private final UserService userService;
-
 
     /**
      * {@inheritDoc}
      * <p>
-     * <b>Validation:</b> Enforces SKU uniqueness within the specific warehouse.
+     * <b>Validation:</b> Enforces SKU uniqueness within the specific warehouse context.
      * Verifies that the assigned category belongs to the same facility.
      * </p>
      */
@@ -71,7 +70,6 @@ public class ProductServiceImpl implements ProductService {
             throw new AlreadyExistsException("Product with SKU " + request.getSku() + " already exists in this facility.");
         }
 
-        // Verify category exists and belongs to the same warehouse
         ProductCategory category = categoryRepository.findByIdAndWarehouseId(request.getCategoryId(), warehouseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Specified Category is invalid or belongs to another warehouse."));
 
@@ -121,8 +119,7 @@ public class ProductServiceImpl implements ProductService {
     /**
      * {@inheritDoc}
      * <p>
-     * Updates product metadata. If the SKU is modified, uniqueness is re-validated
-     * within the warehouse context.
+     * Updates product metadata. Re-validates SKU uniqueness if the SKU is modified.
      * </p>
      */
     @Override
@@ -151,9 +148,6 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Returns a paginated view of the catalog specific to the current facility.
-     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -171,6 +165,9 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * {@inheritDoc}
+     * <p>
+     * Sets 'active' flag to false to preserve transaction history while disabling catalog access.
+     * </p>
      */
     @Override
     @Transactional
@@ -201,10 +198,7 @@ public class ProductServiceImpl implements ProductService {
 
     /**
      * Synchronizes DTO fields to the JPA entity.
-     * <p>
-     * Note: Volumetric data (unitVolume) is automatically recalculated
-     * via @PrePersist/@PreUpdate listeners in the Entity.
-     * </p>
+     * Includes inheritance of industrial replenishment thresholds.
      */
     private void updateProductFields(Product product, ProductRequest request) {
         product.setName(request.getName());
@@ -221,11 +215,12 @@ public class ProductServiceImpl implements ProductService {
         product.setLength(request.getLength());
         product.setWidth(request.getWidth());
         product.setHeight(request.getHeight());
-
         product.setBarcode(request.getBarcode());
 
-        // Operational Logic
+        // Replenishment & Safety Controls
         product.setMinThreshold(request.getMinThreshold() != null ? request.getMinThreshold() : 10);
+        product.setMinReplenishThreshold(request.getMinReplenishThreshold() != null ? request.getMinReplenishThreshold() : 5);
+        product.setMaxPickFaceCapacity(request.getMaxPickFaceCapacity() != null ? request.getMaxPickFaceCapacity() : 50);
         product.setMaxThreshold(request.getMaxThreshold());
 
         // Traceability
@@ -234,12 +229,18 @@ public class ProductServiceImpl implements ProductService {
     }
 
     /**
-     * Maps Entity to Response DTO including dynamic stock health checks.
+     * Maps Entity to Response DTO including dynamic health indicators for Bulk and Picking.
      */
     private ProductResponse mapToResponse(Product entity) {
-        // Calculate current stock levels for the low stock flag
-        long currentStock = entity.getInventoryItems() != null ?
+        // Calculate Total Warehouse Stock (Bulk + Picking) for reorder alerts
+        long totalStock = entity.getInventoryItems() != null ?
                 entity.getInventoryItems().stream().mapToLong(i -> (long) i.getQuantity()).sum() : 0L;
+
+        // Check if any PICK_FACE bin specifically is low (needs replenishment move)
+        boolean needsReplenishment = entity.getInventoryItems() != null &&
+                entity.getInventoryItems().stream()
+                        .filter(i -> i.getStorageBin().getBinType() == BinType.PICK_FACE)
+                        .anyMatch(i -> i.getQuantity() < entity.getMinReplenishThreshold());
 
         ProductResponse response = ProductResponse.builder()
                 .id(entity.getId())
@@ -253,12 +254,15 @@ public class ProductServiceImpl implements ProductService {
                 .length(entity.getLength())
                 .width(entity.getWidth())
                 .height(entity.getHeight())
-                .unitVolume(entity.getUnitVolume()) // Mapped from entity pre-calculation
+                .unitVolume(entity.getUnitVolume())
                 .barcode(entity.getBarcode())
                 .active(entity.isActive())
                 .minThreshold(entity.getMinThreshold())
+                .minReplenishThreshold(entity.getMinReplenishThreshold())
+                .maxPickFaceCapacity(entity.getMaxPickFaceCapacity())
                 .maxThreshold(entity.getMaxThreshold())
-                .isLowStock(currentStock <= entity.getMinThreshold()) // Dynamic health check
+                .isLowStock(totalStock <= entity.getMinThreshold())
+                .needsReplenishment(needsReplenishment) // Added indicator
                 .isSerialized(entity.isSerialized())
                 .isBatchTracked(entity.isBatchTracked())
                 .categoryId(entity.getCategory().getId())
@@ -267,7 +271,7 @@ public class ProductServiceImpl implements ProductService {
                 .updatedAt(entity.getUpdatedAt())
                 .build();
 
-        // Map Suppliers
+        // Vendor sourcing mapping
         response.setSourcingOptions(
                 productSupplierRepository.findByProductId(entity.getId()).stream()
                         .map(ps -> ProductSupplierResponse.builder()

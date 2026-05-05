@@ -3,6 +3,7 @@ package com.infotact.warehouse.entity;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.enums.AuditAction;
 import com.infotact.warehouse.entity.enums.AuditStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -13,11 +14,18 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "barcode_audit_logs")
-@Getter @Setter
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(callSuper = true) // Important for entities extending a base class
 public class BarcodeAudit extends BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Schema(description = "Internal unique identifier (UUID)")
+    private String id; // Fixed: Added the missing primary key identifier
 
     @Column(nullable = false)
     private String warehouseId;
@@ -44,4 +52,14 @@ public class BarcodeAudit extends BaseEntity {
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
+
+    /**
+     * Lifecycle hook to ensure the timestamp is captured at the moment of the event.
+     */
+    @PrePersist
+    protected void onCreate() {
+        if (this.timestamp == null) {
+            this.timestamp = LocalDateTime.now();
+        }
+    }
 }

@@ -4,6 +4,8 @@ import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.*;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.BinStatus;
+import com.infotact.warehouse.entity.enums.BinType;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import com.infotact.warehouse.exception.*;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.BarcodeService;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
  * <p>
  * Key Production Features:
  * <ul>
+ *     <li><b>Functional Inheritance:</b> Bins automatically inherit BinType (BULK vs PICK) from Zone classification.</li>
  *     <li><b>Hardware Safety:</b> Blocks barcode generation for inactive/broken equipment.</li>
  *     <li><b>Scan Optimization:</b> O(1) verification logic for mobile pickers.</li>
  *     <li><b>Aggregated Metrics:</b> Real-time capacity calculation for the Digital Twin UI.</li>
@@ -41,7 +44,9 @@ public class LayoutServiceImpl implements LayoutService {
     private final AisleRepository aisleRepository;
     private final WarehouseRepository warehouseRepository;
     private final BarcodeService barcodeService;
-
+    /**
+    {@inheritDoc}
+    */
     @Override
     @Transactional(readOnly = true)
     @Cacheable(value = "warehouseLayouts", key = "#id")
@@ -77,6 +82,9 @@ public class LayoutServiceImpl implements LayoutService {
                 .build();
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
@@ -86,6 +94,9 @@ public class LayoutServiceImpl implements LayoutService {
                 .map(this::mapToBinSummary);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -100,11 +111,15 @@ public class LayoutServiceImpl implements LayoutService {
 
         Zone zone = new Zone();
         zone.setName(request.name());
+        zone.setZoneType(request.zoneType()); // Updated for industrial classification
         zone.setWarehouse(warehouse);
         zone.setActive(true);
         zoneRepository.save(zone);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -124,6 +139,9 @@ public class LayoutServiceImpl implements LayoutService {
         aisleRepository.save(aisle);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
@@ -133,6 +151,16 @@ public class LayoutServiceImpl implements LayoutService {
                 .orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
 
         Warehouse warehouse = aisle.getZone().getWarehouse();
+
+        // Determine the inherited bin type from the parent zone's classification
+        ZoneType parentZoneType = aisle.getZone().getZoneType();
+        BinType defaultInheritedType = (parentZoneType == ZoneType.BULK) ?
+                BinType.BULK_STORAGE : BinType.PICK_FACE;
+
+        // Use override from request if provided; otherwise, apply inheritance
+        BinType finalBinType = (request.binTypeOverride() != null) ?
+                request.binTypeOverride() : defaultInheritedType;
+
         List<StorageBin> bins = new ArrayList<>();
         int sequence = 1;
         int createdCount = 0;
@@ -143,6 +171,7 @@ public class LayoutServiceImpl implements LayoutService {
             if (!binRepository.existsByBinCode(generatedCode)) {
                 StorageBin bin = StorageBin.builder()
                         .binCode(generatedCode)
+                        .binType(finalBinType) // Apply functional type
                         .maxVolume(request.defaultMaxVolume())
                         .maxWeightCapacity(request.defaultMaxWeight())
                         .currentVolumeOccupied(0.0)
@@ -161,6 +190,9 @@ public class LayoutServiceImpl implements LayoutService {
         binRepository.saveAll(bins);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
@@ -171,6 +203,9 @@ public class LayoutServiceImpl implements LayoutService {
         zoneRepository.save(zone);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
@@ -181,6 +216,9 @@ public class LayoutServiceImpl implements LayoutService {
         aisleRepository.save(aisle);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
@@ -192,8 +230,7 @@ public class LayoutServiceImpl implements LayoutService {
     }
 
     /**
-     * Retrieves high-resolution printable PNG data for a bin label.
-     * Industry Guard: Prevents generating labels for inactive/broken equipment.
+     {@inheritDoc}
      */
     @Override
     @Transactional(readOnly = true)
@@ -209,8 +246,7 @@ public class LayoutServiceImpl implements LayoutService {
     }
 
     /**
-     * Mobile Verification Engine.
-     * Compares raw laser data from handheld scanners against the expected bin record.
+     {@inheritDoc}
      */
     @Override
     @Transactional(readOnly = true)
@@ -222,6 +258,9 @@ public class LayoutServiceImpl implements LayoutService {
                 .orElse(false);
     }
 
+    /**
+     {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public String getBinCodeById(String binId) {
@@ -240,7 +279,7 @@ public class LayoutServiceImpl implements LayoutService {
                             .id(aisle.getId())
                             .code(aisle.getCode())
                             .active(aisle.isActive())
-                            .bins(Collections.emptySet()) // Bins lazy-loaded via drill-down
+                            .bins(Collections.emptySet())
                             .totalCapacity(m.capacity())
                             .currentOccupancy(m.occupancy())
                             .binCount(m.binCount().intValue())
@@ -251,6 +290,7 @@ public class LayoutServiceImpl implements LayoutService {
         return WarehouseLayoutResponse.ZoneSummary.builder()
                 .id(zone.getId())
                 .name(zone.getName())
+                .zoneType(zone.getZoneType()) // Updated
                 .active(zone.isActive())
                 .aisles(aisleDtos)
                 .totalCapacity(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getTotalCapacity).sum())
@@ -266,6 +306,7 @@ public class LayoutServiceImpl implements LayoutService {
         return WarehouseLayoutResponse.BinSummary.builder()
                 .id(bin.getId())
                 .binCode(bin.getBinCode())
+                .binType(bin.getBinType()) // Updated
                 .capacity(bin.getMaxVolume())
                 .currentOccupancy(bin.getCurrentVolumeOccupied())
                 .maxWeight(bin.getMaxWeightCapacity())

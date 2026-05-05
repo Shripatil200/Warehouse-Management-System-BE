@@ -1,13 +1,14 @@
 package com.infotact.warehouse.dto.v1.request;
 
+import com.infotact.warehouse.entity.enums.BinType;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 
 /**
  * Container for request records related to the physical configuration of a warehouse.
  * <p>
- * This class groups the requests for building the structural hierarchy:
- * Zones, Aisles, and Bins.
+ * Updated to include Zone and Bin typing for advanced Putaway and Replenishment logic.
  * </p>
  */
 @Schema(description = "Wrapper for warehouse structural configuration requests")
@@ -21,6 +22,10 @@ public class WarehouseLayoutRequest {
             @Schema(description = "Unique name for the zone", example = "Cold Storage")
             @NotBlank(message = "Zone name is required")
             String name,
+
+            @Schema(description = "Functional purpose of the zone", example = "BULK")
+            @NotNull(message = "Zone type is required")
+            ZoneType zoneType, // Added for industrial logic[cite: 1]
 
             @Schema(description = "The UUID of the parent warehouse facility")
             @NotBlank(message = "Warehouse ID is required")
@@ -47,12 +52,8 @@ public class WarehouseLayoutRequest {
 
     /**
      * Request to automate the creation of multiple storage bins.
-     * <p>
-     * <b>Update:</b> Now requires both volumetric and weight limits to
-     * initialize modern storage constraints.
-     * </p>
      */
-    @Schema(description = "Payload for bulk generating storage bins with physical constraints")
+    @Schema(description = "Payload for bulk generating storage bins with physical and functional constraints")
     public record BulkBinRequest(
             @NotBlank(message = "Warehouse ID is required")
             String warehouseId,
@@ -71,6 +72,9 @@ public class WarehouseLayoutRequest {
             @NotBlank(message = "Prefix is required")
             String prefix,
 
+            @Schema(description = "Optional: Override the default bin type inherited from the Zone", example = "PICK_FACE")
+            BinType binTypeOverride, // Added for granular control[cite: 1]
+
             @Schema(description = "Max physical volume for each bin in cm³", example = "100000.0")
             @NotNull(message = "Default volume capacity is required")
             @Positive
@@ -81,5 +85,4 @@ public class WarehouseLayoutRequest {
             @Positive
             Double defaultMaxWeight
     ) {}
-
 }

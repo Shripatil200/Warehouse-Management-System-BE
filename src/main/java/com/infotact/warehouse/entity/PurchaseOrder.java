@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -29,7 +30,7 @@ import java.util.List;
         @Index(name = "idx_po_status", columnList = "status"),
         @Index(name = "idx_po_expected", columnList = "expectedDate")
 })
-public class PurchaseOrder {
+public class PurchaseOrder extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

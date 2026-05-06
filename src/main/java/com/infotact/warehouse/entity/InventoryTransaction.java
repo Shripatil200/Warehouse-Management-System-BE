@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -28,7 +29,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Table(name = "inventory_transactions")
 @EntityListeners(AuditingEntityListener.class)
-public class InventoryTransaction {
+public class InventoryTransaction extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

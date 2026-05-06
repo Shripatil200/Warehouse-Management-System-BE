@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -29,7 +30,7 @@ import java.util.List;
         @Index(name = "idx_order_status", columnList = "status"),
         @Index(name = "idx_order_number", columnList = "orderNumber")
 })
-public class SellingOrder {
+public class SellingOrder extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

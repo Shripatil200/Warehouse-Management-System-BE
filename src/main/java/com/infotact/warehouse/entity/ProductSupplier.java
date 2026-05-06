@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.Getter;
@@ -20,7 +21,7 @@ import java.math.BigDecimal;
 @Setter
 @Entity
 @Table(name = "product_suppliers")
-public class ProductSupplier extends BaseEntity {
+public class ProductSupplier extends TenantAwareEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;

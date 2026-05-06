@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -23,21 +24,44 @@ public class TenantFilter extends OncePerRequestFilter {
 
     private final EntityManager entityManager;
 
+    // ✅ EXACT PUBLIC APIs (NO PREFIX MATCHING)
+    private static final Set<String> PUBLIC_APIS = Set.of(
+            "/api/v1/auth/login",
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/warehouses/setup",
+            "/api/v1/auth/otp/send-email",
+            "/api/v1/auth/otp/verify-email",
+            "/api/v1/auth/otp/send-contact",
+            "/api/v1/auth/otp/verify-contact",
+            "/v3/api-docs",
+            "/swagger-ui"
+    );
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
+        String path = request.getRequestURI();
+
         try {
 
+            // 🔥 STEP 1: SKIP public APIs
+            if (isPublicApi(path)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // 🔐 STEP 2: Extract tenant (only for protected APIs)
             String warehouseId = extractWarehouseId();
 
-            log.debug("TenantFilter → warehouse={}, path={}",
-                    warehouseId, request.getRequestURI());
+            log.debug("TenantFilter → warehouse={}, path={}", warehouseId, path);
 
             TenantContext.set(warehouseId);
 
+            // 🔥 STEP 3: Enable Hibernate filter
             Session session = entityManager.unwrap(Session.class);
 
             if (session.getEnabledFilter("warehouseFilter") == null) {
@@ -50,11 +74,23 @@ public class TenantFilter extends OncePerRequestFilter {
         } catch (Exception e) {
             log.error("TenantFilter error", e);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return;
+            response.getWriter().write("User not authenticated");
         } finally {
             TenantContext.clear();
         }
     }
+
+    // ============================================================
+    // PUBLIC API CHECK (EXACT MATCH)
+    // ============================================================
+
+    private boolean isPublicApi(String path) {
+        return PUBLIC_APIS.contains(path);
+    }
+
+    // ============================================================
+    // TENANT EXTRACTION (UNCHANGED CORE LOGIC)
+    // ============================================================
 
     private String extractWarehouseId() {
 

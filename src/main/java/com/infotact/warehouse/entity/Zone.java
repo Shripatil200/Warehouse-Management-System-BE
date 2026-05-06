@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -27,7 +28,7 @@ import java.util.Set;
 @Entity
 @Table(name = "zones")
 @EqualsAndHashCode(callSuper = true, exclude = {"warehouse", "aisles"})
-public class Zone extends BaseEntity {
+public class Zone extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

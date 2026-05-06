@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -35,7 +36,7 @@ import java.util.List;
                 @Index(name = "idx_category_warehouse", columnList = "warehouse_id")
         }
 )
-public class ProductCategory extends BaseEntity {
+public class ProductCategory extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

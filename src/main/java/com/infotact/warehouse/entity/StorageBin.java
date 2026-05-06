@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.entity.enums.BinType;
 import jakarta.persistence.*;
@@ -32,7 +33,7 @@ import java.util.List;
 })
 @EqualsAndHashCode(callSuper = true, exclude = {"aisle", "warehouse", "inventoryItems"})
 @Builder
-public class StorageBin extends BaseEntity {
+public class StorageBin extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

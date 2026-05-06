@@ -52,6 +52,8 @@ spring:
       ssl:
         enabled: ${REDIS_SSL_ENABLED:false}
 
+
+
 # Custom Application Properties
 app:
   cors:

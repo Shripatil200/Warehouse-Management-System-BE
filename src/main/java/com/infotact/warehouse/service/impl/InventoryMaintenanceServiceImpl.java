@@ -7,6 +7,7 @@ import com.infotact.warehouse.repository.InventoryRepository;
 import com.infotact.warehouse.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,11 +25,24 @@ public class InventoryMaintenanceServiceImpl implements InventoryMaintenanceServ
     private final ExpiryProcessor expiryProcessor;
     private final WarehouseService warehouseService;
 
+    // ============================================================
+    // SCHEDULED ENTRY POINT (DISTRIBUTED SAFE)
+    // ============================================================
+
     @Override
-    @Scheduled(cron = "0 0 2 * * ?")
+//    @Scheduled(fixedDelay = 10000)
+    @Scheduled(cron = "0 0 2 * * ?") // Runs daily at 2 AM
+    @SchedulerLock(name = "expiry_job", lockAtMostFor = "10m", lockAtLeastFor = "1m")
     public void quarantineExpiredStock() {
 
+        log.info("===== EXPIRY JOB STARTED =====");
+
         List<String> warehouseIds = warehouseService.getAllWarehouseIds();
+
+        if (warehouseIds.isEmpty()) {
+            log.info("No warehouses found. Skipping job.");
+            return;
+        }
 
         log.info("Expiry Guard started for {} warehouses", warehouseIds.size());
 
@@ -42,19 +56,24 @@ public class InventoryMaintenanceServiceImpl implements InventoryMaintenanceServ
                 processWarehouse(warehouseId);
 
             } catch (Exception ex) {
-                log.error("Warehouse failed: {}", warehouseId, ex);
+                log.error("Warehouse processing failed: {}", warehouseId, ex);
             } finally {
                 TenantContext.clear();
             }
         }
 
-        log.info("Expiry Guard completed");
+        log.info("===== EXPIRY JOB COMPLETED =====");
     }
+
+    // ============================================================
+    // CORE PROCESSING (BATCH SAFE)
+    // ============================================================
 
     private void processWarehouse(String warehouseId) {
 
         LocalDate today = LocalDate.now();
         int totalProcessed = 0;
+        int batchCount = 0;
 
         while (true) {
 
@@ -66,17 +85,28 @@ public class InventoryMaintenanceServiceImpl implements InventoryMaintenanceServ
                             BATCH_SIZE
                     );
 
-            if (batch.isEmpty()) break;
+            if (batch.isEmpty()) {
+                break;
+            }
+
+            batchCount++;
 
             for (InventoryItem item : batch) {
-                expiryProcessor.process(item.getId(), warehouseId);
+                try {
+                    expiryProcessor.process(item.getId(), warehouseId);
+                } catch (Exception ex) {
+                    log.error("Failed to process item id={} in warehouse={}",
+                            item.getId(), warehouseId, ex);
+                }
             }
 
             totalProcessed += batch.size();
 
-            log.info("Warehouse {} batch processed={}", warehouseId, batch.size());
+            log.info("Warehouse {} batch {} processed, size={}",
+                    warehouseId, batchCount, batch.size());
         }
 
-        log.info("Warehouse {} completed. Total={}", warehouseId, totalProcessed);
+        log.info("Warehouse {} completed. Total expired processed={}",
+                warehouseId, totalProcessed);
     }
 }

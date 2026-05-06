@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -26,7 +27,7 @@ import java.util.Set;
 @Entity
 @Table(name = "aisles")
 @EqualsAndHashCode(callSuper = true, exclude = {"zone", "bins"})
-public class Aisle extends BaseEntity {
+public class Aisle extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

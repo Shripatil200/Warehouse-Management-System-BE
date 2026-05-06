@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
@@ -34,7 +35,7 @@ import java.time.LocalDate;
                 @Index(name = "idx_inv_bin", columnList = "storage_bin_id")
         }
 )
-public class InventoryItem extends BaseEntity {
+public class InventoryItem extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

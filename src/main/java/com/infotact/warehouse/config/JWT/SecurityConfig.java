@@ -1,5 +1,6 @@
 package com.infotact.warehouse.config.JWT;
 
+import com.infotact.warehouse.config.TenantFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,13 +23,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Main security configuration class.
- * <p>
- * Configures stateless JWT authentication, CORS policies, and global
- * method security (@PreAuthorize).
- * </p>
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -36,49 +30,54 @@ public class SecurityConfig {
 
     private final UsersDetailsService usersDetailsService;
     private final JwtFilter jwtFilter;
+    private final TenantFilter tenantFilter;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
-    public SecurityConfig(UsersDetailsService usersDetailsService, JwtFilter jwtFilter) {
+
+    public SecurityConfig(UsersDetailsService usersDetailsService,
+                          JwtFilter jwtFilter,
+                          TenantFilter tenantFilter) {
         this.usersDetailsService = usersDetailsService;
         this.jwtFilter = jwtFilter;
+        this.tenantFilter = tenantFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
                 .authorizeHttpRequests(auth -> auth
-                        // Allow pre-flight OPTIONS requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Public Endpoints
                         .requestMatchers(
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/forgot-password",
-                                "/api/v1/auth/reset-password",
-                                "/api/v1/warehouses/setup",
-                                "/api/v1/auth/otp/send-email",
-                                "api/v1/auth/otp/verify-email",
-                                "api/v1/auth/otp/send-contact",
-                                "api/v1/auth/otp/verify-contact",
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**"
-                        ).permitAll()
-                        // Protected Endpoints (handled by @PreAuthorize in Controllers)
+                                        "/api/v1/auth/login",
+                                        "/api/v1/auth/forgot-password",
+                                        "/api/v1/auth/reset-password",
+                                        "/api/v1/warehouses/setup",
+                                        "/api/v1/auth/otp/send-email",
+                                        "/api/v1/auth/otp/verify-email",
+                                        "/api/v1/auth/otp/send-contact",
+                                        "/api/v1/auth/otp/verify-contact",
+                                        "/v3/api-docs/**",
+                                        "/swagger-ui/**"
+                                ).permitAll()
                         .anyRequest().authenticated()
                 )
+
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+
+
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(tenantFilter, JwtFilter.class);
 
         return http.build();
     }
 
-    /**
-     * Configures Cross-Origin Resource Sharing (CORS) for frontend connectivity.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

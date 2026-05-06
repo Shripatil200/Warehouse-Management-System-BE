@@ -1,8 +1,12 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 
 /**
@@ -13,10 +17,11 @@ import java.math.BigDecimal;
  * make data-driven decisions on which supplier to use for new Purchase Orders.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "product_suppliers")
-public class ProductSupplier extends BaseEntity {
+public class ProductSupplier extends TenantAwareEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
@@ -35,4 +40,7 @@ public class ProductSupplier extends BaseEntity {
 
     /** Expected days for delivery from this specific vendor. */
     private Integer leadTimeDays;
+
+    @ManyToOne
+    private Warehouse warehouse;
 }

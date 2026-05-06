@@ -1,9 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -15,7 +13,8 @@ import org.hibernate.annotations.DynamicUpdate;
  * records and coordinate stock deliveries.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor

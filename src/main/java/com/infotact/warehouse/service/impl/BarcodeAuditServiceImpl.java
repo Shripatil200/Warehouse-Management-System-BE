@@ -1,6 +1,8 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.entity.BarcodeAudit;
+import com.infotact.warehouse.entity.Warehouse;
 import com.infotact.warehouse.entity.enums.AuditAction;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.repository.BarcodeAuditRepository;
@@ -8,6 +10,7 @@ import com.infotact.warehouse.service.BarcodeAuditService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 
 @Service
@@ -16,25 +19,92 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
 
     private final BarcodeAuditRepository auditRepository;
 
-    @Async
+    // ============================================================
+    // SUCCESS LOG
+    // ============================================================
+
     @Override
-    public void logSuccess(String userId, String warehouseId, String binId, String orderId,
-                           AuditAction action, String scannedValue) {
-        saveLog(userId, warehouseId, binId, orderId, action, AuditStatus.SUCCESS, scannedValue, null);
+    public void logSuccess(String userId,
+                           String binId,
+                           String orderId,
+                           AuditAction action,
+                           String scannedValue) {
+
+        String warehouseId = TenantContext.get();
+
+        if (warehouseId == null) {
+            throw new IllegalStateException("Tenant missing in context");
+        }
+
+        logSuccessAsync(userId, warehouseId, binId, orderId, action, scannedValue);
     }
 
     @Async
-    @Override
-    public void logFailure(String userId, String warehouseId, String binId, String orderId,
-                           AuditAction action, String scannedValue, String errorReason) {
-        saveLog(userId, warehouseId, binId, orderId, action, AuditStatus.FAILURE, scannedValue, errorReason);
+    protected void logSuccessAsync(String userId,
+                                   String warehouseId,
+                                   String binId,
+                                   String orderId,
+                                   AuditAction action,
+                                   String scannedValue) {
+
+        saveLog(userId, warehouseId, binId, orderId, action,
+                AuditStatus.SUCCESS, scannedValue, null);
     }
 
-    private void saveLog(String userId, String warehouseId, String binId, String orderId,
-                         AuditAction action, AuditStatus status, String val, String err) {
+    // ============================================================
+    // FAILURE LOG (🔥 REQUIRED FIX)
+    // ============================================================
+
+    @Override
+    public void logFailure(String userId,
+                           String binId,
+                           String orderId,
+                           AuditAction action,
+                           String scannedValue,
+                           String errorReason) {
+
+        String warehouseId = TenantContext.get();
+
+        if (warehouseId == null) {
+            throw new IllegalStateException("Tenant missing in context");
+        }
+
+        logFailureAsync(userId, warehouseId, binId, orderId,
+                action, scannedValue, errorReason);
+    }
+
+    @Async
+    protected void logFailureAsync(String userId,
+                                   String warehouseId,
+                                   String binId,
+                                   String orderId,
+                                   AuditAction action,
+                                   String scannedValue,
+                                   String errorReason) {
+
+        saveLog(userId, warehouseId, binId, orderId, action,
+                AuditStatus.FAILURE, scannedValue, errorReason);
+    }
+
+    // ============================================================
+    // CORE LOGIC
+    // ============================================================
+
+    private void saveLog(String userId,
+                         String warehouseId,
+                         String binId,
+                         String orderId,
+                         AuditAction action,
+                         AuditStatus status,
+                         String val,
+                         String err) {
+
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+
         BarcodeAudit log = BarcodeAudit.builder()
                 .userId(userId)
-                .warehouseId(warehouseId)
+                .warehouse(warehouse)
                 .binId(binId)
                 .orderId(orderId)
                 .actionType(action)
@@ -43,6 +113,7 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
                 .errorMessage(err)
                 .timestamp(LocalDateTime.now())
                 .build();
+
         auditRepository.save(log);
     }
 }

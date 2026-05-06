@@ -17,10 +17,12 @@ spring:
     show-sql: true
     properties:
       hibernate:
+        format_sql: true
+
+        # ❌ DISABLED FOR MULTI-TENANT SAFETY
         cache:
-          use_second_level_cache: true
-          region:
-            factory_class: org.hibernate.cache.jcache.internal.JCacheRegionFactory
+          use_second_level_cache: false
+          use_query_cache: false
 
   # Mail Server Configuration (Gmail)
   mail:
@@ -41,7 +43,7 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
-  # Redis Infrastructure
+  # Redis Infrastructure (keep, but not used for Hibernate cache now)
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -49,6 +51,8 @@ spring:
       password: ${REDIS_PASSWORD:}
       ssl:
         enabled: ${REDIS_SSL_ENABLED:false}
+
+
 
 # Custom Application Properties
 app:
@@ -60,14 +64,12 @@ app:
     api:
       key: ${SMS_API_KEY}
   jwt:
-    # Ensure this matches the .env variable name exactly
     secret: ${JWT_SECRET_KEY:zdtlY0p3YjVxOHYvYj9FKEgrS2JQZVNnSmtWbk9xM3Q2dzl6JEMmRikpSk1OalFmVGpXbiZyNHU3eCF6JUMqRg==}
 
-# Logging Levels
+# Logging Configuration
 logging:
   level:
-    org:
-      springframework:
-        core:
-          env: DEBUG
-        security: INFO
+    com.infotact.warehouse: DEBUG          # 👈 your logs (TenantFilter, services)
+    org.hibernate.SQL: DEBUG               # 👈 SQL queries
+    org.hibernate.orm.jdbc.bind: TRACE     # 👈 query parameters (CRITICAL)
+    org.springframework.security: INFO

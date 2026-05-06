@@ -5,7 +5,6 @@ import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import com.infotact.warehouse.service.WarehouseService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,84 +16,153 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * REST controller for root-level warehouse management.
+ * REST controller for tenant-scoped warehouse management.
+ *
  * <p>
- * This controller manages the lifecycle of the warehouse facility itself.
- * It includes the critical 'Setup' endpoint which initializes the system's
- * primary facility and its first Administrative user.
+ * This controller enforces strict multi-tenant isolation.
+ * All operations (except setup) are automatically scoped to the
+ * authenticated user's warehouse via JWT and TenantContext.
+ * </p>
+ *
+ * <p>
+ * <b>Design Principle:</b> No API accepts warehouseId as input.
+ * The system determines tenant context internally.
  * </p>
  */
 @RestController
-@RequestMapping(path="/api/v1/warehouses")
+@RequestMapping(path = "/api/v1/warehouses")
 @RequiredArgsConstructor
-@Tag(name = "0. Warehouse Management", description = "Root operations for facility setup and lifecycle control")
+@Tag(name = "0. Warehouse Management", description = "Tenant-scoped operations for warehouse lifecycle and setup")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
 
+    // ============================================================
+    // SYSTEM SETUP (PUBLIC)
+    // ============================================================
+
     /**
-     * Initializes the system with a primary warehouse and an Admin account.
+     * Initializes the system with a warehouse and primary admin account.
+     *
      * <p>
-     * Logic: This is a <b>public</b> endpoint intended for first-time setup.
-     * It creates the Warehouse entity and simultaneously generates the Super Admin
-     * credentials required to manage the platform.
+     * This is a public endpoint used during first-time onboarding.
+     * It creates:
+     * <ul>
+     *     <li>Warehouse entity</li>
+     *     <li>Primary Admin user</li>
+     * </ul>
      * </p>
      *
-     * @param request Data containing warehouse details and admin contact info.
-     * @return The created warehouse profile.
+     * @param request onboarding payload containing warehouse + admin details
+     * @return created warehouse profile
      */
-    @Operation(summary = "Initial System Setup",
-            description = "Bootstrap endpoint to initialize the first warehouse facility and its primary Admin.")
+    @Operation(
+            summary = "Initial System Setup",
+            description = "Bootstrap endpoint to create the first warehouse and its Admin user"
+    )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "System initialized successfully"),
-            @ApiResponse(responseCode = "400", description = "Validation error or warehouse already exists")
+            @ApiResponse(responseCode = "201", description = "Warehouse created successfully"),
+            @ApiResponse(responseCode = "400", description = "Validation failed or resource already exists")
     })
     @PostMapping("/setup")
-    public ResponseEntity<WarehouseResponse> setup(@Valid @RequestBody CreateWarehouseRequest request){
-        System.out.println(request.getContactToken());
-        System.out.println(request.getEmailToken());
-        return ResponseEntity.status(HttpStatus.CREATED).body(warehouseService.createWarehouse(request));
+    public ResponseEntity<WarehouseResponse> setup(
+            @Valid @RequestBody CreateWarehouseRequest request) {
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(warehouseService.createWarehouse(request));
     }
 
+    // ============================================================
+    // CURRENT TENANT OPERATIONS
+    // ============================================================
+
     /**
-     * Re-activates a previously deactivated warehouse.
+     * Retrieves the warehouse associated with the current authenticated user.
      *
-     * @param id The UUID of the warehouse.
+     * @return tenant-specific warehouse details
      */
-    @Operation(summary = "Activate Warehouse", description = "Restores a warehouse to ACTIVE status.")
-    @PreAuthorize("hasRole('ADMIN')")
-    @PatchMapping("/{id}/activate")
-    public ResponseEntity<Void> activate(
-            @Parameter(description = "The UUID of the warehouse", example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable String id){
-        warehouseService.activateWarehouse(id);
-        return ResponseEntity.noContent().build();
+    @Operation(
+            summary = "Get Current Warehouse",
+            description = "Returns the warehouse linked to the authenticated user (tenant-safe)"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Warehouse fetched successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized access")
+    })
+    @GetMapping("/me")
+    public ResponseEntity<WarehouseResponse> getCurrentWarehouse() {
+        return ResponseEntity.ok(warehouseService.getCurrentWarehouse());
     }
 
     /**
-     * Deactivates a warehouse (Soft Delete).
+     * Updates metadata of the current tenant warehouse.
+     *
      * <p>
-     * Logic: Marks the warehouse as inactive. This prevents any new logins or
-     * operations associated with this facility.
+     * Only users with ADMIN role are authorized.
+     * </p>
+     *
+     * @param request updated warehouse details
+     * @return updated warehouse response
+     */
+    @Operation(
+            summary = "Update Warehouse",
+            description = "Updates the name and location of the current tenant warehouse"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Warehouse updated successfully"),
+            @ApiResponse(responseCode = "403", description = "Access denied (Admin only)")
+    })
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping
+    public ResponseEntity<WarehouseResponse> updateWarehouse(
+            @Valid @RequestBody WarehouseRequest request) {
+
+        return ResponseEntity.ok(warehouseService.updateWarehouse(request));
+    }
+
+    /**
+     * Activates the current tenant warehouse.
+     *
+     * <p>
+     * Restores operational state.
      * </p>
      */
-    @Operation(summary = "Deactivate Warehouse", description = "Performs a soft delete by deactivating the facility.")
+    @Operation(
+            summary = "Activate Warehouse",
+            description = "Marks the current tenant warehouse as ACTIVE"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Warehouse activated successfully"),
+            @ApiResponse(responseCode = "403", description = "Access denied (Admin only)")
+    })
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deactivate(@PathVariable String id) {
-        warehouseService.deactivateWarehouse(id);
+    @PatchMapping("/activate")
+    public ResponseEntity<Void> activateWarehouse() {
+        warehouseService.activateWarehouse();
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * Updates warehouse metadata (name, location, etc.).
+     * Deactivates the current tenant warehouse.
+     *
+     * <p>
+     * This is a soft-delete operation.
+     * All operations will be blocked for this warehouse.
+     * </p>
      */
-    @Operation(summary = "Update Warehouse", description = "Updates the physical details of the warehouse facility.")
+    @Operation(
+            summary = "Deactivate Warehouse",
+            description = "Performs soft delete by deactivating the current warehouse"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Warehouse deactivated successfully"),
+            @ApiResponse(responseCode = "403", description = "Access denied (Admin only)")
+    })
     @PreAuthorize("hasRole('ADMIN')")
-    @PutMapping("/{id}")
-    public ResponseEntity<WarehouseResponse> update(
-            @PathVariable String id,
-            @Valid @RequestBody WarehouseRequest request){
-        return ResponseEntity.ok(warehouseService.updateWarehouse(id, request));
+    @DeleteMapping
+    public ResponseEntity<Void> deactivateWarehouse() {
+        warehouseService.deactivateWarehouse();
+        return ResponseEntity.noContent().build();
     }
 }

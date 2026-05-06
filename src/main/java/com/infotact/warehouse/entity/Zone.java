@@ -1,12 +1,10 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -21,7 +19,8 @@ import java.util.Set;
  * It acts as the primary parent for all physical rows (Aisles) within that area.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor
@@ -29,7 +28,7 @@ import java.util.Set;
 @Entity
 @Table(name = "zones")
 @EqualsAndHashCode(callSuper = true, exclude = {"warehouse", "aisles"})
-public class Zone extends BaseEntity {
+public class Zone extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -62,8 +61,8 @@ public class Zone extends BaseEntity {
     /**
      * The parent warehouse facility containing this zone.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
     /**

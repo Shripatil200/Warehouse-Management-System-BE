@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.entity.enums.BinType;
 import jakarta.persistence.*;
@@ -18,7 +19,8 @@ import java.util.List;
  * overruns during simultaneous stock movements.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor
@@ -31,7 +33,7 @@ import java.util.List;
 })
 @EqualsAndHashCode(callSuper = true, exclude = {"aisle", "warehouse", "inventoryItems"})
 @Builder
-public class StorageBin extends BaseEntity {
+public class StorageBin extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -86,8 +88,8 @@ public class StorageBin extends BaseEntity {
     /**
      * Multi-Tenant Isolation: Direct link to the parent Warehouse.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
     @OneToMany(mappedBy = "storageBin", cascade = CascadeType.ALL)

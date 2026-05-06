@@ -1,11 +1,9 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -20,7 +18,8 @@ import java.util.Set;
  * and is always anchored to a specific {@link Zone}.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor
@@ -28,7 +27,7 @@ import java.util.Set;
 @Entity
 @Table(name = "aisles")
 @EqualsAndHashCode(callSuper = true, exclude = {"zone", "bins"})
-public class Aisle extends BaseEntity {
+public class Aisle extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -58,6 +57,9 @@ public class Aisle extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "zone_id")
     private Zone zone;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    private Warehouse warehouse;
 
     /**
      * The collection of physical storage slots (bins) assigned to this aisle.

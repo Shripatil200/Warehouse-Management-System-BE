@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
@@ -10,7 +11,8 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-@Data
+@Getter
+@Setter
 @Entity
 @DynamicUpdate
 @DynamicInsert
@@ -33,7 +35,7 @@ import java.time.LocalDate;
                 @Index(name = "idx_inv_bin", columnList = "storage_bin_id")
         }
 )
-public class InventoryItem extends BaseEntity {
+public class InventoryItem extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -76,6 +78,10 @@ public class InventoryItem extends BaseEntity {
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal purchasePrice;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
 
     /**
      * Helper to calculate pickable stock.

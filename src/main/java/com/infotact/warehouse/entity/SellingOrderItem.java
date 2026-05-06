@@ -1,9 +1,8 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -20,14 +19,15 @@ import java.math.BigDecimal;
  * If the master Product price changes, this record preserves what the customer paid.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
 @Table(name = "order_items")
-public class SellingOrderItem {
+public class SellingOrderItem extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

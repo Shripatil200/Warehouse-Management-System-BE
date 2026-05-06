@@ -1,10 +1,9 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -23,13 +22,14 @@ import java.time.LocalDateTime;
  * For INBOUND, this is the purchase price; for OUTBOUND, it is the selling price.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "inventory_transactions")
 @EntityListeners(AuditingEntityListener.class)
-public class InventoryTransaction {
+public class InventoryTransaction extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -108,4 +108,8 @@ public class InventoryTransaction {
      */
     @Column(precision = 19, scale = 4)
     private BigDecimal unitPrice;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
 }

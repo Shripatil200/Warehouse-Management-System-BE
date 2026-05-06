@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -16,7 +17,8 @@ import java.util.List;
  * Designed for multi-tenant isolation, ensuring SKUs are unique per warehouse.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
@@ -31,7 +33,7 @@ import java.util.List;
                 @Index(name = "idx_product_warehouse", columnList = "warehouse_id")
         }
 )
-public class Product extends BaseEntity {
+public class Product extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -2,10 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -21,7 +18,8 @@ import java.util.Set;
  * partition data across the entire platform.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor

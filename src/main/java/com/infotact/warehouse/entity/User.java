@@ -1,13 +1,11 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -19,7 +17,8 @@ import org.hibernate.annotations.DynamicUpdate;
  * isolation where staff can only view and manage stock within their assigned facility.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor

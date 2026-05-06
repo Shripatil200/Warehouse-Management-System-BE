@@ -1,10 +1,9 @@
 package com.infotact.warehouse.entity;
 
+import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -19,7 +18,8 @@ import java.util.List;
  * shipments physically arrive at the loading dock.
  * </p>
  */
-@Data
+@Getter
+@Setter
 @DynamicUpdate
 @DynamicInsert
 @NoArgsConstructor
@@ -30,7 +30,7 @@ import java.util.List;
         @Index(name = "idx_po_status", columnList = "status"),
         @Index(name = "idx_po_expected", columnList = "expectedDate")
 })
-public class PurchaseOrder {
+public class PurchaseOrder extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

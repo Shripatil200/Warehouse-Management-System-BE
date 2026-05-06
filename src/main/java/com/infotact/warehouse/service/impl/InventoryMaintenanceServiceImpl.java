@@ -1,14 +1,15 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.entity.InventoryItem;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.repository.InventoryRepository;
-import com.infotact.warehouse.service.InventoryMaintenanceService;
+import com.infotact.warehouse.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,32 +19,94 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InventoryMaintenanceServiceImpl implements InventoryMaintenanceService {
 
+    private static final int BATCH_SIZE = 200;
+
     private final InventoryRepository inventoryRepository;
+    private final ExpiryProcessor expiryProcessor;
+    private final WarehouseService warehouseService;
+
+    // ============================================================
+    // SCHEDULED ENTRY POINT (DISTRIBUTED SAFE)
+    // ============================================================
 
     @Override
-    @Transactional
-    @Scheduled(cron = "0 0 2 * * ?") // Runs at 2 AM every day
+//    @Scheduled(fixedDelay = 10000)
+    @Scheduled(cron = "0 0 2 * * ?") // Runs daily at 2 AM
+    @SchedulerLock(name = "expiry_job", lockAtMostFor = "10m", lockAtLeastFor = "1m")
     public void quarantineExpiredStock() {
-        log.info("System Task: Starting Expiry Guard sweep...");
 
-        LocalDate today = LocalDate.now();
+        log.info("===== EXPIRY JOB STARTED =====");
 
-        // Use the FEFO-related logic already supported by your repository
-        List<InventoryItem> expiredItems = inventoryRepository.findAllByStatusAndExpiryDateBefore(
-                InventoryStatus.AVAILABLE, today);
+        List<String> warehouseIds = warehouseService.getAllWarehouseIds();
 
-        if (expiredItems.isEmpty()) {
-            log.info("Expiry Guard: No expired stock detected.");
+        if (warehouseIds.isEmpty()) {
+            log.info("No warehouses found. Skipping job.");
             return;
         }
 
-        expiredItems.forEach(item -> {
-            log.warn("ACTION REQUIRED: Stock Expired [ID: {}, SKU: {}, Batch: {}]",
-                    item.getId(), item.getProduct().getSku(), item.getBatchNumber());
-            item.setStatus(InventoryStatus.EXPIRED);
-        });
+        log.info("Expiry Guard started for {} warehouses", warehouseIds.size());
 
-        inventoryRepository.saveAll(expiredItems);
-        log.info("Expiry Guard: Successfully quarantined {} items.", expiredItems.size());
+        for (String warehouseId : warehouseIds) {
+
+            try {
+                TenantContext.set(warehouseId);
+
+                log.info("Processing warehouse {}", warehouseId);
+
+                processWarehouse(warehouseId);
+
+            } catch (Exception ex) {
+                log.error("Warehouse processing failed: {}", warehouseId, ex);
+            } finally {
+                TenantContext.clear();
+            }
+        }
+
+        log.info("===== EXPIRY JOB COMPLETED =====");
+    }
+
+    // ============================================================
+    // CORE PROCESSING (BATCH SAFE)
+    // ============================================================
+
+    private void processWarehouse(String warehouseId) {
+
+        LocalDate today = LocalDate.now();
+        int totalProcessed = 0;
+        int batchCount = 0;
+
+        while (true) {
+
+            List<InventoryItem> batch =
+                    inventoryRepository.lockNextExpiredBatch(
+                            InventoryStatus.AVAILABLE.name(),
+                            today,
+                            warehouseId,
+                            BATCH_SIZE
+                    );
+
+            if (batch.isEmpty()) {
+                break;
+            }
+
+            batchCount++;
+
+            for (InventoryItem item : batch) {
+                try {
+                    expiryProcessor.process(item.getId(), warehouseId);
+                } catch (Exception ex) {
+                    log.error("Failed to process item id={} in warehouse={}",
+                            item.getId(), warehouseId, ex);
+                }
+            }
+
+            totalProcessed += batch.size();
+
+            log.info("Warehouse {} batch {} processed, size={}",
+                    warehouseId, batchCount, batch.size());
+        }
+
+        log.info("Warehouse {} completed. Total expired processed={}",
+                warehouseId, totalProcessed);
     }
 }

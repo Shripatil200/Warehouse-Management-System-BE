@@ -4,120 +4,216 @@ import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.entity.InventoryItem;
 import jakarta.validation.Valid;
+
 import java.util.List;
 
 /**
- * Service interface for managing physical stock movements and inventory integrity.
+ * Core service responsible for managing physical stock movements and ensuring
+ * inventory integrity across a multi-tenant warehouse system.
+ *
  * <p>
- * This service handles high-concurrency logic for stock acquisition (Receiving),
- * internal movement, and secure fulfillment. It ensures the digital "Digital Twin"
- * of the stock matches physical reality through strict FEFO logic and
- * mandatory scan-validation protocols.
+ * This service represents the transactional backbone of the WMS (Warehouse Management System).
+ * It enforces strict rules for:
+ * </p>
+ *
+ * <ul>
+ *   <li><b>Cost Layering:</b> Each inventory record represents a distinct financial and physical layer.</li>
+ *   <li><b>FEFO Picking:</b> Stock is allocated based on earliest expiry to minimize waste.</li>
+ *   <li><b>Concurrency Safety:</b> All critical operations use pessimistic locking.</li>
+ *   <li><b>Tenant Isolation:</b> All operations are scoped to the current warehouse via TenantContext.</li>
+ *   <li><b>Traceability:</b> Every stock movement generates an immutable transaction record.</li>
+ * </ul>
+ *
+ * <p><b>Inventory Layer Definition:</b></p>
+ * A single {@link InventoryItem} is uniquely identified by:
+ *
+ * <pre>
+ * (product + storageBin + batchNumber + purchasePrice + expiryDate)
+ * </pre>
+ *
+ * <p>
+ * This ensures accurate cost tracking, FEFO compliance, and audit traceability.
  * </p>
  */
 public interface InventoryService {
 
     /**
-     * Processes the inbound receipt of goods into the warehouse.
-     * <p>
-     * <b>Workflow:</b>
-     * 1. <b>Smart Putaway:</b> Finds an optimal location based on product category.
-     * 2. <b>Volumetric Check:</b> Ensures weight and volume fit the physical bin[cite: 1].
-     * 3. <b>Cost Layering:</b> Creates a new record if Batch or Expiry differs from existing stock[cite: 1].
-     * </p>
+     * Processes inbound stock into the warehouse using smart putaway logic.
      *
-     * @param request Data containing Product ID, Quantity, and Batch metadata.
+     * <p><b>Core Behavior:</b></p>
+     * <ul>
+     *   <li>Selects optimal bin based on capacity, product affinity, and zone.</li>
+     *   <li>Validates volumetric and weight constraints.</li>
+     *   <li>Ensures strict cost-layering rules.</li>
+     * </ul>
+     *
+     * <p><b>Cost Layering Rules (CRITICAL):</b></p>
+     *
+     * <ul>
+     *   <li>If an existing layer matches:
+     *     <pre>
+     *     product + bin + batch + purchasePrice + expiryDate
+     *     </pre>
+     *     → quantity is incremented (merge).</li>
+     *
+     *   <li>If ANY attribute differs:
+     *     <ul>
+     *       <li>batch number</li>
+     *       <li>expiry date</li>
+     *       <li><b>purchase price</b></li>
+     *     </ul>
+     *     → a NEW inventory layer is created.</li>
+     * </ul>
+     *
+     * <p><b>Duplicate Layer Prevention:</b></p>
+     * Prevents multiple rows representing the same logical stock layer.
+     * Ensures:
+     *
+     * <pre>
+     * SAME layer → UPDATE
+     * DIFFERENT cost → NEW layer
+     * </pre>
+     *
+     * <p><b>Example:</b></p>
+     * <ul>
+     *   <li>100 units @ $30 → Layer 1</li>
+     *   <li>100 units @ $40 → Layer 2 (NOT merged)</li>
+     * </ul>
+     *
+     * @param request inbound shipment details
      */
     void receiveShipment(@Valid ReceivingRequest request);
 
     /**
-     * Performs a manual correction of stock levels for a specific inventory layer.
-     * <p>
-     * <b>Process:</b>
-     * Uses Pessimistic Locking to prevent race conditions during manual audits[cite: 1].
-     * Automatically adjusts the associated bin occupancy metrics[cite: 1].
-     * </p>
+     * Performs manual inventory correction.
      *
-     * @param request Payload containing Inventory UUID, adjustment delta, and reason.
+     * <p><b>Safety Guarantees:</b></p>
+     * <ul>
+     *   <li>Pessimistic locking ensures no concurrent modification.</li>
+     *   <li>Prevents negative stock levels.</li>
+     *   <li>Automatically syncs bin weight/volume metrics.</li>
+     * </ul>
+     *
+     * <p><b>Use Cases:</b></p>
+     * <ul>
+     *   <li>Cycle counting discrepancies</li>
+     *   <li>Damaged goods removal</li>
+     *   <li>Stock corrections</li>
+     * </ul>
      */
     void adjustStock(@Valid InventoryAdjustmentRequest request);
 
     /**
-     * Reserves stock using FEFO (First-Expiry-First-Out) logic.
-     * <p>
-     * <b>Industry Purpose:</b> Soft-locks the oldest expiring items first to minimize waste[cite: 1].
-     * Returns the specific inventory layers and their Bin IDs to guide pickers[cite: 1].
-     * </p>
+     * Reserves stock using FEFO (First Expiry First Out).
      *
-     * @param productId The UUID of the product to reserve.
-     * @param quantity The total quantity required for the order.
-     * @return A list of specific {@link InventoryItem} layers reserved[cite: 1].
+     * <p><b>Behavior:</b></p>
+     * <ul>
+     *   <li>Allocates stock from earliest expiry layers first.</li>
+     *   <li>Reserves only AVAILABLE inventory.</li>
+     *   <li>Triggers automatic replenishment if pick-face stock is insufficient.</li>
+     * </ul>
+     *
+     * <p><b>Concurrency:</b></p>
+     * <ul>
+     *   <li>Each inventory layer is locked during reservation.</li>
+     *   <li>Prevents double allocation under high concurrency.</li>
+     * </ul>
+     *
+     * @param productId product identifier
+     * @param quantity quantity to reserve
+     * @return list of reserved inventory layers
      */
     List<InventoryItem> reserveStock(String productId, Integer quantity);
 
     /**
-     * Releases a soft-lock reservation, returning items to the available pool.
-     * <p>
-     * Typically used when an order is cancelled or a picker discovers damaged goods[cite: 1].
-     * </p>
+     * Releases previously reserved stock.
      *
-     * @param inventoryItemId The digital record ID to release.
-     * @param quantity The quantity to return to 'Available' status.
+     * <p><b>Use Cases:</b></p>
+     * <ul>
+     *   <li>Order cancellation</li>
+     *   <li>Picking failure</li>
+     *   <li>Damage discovered during picking</li>
+     * </ul>
+     *
+     * <p><b>Safety:</b></p>
+     * <ul>
+     *   <li>Prevents reserved quantity from going negative.</li>
+     * </ul>
      */
     void releaseReservation(String inventoryItemId, Integer quantity);
 
     /**
-     * <b>SECURE FULFILLMENT:</b> Commits a pick only after physical verification.
-     * <p>
-     * <b>Verification Protocol:</b>
-     * 1. Validates that the physical bin scan matches the reserved location[cite: 1].
-     * 2. Validates that the physical product scan matches the required SKU.
-     * </p>
+     * Secure picking operation with physical verification.
      *
-     * @param inventoryItemId The digital record ID.
-     * @param scannedBinCode The raw barcode text from the physical rack scan.
-     * @param scannedSku The raw barcode text from the product sticker scan.
-     * @param quantity The quantity physically picked.
+     * <p><b>Validation Steps:</b></p>
+     * <ol>
+     *   <li>Validate scanned bin matches reserved bin.</li>
+     *   <li>Validate scanned SKU matches product.</li>
+     * </ol>
+     *
+     * <p><b>Purpose:</b></p>
+     * Prevents:
+     * <ul>
+     *   <li>Wrong bin picking</li>
+     *   <li>Wrong product picking</li>
+     * </ul>
      */
-    void commitPickWithVerification(String inventoryItemId, String scannedBinCode, String scannedSku, Integer quantity);
+    void commitPickWithVerification(
+            String inventoryItemId,
+            String scannedBinCode,
+            String scannedSku,
+            Integer quantity
+    );
 
     /**
-     * Finalizes physical deduction of stock from a specific inventory layer.
-     * <p>
-     * Decrements physical stock, releases the soft-lock, and updates bin metrics[cite: 1].
-     * </p>
+     * Finalizes stock deduction from a specific inventory layer.
      *
-     * @param inventoryItemId The ID of the inventory record being picked.
-     * @param quantity The amount being removed from the warehouse.
+     * <p><b>Behavior:</b></p>
+     * <ul>
+     *   <li>Decreases physical quantity</li>
+     *   <li>Releases reserved quantity</li>
+     *   <li>Updates bin metrics</li>
+     * </ul>
+     *
+     * <p><b>Safety:</b></p>
+     * <ul>
+     *   <li>Prevents over-picking (reserved < quantity)</li>
+     * </ul>
      */
     void commitPick(String inventoryItemId, Integer quantity);
 
     /**
-     * Executes an internal stock transfer between physical locations.
-     * <p>
-     * <b>Industrial Use Case:</b> Primarily used for <i>Replenishment</i> (moving stock
-     * from BULK_STORAGE to PICK_FACE) or <i>Consolidation</i> (merging partially
-     * filled bins to optimize space).
-     * </p>
-     * <p>
-     * <b>Operational Logic:</b>
-     * 1. <b>Atomic Execution:</b> Uses transactional locking to prevent stock being
-     *    "double-picked" or "over-filled" during the move.
-     * 2. <b>Metric Synchronization:</b> Automatically updates the volume and weight
-     *    load for both the source and target bins.
-     * 3. <b>Traceability:</b> Generates a 'TRANSFER' type record in the immutable ledger.
-     * </p>
+     * Moves stock between bins (internal transfer).
      *
-     * @param sourceItemId The UUID of the specific stock layer (batch/cost) to move.
-     * @param targetBinId  The UUID of the destination bin.
-     * @param quantity     The number of units to transfer.
-     * @throws com.infotact.warehouse.exception.IllegalOperationException if source stock is insufficient.
-     * @throws com.infotact.warehouse.exception.ResourceNotFoundException if IDs are invalid.
+     * <p><b>Use Cases:</b></p>
+     * <ul>
+     *   <li>Replenishment (Bulk → Pick Face)</li>
+     *   <li>Consolidation</li>
+     * </ul>
+     *
+     * <p><b>Critical Rules:</b></p>
+     * <ul>
+     *   <li>Preserves cost layer (price, batch, expiry MUST remain same)</li>
+     *   <li>Locks both source and destination bins</li>
+     *   <li>Atomic operation (all-or-nothing)</li>
+     * </ul>
      */
     void internalStockTransfer(String sourceItemId, String targetBinId, Integer quantity);
 
     /**
-     * Automated Replenishment Logic: Pulls from BULK_STORAGE to refill PICK_FACE.
+     * Automated replenishment logic.
+     *
+     * <p><b>Behavior:</b></p>
+     * <ul>
+     *   <li>Pulls stock from BULK_STORAGE</li>
+     *   <li>Moves it to PICK_FACE</li>
+     *   <li>Maintains FEFO order</li>
+     * </ul>
+     *
+     * <p><b>Trigger:</b></p>
+     * <ul>
+     *   <li>Called automatically when pick-face stock is below threshold</li>
+     * </ul>
      */
     void replenishPickingFace(String productId, String targetBinId, Integer desiredQty);
 }

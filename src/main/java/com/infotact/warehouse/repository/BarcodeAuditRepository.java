@@ -22,11 +22,16 @@ public interface BarcodeAuditRepository extends JpaRepository<BarcodeAudit, Stri
     /**
      * Finds barcode audit logs with optional filters for User and Status.
      */
-    @Query("SELECT b FROM BarcodeAudit b WHERE " +
-            "(:userId IS NULL OR b.userId = :userId) AND " +
-            "(:status IS NULL OR b.status = :status)")
+    @Query("""
+    SELECT b FROM BarcodeAudit b
+    WHERE b.warehouse.id = :warehouseId
+      AND (:userId IS NULL OR b.userId = :userId)
+      AND (:status IS NULL OR b.status = :status)
+""")
     Page<BarcodeAudit> findFilteredAudits(
-            @Param("userId") String userId,
+            @Param("warehouseId") String warehouseId,
             @Param("status") AuditStatus status,
-            Pageable pageable);
+            @Param("userId") String userId,
+            Pageable pageable
+    );
 }

@@ -136,12 +136,12 @@ public class OrderServiceImpl implements OrderService {
                 inventoryService.commitPick(item.getInventoryItemId(), item.getQuantity());
 
                 // AUDIT LOG: Success
-                auditService.logSuccess(operator.getId(), warehouseId, item.getSuggestedBinId(),
+                auditService.logSuccess(operator.getId(), item.getSuggestedBinId(),
                         orderId, AuditAction.PICKING, scannedBinCode);
 
             } catch (IllegalOperationException e) {
                 // AUDIT LOG: Failure (Logs exactly what went wrong)
-                auditService.logFailure(operator.getId(), warehouseId, item.getSuggestedBinId(),
+                auditService.logFailure(operator.getId(), item.getSuggestedBinId(),
                         orderId, AuditAction.PICKING, scannedBinCode, e.getMessage());
                 throw e;
             }

@@ -1,5 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.*;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
@@ -24,15 +25,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Industry-Grade Service implementation for warehouse layout orchestration.
+ * Production-grade tenant-safe implementation of {@link LayoutService}.
+ *
  * <p>
- * Key Production Features:
+ * Enforces strict multi-tenant isolation:
  * <ul>
- *     <li><b>Functional Inheritance:</b> Bins automatically inherit BinType (BULK vs PICK) from Zone classification.</li>
- *     <li><b>Hardware Safety:</b> Blocks barcode generation for inactive/broken equipment.</li>
- *     <li><b>Scan Optimization:</b> O(1) verification logic for mobile pickers.</li>
- *     <li><b>Aggregated Metrics:</b> Real-time capacity calculation for the Digital Twin UI.</li>
+ *     <li>No external warehouseId usage</li>
+ *     <li>All operations scoped via {@link TenantContext}</li>
+ *     <li>Cross-entity ownership validation enforced</li>
  * </ul>
+ * </p>
  */
 @Slf4j
 @Service
@@ -44,19 +46,36 @@ public class LayoutServiceImpl implements LayoutService {
     private final AisleRepository aisleRepository;
     private final WarehouseRepository warehouseRepository;
     private final BarcodeService barcodeService;
+
+    // ============================================================
+    // READ: FULL LAYOUT
+    // ============================================================
+
     /**
-    {@inheritDoc}
-    */
+     * {@inheritDoc}
+     *
+     * <p>
+     * Retrieves warehouse layout for the current tenant only.
+     * Uses tenant-scoped cache.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "warehouseLayouts", key = "#id")
-    public WarehouseLayoutResponse getWarehouseLayout(String id) {
-        log.info("Generating layout metrics for Warehouse: {}", id);
+    @Cacheable(
+            value = "warehouseLayouts",
+            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+    )
+    public WarehouseLayoutResponse getWarehouseLayout() {
 
-        Warehouse warehouse = warehouseRepository.findOptimizedLayout(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found: " + id));
+        String warehouseId = getCurrentWarehouseId();
 
-        List<Object[]> metricsResults = warehouseRepository.findAllAisleMetricsByWarehouseId(id);
+        log.info("Generating layout for tenant warehouse: {}", warehouseId);
+
+        Warehouse warehouse = warehouseRepository.findOptimizedLayout(warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+
+        List<Object[]> metricsResults =
+                warehouseRepository.findAllAisleMetricsByWarehouseId(warehouseId);
 
         Map<String, AisleMetrics> metricsMap = metricsResults.stream().collect(Collectors.toMap(
                 row -> (String) row[0],
@@ -64,14 +83,13 @@ public class LayoutServiceImpl implements LayoutService {
                         (row[1] == null) ? 0.0 : ((Number) row[1]).doubleValue(),
                         (row[2] == null) ? 0.0 : ((Number) row[2]).doubleValue(),
                         (row[3] == null) ? 0L : ((Number) row[3]).longValue()
-                ),
-                (existing, replacement) -> existing
+                )
         ));
 
-        List<WarehouseLayoutResponse.ZoneSummary> zoneDtos = warehouse.getZones().stream()
-                .map(zone -> mapToZoneDto(zone, metricsMap))
-                .sorted(Comparator.comparing(WarehouseLayoutResponse.ZoneSummary::getName))
-                .toList();
+        List<WarehouseLayoutResponse.ZoneSummary> zoneDtos =
+                warehouse.getZones().stream()
+                        .map(zone -> mapToZoneDto(zone, metricsMap))
+                        .toList();
 
         return WarehouseLayoutResponse.builder()
                 .id(warehouse.getId())
@@ -82,96 +100,131 @@ public class LayoutServiceImpl implements LayoutService {
                 .build();
     }
 
+    // ============================================================
+    // READ: BINS
+    // ============================================================
+
     /**
-     {@inheritDoc}
+     * {@inheritDoc}
      */
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable) {
-        log.debug("Drilling down into bins for Aisle: {}", aisleId);
-        return binRepository.findByAisleId(aisleId, pageable)
-                .map(this::mapToBinSummary);
+
+        Aisle aisle = getValidatedAisle(aisleId);
+
+        return binRepository.findByAisleIdAndWarehouseId(
+                aisle.getId(),
+                getCurrentWarehouseId(),
+                pageable
+        ).map(this::mapToBinSummary);
     }
 
+    // ============================================================
+    // WRITE: ZONE
+    // ============================================================
+
     /**
-     {@inheritDoc}
+     * {@inheritDoc}
      */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    @CacheEvict(value = "warehouseLayouts", key = "#request.warehouseId()")
+    @CacheEvict(
+            value = "warehouseLayouts",
+            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+    )
     public void addZoneToWarehouse(ZoneRequest request) {
-        Warehouse warehouse = warehouseRepository.findById(request.warehouseId())
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
 
-        if(zoneRepository.existsByNameAndWarehouseId(request.name(), request.warehouseId())){
-            throw new AlreadyExistsException("Zone '" + request.name() + "' exists in this warehouse.");
+        Warehouse warehouse = getCurrentWarehouse();
+
+        if (zoneRepository.existsByNameAndWarehouseId(request.name(), warehouse.getId())) {
+            throw new AlreadyExistsException("Zone already exists in warehouse");
         }
 
         Zone zone = new Zone();
         zone.setName(request.name());
-        zone.setZoneType(request.zoneType()); // Updated for industrial classification
+        zone.setZoneType(request.zoneType());
         zone.setWarehouse(warehouse);
         zone.setActive(true);
+
         zoneRepository.save(zone);
     }
 
+    // ============================================================
+    // WRITE: AISLE
+    // ============================================================
+
     /**
-     {@inheritDoc}
+     * {@inheritDoc}
      */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    @CacheEvict(value = "warehouseLayouts", key = "#request.warehouseId()")
+    @CacheEvict(
+            value = "warehouseLayouts",
+            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+    )
     public void addAisleToZone(AisleRequest request) {
-        Zone zone = zoneRepository.findById(request.zoneId())
-                .orElseThrow(() -> new ResourceNotFoundException("Zone not found"));
 
-        if (aisleRepository.existsByCodeAndZoneId(request.code(), request.zoneId())){
-            throw new AlreadyExistsException("Aisle '" + request.code() + "' exists in this zone.");
+        Zone zone = getValidatedZone(request.zoneId());
+
+        if (aisleRepository.existsByCodeAndZoneId(request.code(), zone.getId())) {
+            throw new AlreadyExistsException("Aisle exists in zone");
         }
 
         Aisle aisle = new Aisle();
         aisle.setCode(request.code());
         aisle.setZone(zone);
         aisle.setActive(true);
+
         aisleRepository.save(aisle);
     }
 
+    // ============================================================
+    // WRITE: BULK BINS
+    // ============================================================
+
     /**
-     {@inheritDoc}
+     * {@inheritDoc}
      */
     @Override
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
-    @CacheEvict(value = "warehouseLayouts", allEntries = true)
+    @CacheEvict(
+            value = "warehouseLayouts",
+            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+    )
     public void bulkCreateBins(BulkBinRequest request) {
-        Aisle aisle = aisleRepository.findById(request.aisleId())
-                .orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
 
+        Aisle aisle = getValidatedAisle(request.aisleId());
         Warehouse warehouse = aisle.getZone().getWarehouse();
 
-        // Determine the inherited bin type from the parent zone's classification
-        ZoneType parentZoneType = aisle.getZone().getZoneType();
-        BinType defaultInheritedType = (parentZoneType == ZoneType.BULK) ?
-                BinType.BULK_STORAGE : BinType.PICK_FACE;
+        ZoneType zoneType = aisle.getZone().getZoneType();
 
-        // Use override from request if provided; otherwise, apply inheritance
-        BinType finalBinType = (request.binTypeOverride() != null) ?
-                request.binTypeOverride() : defaultInheritedType;
+        BinType defaultType = (zoneType == ZoneType.BULK)
+                ? BinType.BULK_STORAGE
+                : BinType.PICK_FACE;
+
+        BinType finalType = request.binTypeOverride() != null
+                ? request.binTypeOverride()
+                : defaultType;
 
         List<StorageBin> bins = new ArrayList<>();
+
         int sequence = 1;
-        int createdCount = 0;
+        int created = 0;
 
-        while (createdCount < request.quantity()) {
-            String generatedCode = String.format("%s-%03d", request.prefix(), sequence);
+        while (created < request.quantity()) {
 
-            if (!binRepository.existsByBinCode(generatedCode)) {
+            String code = String.format("%s-%03d", request.prefix(), sequence);
+
+            if (!binRepository.existsByBinCodeAndWarehouseId(code, warehouse.getId())) {
+
                 StorageBin bin = StorageBin.builder()
-                        .binCode(generatedCode)
-                        .binType(finalBinType) // Apply functional type
+                        .binCode(code)
+                        .binType(finalType)
                         .maxVolume(request.defaultMaxVolume())
                         .maxWeightCapacity(request.defaultMaxWeight())
                         .currentVolumeOccupied(0.0)
@@ -181,137 +234,175 @@ public class LayoutServiceImpl implements LayoutService {
                         .status(BinStatus.AVAILABLE)
                         .active(true)
                         .build();
+
                 bins.add(bin);
-                createdCount++;
+                created++;
             }
+
             sequence++;
-            if (sequence > 999) throw new IllegalOperationException("Sequence limit exceeded.");
+            if (sequence > 999) throw new IllegalOperationException("Sequence overflow");
         }
+
         binRepository.saveAll(bins);
     }
 
-    /**
-     {@inheritDoc}
-     */
+    // ============================================================
+    // STATUS UPDATES
+    // ============================================================
+
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    @CacheEvict(value = "warehouseLayouts", allEntries = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public void updateZoneStatus(String zoneId, boolean isActive) {
-        Zone zone = zoneRepository.findById(zoneId).orElseThrow(() -> new ResourceNotFoundException("Zone not found"));
+        Zone zone = getValidatedZone(zoneId);
         zone.setActive(isActive);
-        zoneRepository.save(zone);
     }
 
-    /**
-     {@inheritDoc}
-     */
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    @CacheEvict(value = "warehouseLayouts", allEntries = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public void updateAisleStatus(String aisleId, boolean isActive) {
-        Aisle aisle = aisleRepository.findById(aisleId).orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
+        Aisle aisle = getValidatedAisle(aisleId);
         aisle.setActive(isActive);
-        aisleRepository.save(aisle);
     }
 
-    /**
-     {@inheritDoc}
-     */
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
-    @CacheEvict(value = "warehouseLayouts", allEntries = true)
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public void updateBinStatus(String binId, boolean isActive) {
-        StorageBin bin = binRepository.findById(binId).orElseThrow(() -> new ResourceNotFoundException("Storage Bin not found"));
+        StorageBin bin = getValidatedBin(binId);
         bin.setActive(isActive);
-        binRepository.save(bin);
     }
 
-    /**
-     {@inheritDoc}
-     */
+    // ============================================================
+    // BARCODE + SCAN
+    // ============================================================
+
     @Override
     @Transactional(readOnly = true)
     public byte[] getBinBarcode(String binId) {
-        StorageBin bin = binRepository.findById(binId)
-                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
+
+        StorageBin bin = getValidatedBin(binId);
 
         if (!bin.isActive()) {
-            throw new IllegalOperationException("Physical label generation blocked: Bin " + bin.getBinCode() + " is currently Under Maintenance.");
+            throw new IllegalOperationException("Bin inactive");
         }
 
         return barcodeService.getBarcodeForBin(bin.getBinCode());
     }
 
-    /**
-     {@inheritDoc}
-     */
     @Override
     @Transactional(readOnly = true)
     public boolean verifyBinScan(String scannedCode, String expectedBinId) {
-        if (scannedCode == null || expectedBinId == null) return false;
 
         return binRepository.findById(expectedBinId)
+                .filter(bin -> bin.getWarehouse().getId().equals(getCurrentWarehouseId()))
                 .map(bin -> bin.isActive() && bin.getBinCode().equalsIgnoreCase(scannedCode.trim()))
                 .orElse(false);
     }
 
-    /**
-     {@inheritDoc}
-     */
     @Override
     @Transactional(readOnly = true)
     public String getBinCodeById(String binId) {
-        return binRepository.findById(binId)
-                .map(StorageBin::getBinCode)
-                .orElseThrow(() -> new ResourceNotFoundException("Bin not found with ID: " + binId));
+        return getValidatedBin(binId).getBinCode();
     }
 
-    // --- Private Map Helpers ---
+    // ============================================================
+    // VALIDATION HELPERS
+    // ============================================================
+
+    private Warehouse getCurrentWarehouse() {
+        return warehouseRepository.findById(getCurrentWarehouseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
+    }
+
+    private Zone getValidatedZone(String zoneId) {
+        Zone zone = zoneRepository.findById(zoneId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zone not found"));
+
+        if (!zone.getWarehouse().getId().equals(getCurrentWarehouseId())) {
+            throw new SecurityException("Cross-tenant zone access denied");
+        }
+
+        return zone;
+    }
+
+    private Aisle getValidatedAisle(String aisleId) {
+        Aisle aisle = aisleRepository.findById(aisleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
+
+        if (!aisle.getZone().getWarehouse().getId().equals(getCurrentWarehouseId())) {
+            throw new SecurityException("Cross-tenant aisle access denied");
+        }
+
+        return aisle;
+    }
+
+    private StorageBin getValidatedBin(String binId) {
+        StorageBin bin = binRepository.findById(binId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
+
+        if (!bin.getWarehouse().getId().equals(getCurrentWarehouseId())) {
+            throw new SecurityException("Cross-tenant bin access denied");
+        }
+
+        return bin;
+    }
+
+    private String getCurrentWarehouseId() {
+        String id = TenantContext.get();
+        if (id == null) throw new IllegalStateException("Tenant missing");
+        return id;
+    }
+
+    // ============================================================
+    // MAPPING
+    // ============================================================
 
     private WarehouseLayoutResponse.ZoneSummary mapToZoneDto(Zone zone, Map<String, AisleMetrics> metricsMap) {
-        Set<WarehouseLayoutResponse.AisleSummary> aisleDtos = zone.getAisles().stream()
-                .map(aisle -> {
-                    AisleMetrics m = metricsMap.getOrDefault(aisle.getId(), new AisleMetrics(0.0, 0.0, 0L));
-                    return WarehouseLayoutResponse.AisleSummary.builder()
-                            .id(aisle.getId())
-                            .code(aisle.getCode())
-                            .active(aisle.isActive())
-                            .bins(Collections.emptySet())
-                            .totalCapacity(m.capacity())
-                            .currentOccupancy(m.occupancy())
-                            .binCount(m.binCount().intValue())
-                            .build();
-                })
-                .collect(Collectors.toSet());
+
+        Set<WarehouseLayoutResponse.AisleSummary> aisles =
+                zone.getAisles().stream()
+                        .map(aisle -> {
+                            AisleMetrics m = metricsMap.getOrDefault(aisle.getId(), new AisleMetrics(0.0, 0.0, 0L));
+
+                            return WarehouseLayoutResponse.AisleSummary.builder()
+                                    .id(aisle.getId())
+                                    .code(aisle.getCode())
+                                    .active(aisle.isActive())
+                                    .totalCapacity(m.capacity())
+                                    .currentOccupancy(m.occupancy())
+                                    .binCount(m.binCount().intValue())
+                                    .build();
+                        }).collect(Collectors.toSet());
 
         return WarehouseLayoutResponse.ZoneSummary.builder()
                 .id(zone.getId())
                 .name(zone.getName())
-                .zoneType(zone.getZoneType()) // Updated
+                .zoneType(zone.getZoneType())
                 .active(zone.isActive())
-                .aisles(aisleDtos)
-                .totalCapacity(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getTotalCapacity).sum())
-                .currentOccupancy(aisleDtos.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getCurrentOccupancy).sum())
+                .aisles(aisles)
+                .totalCapacity(aisles.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getTotalCapacity).sum())
+                .currentOccupancy(aisles.stream().mapToDouble(WarehouseLayoutResponse.AisleSummary::getCurrentOccupancy).sum())
                 .build();
     }
 
     private WarehouseLayoutResponse.BinSummary mapToBinSummary(StorageBin bin) {
-        double volUsage = (bin.getMaxVolume() > 0) ? (bin.getCurrentVolumeOccupied() / bin.getMaxVolume()) * 100 : 0;
-        double weightUsage = (bin.getMaxWeightCapacity() > 0) ? (bin.getCurrentWeightLoad() / bin.getMaxWeightCapacity()) * 100 : 0;
-        int finalFillPercent = (int) Math.round(Math.max(volUsage, weightUsage));
+
+        double vol = bin.getMaxVolume() > 0 ? (bin.getCurrentVolumeOccupied() / bin.getMaxVolume()) * 100 : 0;
+        double weight = bin.getMaxWeightCapacity() > 0 ? (bin.getCurrentWeightLoad() / bin.getMaxWeightCapacity()) * 100 : 0;
+
+        int fill = (int) Math.round(Math.max(vol, weight));
 
         return WarehouseLayoutResponse.BinSummary.builder()
                 .id(bin.getId())
                 .binCode(bin.getBinCode())
-                .binType(bin.getBinType()) // Updated
+                .binType(bin.getBinType())
                 .capacity(bin.getMaxVolume())
                 .currentOccupancy(bin.getCurrentVolumeOccupied())
                 .maxWeight(bin.getMaxWeightCapacity())
                 .currentWeight(bin.getCurrentWeightLoad())
-                .fillPercentage(finalFillPercent)
+                .fillPercentage(fill)
                 .active(bin.isActive())
                 .build();
     }

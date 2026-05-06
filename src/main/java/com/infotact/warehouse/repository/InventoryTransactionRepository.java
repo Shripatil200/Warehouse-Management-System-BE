@@ -30,15 +30,21 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
      * Advanced Filtered Query for Management Reports.
      * Joins Transaction -> InventoryItem -> Product to allow filtering by SKU.
      */
-    @Query("SELECT t FROM InventoryTransaction t " +
-            "JOIN t.inventoryItem item " +
-            "JOIN item.product p " +
-            "WHERE (:sku IS NULL OR p.sku = :sku) " +
-            "AND (:type IS NULL OR t.type = :type)")
+    @Query("""
+    SELECT t FROM InventoryTransaction t
+    JOIN t.inventoryItem i
+    JOIN i.product p
+    JOIN i.storageBin b
+    WHERE i.storageBin.warehouse.id = :warehouseId
+    AND (:sku IS NULL OR p.sku = :sku)
+    AND (:type IS NULL OR t.type = :type)
+""")
     Page<InventoryTransaction> findFilteredTransactions(
             @Param("sku") String sku,
             @Param("type") TransactionType type,
-            Pageable pageable);
+            @Param("warehouseId") String warehouseId,
+            Pageable pageable
+    );
 
     /**
      * Audit Query: Finds all actions that occurred in a specific bin location.

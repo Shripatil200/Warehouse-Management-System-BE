@@ -5,6 +5,8 @@ import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import jakarta.validation.Valid;
 
+import java.util.List;
+
 /**
  * Service interface for Warehouse lifecycle and tenant-scoped operations.
  *
@@ -67,4 +69,6 @@ public interface WarehouseService {
      * @return Created warehouse details.
      */
     WarehouseResponse createWarehouse(@Valid CreateWarehouseRequest request);
+
+    List<String> getAllWarehouseIds();
 }

@@ -1,14 +1,14 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.entity.InventoryItem;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.repository.InventoryRepository;
-import com.infotact.warehouse.service.InventoryMaintenanceService;
+import com.infotact.warehouse.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,32 +18,65 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InventoryMaintenanceServiceImpl implements InventoryMaintenanceService {
 
+    private static final int BATCH_SIZE = 200;
+
     private final InventoryRepository inventoryRepository;
+    private final ExpiryProcessor expiryProcessor;
+    private final WarehouseService warehouseService;
 
     @Override
-    @Transactional
-    @Scheduled(cron = "0 0 2 * * ?") // Runs at 2 AM every day
+    @Scheduled(cron = "0 0 2 * * ?")
     public void quarantineExpiredStock() {
-        log.info("System Task: Starting Expiry Guard sweep...");
 
-        LocalDate today = LocalDate.now();
+        List<String> warehouseIds = warehouseService.getAllWarehouseIds();
 
-        // Use the FEFO-related logic already supported by your repository
-        List<InventoryItem> expiredItems = inventoryRepository.findAllByStatusAndExpiryDateBefore(
-                InventoryStatus.AVAILABLE, today);
+        log.info("Expiry Guard started for {} warehouses", warehouseIds.size());
 
-        if (expiredItems.isEmpty()) {
-            log.info("Expiry Guard: No expired stock detected.");
-            return;
+        for (String warehouseId : warehouseIds) {
+
+            try {
+                TenantContext.set(warehouseId);
+
+                log.info("Processing warehouse {}", warehouseId);
+
+                processWarehouse(warehouseId);
+
+            } catch (Exception ex) {
+                log.error("Warehouse failed: {}", warehouseId, ex);
+            } finally {
+                TenantContext.clear();
+            }
         }
 
-        expiredItems.forEach(item -> {
-            log.warn("ACTION REQUIRED: Stock Expired [ID: {}, SKU: {}, Batch: {}]",
-                    item.getId(), item.getProduct().getSku(), item.getBatchNumber());
-            item.setStatus(InventoryStatus.EXPIRED);
-        });
+        log.info("Expiry Guard completed");
+    }
 
-        inventoryRepository.saveAll(expiredItems);
-        log.info("Expiry Guard: Successfully quarantined {} items.", expiredItems.size());
+    private void processWarehouse(String warehouseId) {
+
+        LocalDate today = LocalDate.now();
+        int totalProcessed = 0;
+
+        while (true) {
+
+            List<InventoryItem> batch =
+                    inventoryRepository.lockNextExpiredBatch(
+                            InventoryStatus.AVAILABLE.name(),
+                            today,
+                            warehouseId,
+                            BATCH_SIZE
+                    );
+
+            if (batch.isEmpty()) break;
+
+            for (InventoryItem item : batch) {
+                expiryProcessor.process(item.getId(), warehouseId);
+            }
+
+            totalProcessed += batch.size();
+
+            log.info("Warehouse {} batch processed={}", warehouseId, batch.size());
+        }
+
+        log.info("Warehouse {} completed. Total={}", warehouseId, totalProcessed);
     }
 }

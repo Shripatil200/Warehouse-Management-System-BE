@@ -1,15 +1,15 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.TenantContext;
 import com.infotact.warehouse.dto.v1.response.*;
-import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import com.infotact.warehouse.repository.BarcodeAuditRepository;
 import com.infotact.warehouse.repository.InventoryRepository;
 import com.infotact.warehouse.repository.InventoryTransactionRepository;
 import com.infotact.warehouse.service.InventoryReportService;
-import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,24 +18,49 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true) // Class-level ensures all methods are read-only and optimized
+@Transactional(readOnly = true)
 public class InventoryReportServiceImpl implements InventoryReportService {
 
     private final InventoryRepository inventoryRepository;
     private final InventoryTransactionRepository transactionRepository;
     private final BarcodeAuditRepository barcodeAuditRepository;
-    private final UserService userService;
+
+    // ============================================================
+    // GLOBAL SUMMARY (TENANT SAFE)
+    // ============================================================
 
     @Override
     public Page<InventorySummaryResponse> getGlobalSummary(Pageable pageable) {
-        return inventoryRepository.findGlobalInventorySummary(pageable);
+
+        String warehouseId = TenantContext.get();
+
+        return inventoryRepository.findGlobalInventorySummaryByWarehouse(
+                warehouseId,
+                pageable
+        );
     }
 
+    // ============================================================
+    // DETAILED INVENTORY
+    // ============================================================
+
     @Override
-    public Page<InventoryItemDetailResponse> getDetailedInventory(String sku, String binCode, Pageable pageable) {
-        return inventoryRepository.findDetailedInventory(sku, binCode, pageable)
+    public Page<InventoryItemDetailResponse> getDetailedInventory(
+            String sku,
+            String binCode,
+            Pageable pageable) {
+
+        String warehouseId = TenantContext.get();
+
+        return inventoryRepository.findDetailedInventory(
+                        sku,
+                        binCode,
+                        warehouseId,
+                        pageable
+                )
                 .map(item -> InventoryItemDetailResponse.builder()
                         .inventoryItemId(item.getId())
                         .productId(item.getProduct().getId())
@@ -46,21 +71,35 @@ public class InventoryReportServiceImpl implements InventoryReportService {
                         .binType(item.getStorageBin().getBinType())
                         .physicalQuantity(item.getQuantity())
                         .reservedQuantity(item.getReservedQuantity())
-                        .availableQuantity(item.getQuantity() - item.getReservedQuantity())
+                        .availableQuantity(item.getAvailableQuantity())
                         .batchNumber(item.getBatchNumber())
                         .expiryDate(item.getExpiryDate())
                         .status(item.getStatus())
-                        // Note: Using batch-specific price from the InventoryItem
                         .purchasePrice(item.getPurchasePrice())
                         .build());
     }
 
+    // ============================================================
+    // TRANSACTION HISTORY
+    // ============================================================
+
     @Override
-    public Page<InventoryTransactionResponse> getTransactionHistory(String sku, TransactionType type, Pageable pageable) {
-        return transactionRepository.findFilteredTransactions(sku, type, pageable)
+    public Page<InventoryTransactionResponse> getTransactionHistory(
+            String sku,
+            TransactionType type,
+            Pageable pageable) {
+
+        String warehouseId = TenantContext.get();
+
+        return transactionRepository.findFilteredTransactions(
+                        sku,
+                        type,
+                        warehouseId,
+                        pageable
+                )
                 .map(tx -> InventoryTransactionResponse.builder()
                         .transactionId(tx.getId())
-                        .timestamp(tx.getTransactionDate()) // Matches your @CreatedDate field
+                        .timestamp(tx.getTransactionDate())
                         .sku(tx.getInventoryItem().getProduct().getSku())
                         .productName(tx.getInventoryItem().getProduct().getName())
                         .type(tx.getType())
@@ -68,19 +107,47 @@ public class InventoryReportServiceImpl implements InventoryReportService {
                         .reasonCode(tx.getReasonCode())
                         .referenceId(tx.getReferenceId())
                         .binCode(tx.getInventoryItem().getStorageBin().getBinCode())
-                        .performedBy(tx.getPerformedBy()) // Matches your @CreatedBy field
+                        .performedBy(tx.getPerformedBy())
                         .unitPrice(tx.getUnitPrice())
                         .build());
     }
 
-    @Override
-    public Page<InventorySummaryResponse> getLowStockReport(Integer threshold, Pageable pageable) {
-        return inventoryRepository.findLowStockSummary(threshold, pageable);
-    }
+    // ============================================================
+    // LOW STOCK
+    // ============================================================
 
     @Override
-    public Page<BarcodeAuditResponse> getBarcodeAuditLogs(String userId, AuditStatus status, Pageable pageable) {
-        return barcodeAuditRepository.findFilteredAudits(userId, status, pageable)
+    public Page<InventorySummaryResponse> getLowStockReport(
+            Integer threshold,
+            Pageable pageable) {
+
+        String warehouseId = TenantContext.get();
+
+        return inventoryRepository.findLowStockSummaryByWarehouse(
+                threshold,
+                warehouseId,
+                pageable
+        );
+    }
+
+    // ============================================================
+    // BARCODE AUDIT LOGS (SECURE)
+    // ============================================================
+
+    @Override
+    public Page<BarcodeAuditResponse> getBarcodeAuditLogs(
+            String userId,
+            AuditStatus status,
+            Pageable pageable) {
+
+        String warehouseId = TenantContext.get();
+
+        return barcodeAuditRepository.findFilteredAudits(
+                        userId,
+                        status,
+                        warehouseId,
+                        pageable
+                )
                 .map(audit -> BarcodeAuditResponse.builder()
                         .auditId(audit.getId())
                         .timestamp(audit.getTimestamp())
@@ -89,20 +156,38 @@ public class InventoryReportServiceImpl implements InventoryReportService {
                         .status(audit.getStatus())
                         .scannedValue(audit.getScannedValue())
                         .errorMessage(audit.getErrorMessage())
-                        // You might need a BinRepository join here to get the actual Code
                         .binCode(audit.getBinId())
                         .build());
     }
 
+    // ============================================================
+    // FINANCIAL ANALYTICS
+    // ============================================================
+
     @Override
-    @Transactional(readOnly = true)
-    public List<FinancialMetricResponse> getProductFinancialPerformance(String productId, String granularity, LocalDateTime start, LocalDateTime end) {
-        User currentUser = userService.getAuthenticatedUser(); // Or use your userService if injected
-        String warehouseId = currentUser.getWarehouse().getId();
+    public List<FinancialMetricResponse> getProductFinancialPerformance(
+            String productId,
+            String granularity,
+            LocalDateTime start,
+            LocalDateTime end) {
+
+        String warehouseId = TenantContext.get();
+
         String format = resolveFormat(granularity);
 
-        return transactionRepository.getFinancialAnalytics(warehouseId, productId, start, end, format);
+        return transactionRepository.getFinancialAnalytics(
+                warehouseId,
+                productId,
+                start,
+                end,
+                format
+        );
     }
+
+    // ============================================================
+    // HELPER
+    // ============================================================
+
     private String resolveFormat(String granularity) {
         return switch (granularity.toLowerCase()) {
             case "day" -> "%Y-%m-%d";

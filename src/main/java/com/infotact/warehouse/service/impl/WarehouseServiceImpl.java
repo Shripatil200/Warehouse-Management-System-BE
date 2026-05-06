@@ -20,10 +20,13 @@ import com.infotact.warehouse.util.EmailUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * Production-grade implementation of {@link WarehouseService}.
@@ -131,6 +134,19 @@ public class WarehouseServiceImpl implements WarehouseService {
         }
 
         return mapToResponse(savedWarehouse);
+    }
+
+    @Override
+    @Cacheable("warehouseIds") // 🔥 avoids DB hit every night
+    public List<String> getAllWarehouseIds() {
+
+        List<String> ids = warehouseRepository.findAllActiveWarehouseIds();
+
+        if (ids.isEmpty()) {
+            throw new IllegalStateException("No active warehouses found");
+        }
+
+        return ids;
     }
 
     // ============================================================

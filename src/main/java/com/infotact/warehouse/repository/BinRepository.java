@@ -3,6 +3,7 @@ package com.infotact.warehouse.repository;
 import com.infotact.warehouse.entity.StorageBin;
 import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.entity.enums.BinType;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
@@ -20,11 +21,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Tenant-safe repository for StorageBin.
- *
- * <p>
- * All queries are scoped by warehouseId to enforce strict multi-tenancy.
- * </p>
+ * Repository for StorageBin with strict tenant isolation and
+ * warehouse-grade putaway intelligence.
  */
 @Repository
 public interface BinRepository extends JpaRepository<StorageBin, String> {
@@ -75,33 +73,56 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // SMART PUTAWAY (TENANT SAFE)
+    //  SMART PUTAWAY ENGINE (FINAL)
     // ============================================================
 
+    /**
+     * Returns bins ordered by optimal putaway priority:
+     *
+     * Priority:
+     * 0 → Same product bins (consolidation)
+     * 1 → Empty bins
+     * 2 → Other bins
+     *
+     * Then sorted by available space (DESC)
+     */
     @Query("""
-        SELECT DISTINCT b FROM StorageBin b 
-        LEFT JOIN b.inventoryItems ii WITH ii.product.id = :productId 
-        JOIN FETCH b.aisle a 
-        JOIN FETCH a.zone z 
-        WHERE b.active = true 
-        AND b.status = :activeStatus 
-        AND b.binType = :targetType 
-        AND b.warehouse.id = :warehouseId
-        AND (:zoneId IS NULL OR z.id = :zoneId) 
-        AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume 
-        AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight 
-        ORDER BY 
-            CASE WHEN ii.id IS NOT NULL THEN 0 ELSE 1 END ASC,
-            (b.maxVolume - b.currentVolumeOccupied) ASC
-    """)
-    List<StorageBin> findSmartPutawayBins(
+    SELECT DISTINCT b FROM StorageBin b
+    JOIN FETCH b.aisle a
+    JOIN FETCH a.zone z
+    WHERE b.active = true
+      AND b.status = :status
+      AND b.binType = :binType
+      AND z.zoneType = :zoneType
+      AND b.warehouse.id = :warehouseId
+      AND (:zoneId IS NULL OR z.id = :zoneId)
+      AND (b.maxVolume - b.currentVolumeOccupied) >= :reqVolume
+      AND (b.maxWeightCapacity - b.currentWeightLoad) >= :reqWeight
+
+    ORDER BY
+        CASE
+            WHEN EXISTS (
+                SELECT 1 FROM InventoryItem ii2
+                WHERE ii2.storageBin = b
+                  AND ii2.product.id = :productId
+            ) THEN 0
+            WHEN NOT EXISTS (
+                SELECT 1 FROM InventoryItem ii3
+                WHERE ii3.storageBin = b
+            ) THEN 1
+            ELSE 2
+        END,
+        (b.maxVolume - b.currentVolumeOccupied) DESC
+""")
+    List<StorageBin> findPutawayCandidates(
             @Param("productId") String productId,
             @Param("zoneId") String zoneId,
             @Param("reqVolume") BigDecimal reqVolume,
             @Param("reqWeight") Double reqWeight,
-            @Param("targetType") BinType targetType,
-            @Param("activeStatus") BinStatus activeStatus,
-            @Param("warehouseId") String warehouseId
+            @Param("binType") BinType binType,
+            @Param("status") BinStatus status,
+            @Param("warehouseId") String warehouseId,
+            @Param("zoneType") ZoneType zoneType
     );
 
     // ============================================================
@@ -125,7 +146,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // LOCKING (SAFE)
+    // LOCKING (CRITICAL FOR CONCURRENCY)
     // ============================================================
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -28,8 +28,8 @@ public class BarcodeAudit extends BaseEntity {
     private String id; // Fixed: Added the missing primary key identifier
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @Column(nullable = false)
-    private String warehouseId;
+    @JoinColumn(name = "warehouse_id", nullable = false)
+    private Warehouse warehouse;
 
     @Column(nullable = false)
     private String userId; // The Operator who performed the scan

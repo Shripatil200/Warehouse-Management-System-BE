@@ -10,118 +10,132 @@ import org.springframework.data.domain.Pageable;
 
 /**
  * Service interface for physical facility modeling and layout orchestration.
+ *
  * <p>
- * This service manages the recursive structural hierarchy of the warehouse
- * (Zones -> Aisles -> Bins). It provides tools for both granular facility
- * configuration and high-volume infrastructure deployment.
+ * This service manages the structural hierarchy of a warehouse:
+ * Zones → Aisles → Storage Bins.
+ * </p>
+ *
+ * <p>
+ * <b>Multi-Tenant Design:</b>
+ * All operations are strictly scoped to the authenticated tenant (warehouse)
+ * via TenantContext. No method accepts a warehouseId externally.
  * </p>
  */
 public interface LayoutService {
 
     /**
-     * Segments the warehouse floor into functional Zones.
+     * Creates a functional Zone within the current tenant warehouse.
+     *
      * <p>
-     * <b>Validation:</b> Zone names must be unique within the parent warehouse scope
-     * (e.g., "Cold Storage", "Hazardous Materials").
+     * <b>Validation:</b>
+     * Zone names must be unique within the warehouse scope.
      * </p>
-     * @param request Data containing zone metadata and parent warehouse ID.
+     *
+     * @param request Zone metadata (name, type).
      */
     void addZoneToWarehouse(ZoneRequest request);
 
     /**
-     * Maps a physical Aisle within a specific Zone.
+     * Creates an Aisle within a Zone.
+     *
      * <p>
-     * <b>Security Logic:</b> Validates the structural hierarchy to ensure the
-     * target zone belongs to the specified warehouse before insertion.
+     * <b>Security:</b>
+     * Validates that the provided zone belongs to the current tenant warehouse.
      * </p>
-     * @param request Data containing the aisle code (e.g., "A-01") and parent zone ID.
+     *
+     * @param request Aisle configuration.
      */
     void addAisleToZone(AisleRequest request);
 
     /**
-     * THE GENERATION ENGINE: Automated Storage Bin Deployment.
+     * Bulk-creates storage bins within an aisle.
+     *
      * <p>
      * <b>Operational Logic:</b>
      * <ul>
-     * <li><b>Naming Convention:</b> Follows <code>[Prefix]-[Sequence]</code> (e.g., SHELF-001).</li>
-     * <li><b>Idempotency:</b> Checks existing codes to prevent duplicate bin errors during retries.</li>
-     * <li><b>Safety Ceiling:</b> Limits provisioning to 999 bins per request to protect DB performance.</li>
+     *     <li>Naming format: PREFIX-001, PREFIX-002...</li>
+     *     <li>Ensures uniqueness within tenant scope</li>
+     *     <li>Limits to 999 bins per request</li>
      * </ul>
      * </p>
-     * @param request Configuration for prefix, quantity, and default capacity.
+     *
+     * @param request Bin generation configuration.
      */
     void bulkCreateBins(@Valid BulkBinRequest request);
 
     /**
-     * Visualizes the facility's digital twin hierarchy.
+     * Retrieves the full warehouse layout for the current tenant.
+     *
      * <p>
-     * <b>Usage:</b> Recursively fetches the tree structure. Designed for frontend map rendering.
-     * <b>Aggregation:</b> Includes real-time capacity and occupancy metrics at every node.
+     * <b>Usage:</b> Used for frontend visualization (tree/map view).
      * </p>
-     * @param id The UUID of the warehouse.
-     * @return A hierarchical tree representation of the facility structure.
+     *
+     * <p>
+     * <b>Aggregation:</b>
+     * Includes real-time metrics such as:
+     * <ul>
+     *     <li>Total capacity</li>
+     *     <li>Current occupancy</li>
+     *     <li>Bin counts</li>
+     * </ul>
+     * </p>
+     *
+     * @return Hierarchical layout response.
      */
-    WarehouseLayoutResponse getWarehouseLayout(String id);
+    WarehouseLayoutResponse getWarehouseLayout();
 
     /**
-     * Provides a granular list view of storage locations within an aisle.
+     * Retrieves paginated bins for a given aisle.
+     *
      * <p>
-     * <b>Performance:</b> Uses pagination to handle high-density aisles (hundreds of bins)
-     * without memory overhead.
+     * <b>Performance:</b>
+     * Supports pagination for high-density aisles.
      * </p>
-     * @param aisleId  The UUID of the parent aisle.
-     * @param pageable Pagination and sorting details (e.g., page number, size).
-     * @return A paginated list of bin summaries.
+     *
+     * @param aisleId Aisle identifier (validated for tenant ownership).
+     * @param pageable Pagination configuration.
+     * @return Paginated bin summaries.
      */
     Page<WarehouseLayoutResponse.BinSummary> getBinsByAisle(String aisleId, Pageable pageable);
 
     /**
-     * Toggles the operational status of a Warehouse Zone.
+     * Updates the active status of a Zone.
+     *
      * <p>
-     * <b>Maintenance Gate:</b> Setting a zone to inactive logically "closes"
-     * all nested aisles and bins, effectively blocking them from Putaway/Picking algorithms.
+     * Inactive zones block all operations inside them.
      * </p>
-     * @param zoneId   The UUID of the zone.
-     * @param isActive True for operational, False for maintenance/closed.
      */
     void updateZoneStatus(String zoneId, boolean isActive);
 
     /**
-     * Toggles the operational status of a specific Aisle.
-     * <p>
-     * <b>Usage:</b> Temporarily block access to a specific row due to forklift
-     * obstruction, shelf damage, or physical auditing.
-     * </p>
-     * @param aisleId  The UUID of the aisle.
-     * @param isActive True for operational, False for blocked.
+     * Updates the active status of an Aisle.
      */
     void updateAisleStatus(String aisleId, boolean isActive);
 
     /**
-     * Toggles the operational status of a specific Storage Bin.
-     * <p>
-     * <b>Granular Control:</b> Used when a specific slot is damaged or needs
-     * cleaning, while the rest of the aisle remains operational.
-     * </p>
-     * @param binId    The UUID of the bin.
-     * @param isActive True for usable, False for under repair/blocked.
+     * Updates the active status of a Storage Bin.
      */
     void updateBinStatus(String binId, boolean isActive);
 
     /**
-     * Retrieves the scannable barcode image for a specific storage bin.
+     * Generates barcode image for a bin.
+     *
      * <p>
-     * This bridges the Layout module with the Barcode module, allowing
-     * for physical label printing of rack locations.
+     * Used for printing physical labels.
      * </p>
      */
     byte[] getBinBarcode(String binId);
 
+    /**
+     * Verifies scanned barcode against expected bin.
+     *
+     * @return true if valid scan
+     */
     boolean verifyBinScan(String scannedCode, String expectedBinId);
 
     /**
-     * Resolves a human-readable bin code from a bin UUID.
-     * Used for displaying pick locations to operators.
+     * Retrieves bin code from its UUID.
      */
     String getBinCodeById(String binId);
 }

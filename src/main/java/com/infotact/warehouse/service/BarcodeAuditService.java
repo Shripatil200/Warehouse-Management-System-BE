@@ -11,12 +11,19 @@ public interface BarcodeAuditService {
     /**
      * Records a successful barcode verification event.
      */
-    void logSuccess(String userId, String warehouseId, String binId, String orderId,
-                    AuditAction action, String scannedValue);
+    void logSuccess(String userId,
+                    String binId,
+                    String orderId,
+                    AuditAction action,
+                    String scannedValue);
 
     /**
      * Records a failed verification attempt with the specific reason for failure.
      */
-    void logFailure(String userId, String warehouseId, String binId, String orderId,
-                    AuditAction action, String scannedValue, String errorReason);
+    void logFailure(String userId,
+                    String binId,
+                    String orderId,
+                    AuditAction action,
+                    String scannedValue,
+                    String errorReason);
 }

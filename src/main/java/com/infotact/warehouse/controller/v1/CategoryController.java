@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/categories")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('MANAGER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 @Tag(name = "2. Product Categories", description = "Endpoints for managing the hierarchical product category tree")
 public class CategoryController {
 

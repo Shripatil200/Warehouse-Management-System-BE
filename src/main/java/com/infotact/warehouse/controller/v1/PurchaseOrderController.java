@@ -33,7 +33,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/purchase-orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('MANAGER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 @Tag(name = "7. Purchase Orders", description = "Management of inbound stock expectations from suppliers")
 public class PurchaseOrderController {
 

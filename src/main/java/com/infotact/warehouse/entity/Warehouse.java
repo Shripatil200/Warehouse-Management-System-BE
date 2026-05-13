@@ -26,10 +26,11 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "warehouses")
-@EqualsAndHashCode(callSuper = true, exclude = {"zones"})
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Warehouse extends BaseEntity {
 
     @Id
+    @EqualsAndHashCode.Include
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 

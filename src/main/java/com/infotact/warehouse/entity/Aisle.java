@@ -26,10 +26,11 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "aisles")
-@EqualsAndHashCode(callSuper = true, exclude = {"zone", "bins"})
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Aisle extends TenantAwareEntity {
 
     @Id
+    @EqualsAndHashCode.Include
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 

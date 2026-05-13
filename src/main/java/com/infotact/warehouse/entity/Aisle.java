@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
@@ -57,9 +58,11 @@ public class Aisle extends TenantAwareEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "zone_id")
+    @JsonIgnore
     private Zone zone;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JsonIgnore
     private Warehouse warehouse;
 
     /**

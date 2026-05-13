@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import com.infotact.warehouse.entity.enums.ZoneType;
@@ -64,6 +65,7 @@ public class Zone extends TenantAwareEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "warehouse_id", nullable = false)
+    @JsonIgnore
     private Warehouse warehouse;
 
     /**

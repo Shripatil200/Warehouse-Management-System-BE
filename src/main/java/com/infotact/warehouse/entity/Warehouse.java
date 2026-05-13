@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -67,6 +68,7 @@ public class Warehouse extends BaseEntity {
      * </p>
      */
     @OneToMany(mappedBy = "warehouse", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<Zone> zones;
 
     /**
@@ -77,5 +79,6 @@ public class Warehouse extends BaseEntity {
      * </p>
      */
     @OneToMany(mappedBy = "warehouse", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<User> users;
 }

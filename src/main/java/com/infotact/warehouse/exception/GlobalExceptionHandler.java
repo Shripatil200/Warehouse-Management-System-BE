@@ -1,5 +1,6 @@
 package com.infotact.warehouse.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -17,6 +18,7 @@ import java.util.Map;
  * Enhanced Global Interceptor for exception handling.
  * Optimized for RESTful responses and Bean Validation errors.
  */
+@Slf4j
 @RestControllerAdvice // Modern REST approach
 public class GlobalExceptionHandler {
 
@@ -85,8 +87,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGlobalException(Exception ex) {
         // Log the actual exception for debugging
+//        log.error("Unhandled exception: {}", ex.getMessage(), ex);
         ex.printStackTrace();
-
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now());
         body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());

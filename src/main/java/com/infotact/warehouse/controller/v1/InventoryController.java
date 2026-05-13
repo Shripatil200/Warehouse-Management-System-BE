@@ -77,7 +77,7 @@ public class InventoryController {
             @ApiResponse(responseCode = "400", description = "Scan mismatch: Incorrect Bin or Product scanned")
     })
     @PostMapping("/pick/verify")
-    @PreAuthorize("hasAnyRole('ADMIN', 'WORKER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<Void> commitPickWithVerification(
             @Parameter(description = "Internal Inventory Item ID") @RequestParam String inventoryItemId,
             @Parameter(description = "Raw scan data from physical bin label") @RequestParam String scannedBinCode,

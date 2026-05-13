@@ -1,5 +1,6 @@
 package com.infotact.warehouse.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
@@ -21,7 +22,6 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
 @DynamicUpdate
 @DynamicInsert
 @Entity
@@ -33,10 +33,12 @@ import java.util.List;
                 @Index(name = "idx_product_warehouse", columnList = "warehouse_id")
         }
 )
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 public class Product extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
     private String id;
 
     @Column(nullable = false)
@@ -123,6 +125,7 @@ public class Product extends TenantAwareEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
+    @JsonIgnore
     private ProductCategory category;
 
     /**

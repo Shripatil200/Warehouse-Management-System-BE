@@ -25,7 +25,9 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, String>, JpaSpecificationExecutor<User> {
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"warehouse"})
     Optional<User> findByEmail(String email);
+
 
     Optional<User> findByContactNumber(String contactNumber);
 

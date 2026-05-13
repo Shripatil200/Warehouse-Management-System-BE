@@ -32,7 +32,7 @@ public class BarcodeController {
 
     @Operation(summary = "Get Product Label (1D)", description = "Generates a 1D barcode optimized for SKU identification.")
     @GetMapping(value = "/product/{sku}", produces = MediaType.IMAGE_PNG_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'WORKER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<byte[]> getProductBarcode(@PathVariable String sku) {
         byte[] image = barcodeService.getBarcodeForProduct(sku);
         if (image == null) return ResponseEntity.notFound().build();

@@ -27,7 +27,7 @@ class InventoryServiceTest {
 
     @Mock private BinRepository binRepository;
     @Mock private ProductRepository productRepository;
-    @Mock private InventoryItemRepository inventoryRepository;
+    @Mock private InventoryRepository inventoryRepository;
     @Mock private InventoryTransactionRepository transactionRepository;
     @Mock private BarcodeAuditService auditService;
     @Mock private UserService userService;
@@ -103,6 +103,7 @@ class InventoryServiceTest {
     @Test
     @DisplayName("receiveShipment - should place stock into an available bin successfully")
     void receiveShipment_ShouldSucceed_WhenBinAvailable() {
+        // 1. Arrange Data
         ReceivingRequest request = new ReceivingRequest();
         request.setProductId(PRODUCT_ID);
         request.setQuantity(10);
@@ -110,20 +111,40 @@ class InventoryServiceTest {
         request.setExpiryDate(LocalDate.now().plusDays(90));
 
         StorageBin bin = buildBin();
+        Product product = buildProduct();
 
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(buildProduct()));
+        // 2. Mocking Behaviors
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
+        when(userService.getAuthenticatedUser()).thenReturn(buildOperator());
+
+        // Mock Bin Search
         when(binRepository.findPutawayCandidates(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(bin));
         when(binRepository.findByIdWithLock(BIN_ID, WAREHOUSE_ID)).thenReturn(Optional.of(bin));
-        when(userService.getAuthenticatedUser()).thenReturn(buildOperator());
+
+        // FIX FOR POINT 2 & 3: Stub the long search query
+        // We use specific matchers to ensure the 6-argument method is matched correctly
+        when(inventoryRepository.findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePriceAndExpiryDateAndStorageBin_Warehouse_Id(
+                eq(PRODUCT_ID),
+                eq(BIN_ID),
+                eq("BATCH-2025"),
+                any(BigDecimal.class),
+                any(LocalDate.class),
+                eq(WAREHOUSE_ID)
+        )).thenReturn(Optional.empty());
+
+        // Mock the Save
         when(inventoryRepository.save(any(InventoryItem.class))).thenAnswer(i -> {
             InventoryItem item = i.getArgument(0);
-            item.setId("inv-" + System.nanoTime()); // ensure ID is populated
+            item.setId("inv-" + System.nanoTime());
             return item;
         });
+
         when(transactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
+        // 3. Act & Assert
         assertThatNoException().isThrownBy(() -> inventoryService.receiveShipment(request));
+
         verify(inventoryRepository, atLeastOnce()).save(any(InventoryItem.class));
     }
 

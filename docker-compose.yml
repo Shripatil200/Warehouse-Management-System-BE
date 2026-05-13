@@ -1,0 +1,76 @@
+
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: wms-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: wms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wms-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: wms-app
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database
+      DB_URL: jdbc:postgresql://postgres:5432/wms
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_SSL_ENABLED: "false"
+
+      # CORS / Frontend
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:5173
+      APP_FRONTEND_URL: http://localhost:5173
+
+      # Mail (Gmail SMTP — fill in your credentials)
+      SMTP_USER: your-email@gmail.com
+      SMTP_PASS: your-app-password
+
+      # SMS
+      SMS_API_KEY: your-sms-api-key
+
+      # JWT (default from application.yml is used if not set)
+      # JWT_SECRET_KEY: your-secret-key
+
+volumes:
+  postgres_data:
+  redis_data:

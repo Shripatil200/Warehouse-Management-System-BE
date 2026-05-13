@@ -31,12 +31,13 @@ import java.util.List;
         @Index(name = "idx_bin_status", columnList = "status"),
         @Index(name = "idx_bin_warehouse", columnList = "warehouse_id")
 })
-@EqualsAndHashCode(callSuper = true, exclude = {"aisle", "warehouse", "inventoryItems"})
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Builder
 public class StorageBin extends TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
     private String id;
 
     /**

@@ -1,39 +1,55 @@
-HELP.md
+# ===========================
+# WMS - .gitignore
+# Java / Spring Boot / Maven
+# ===========================
+
+# Compiled class files
+*.class
+
+# Maven build output
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+!.mvn/wrapper/maven-wrapper.jar
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# IntelliJ IDEA
+.idea/
 *.iml
+*.iws
 *.ipr
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+# VS Code
 .vscode/
 
-.env
+# Eclipse
+.classpath
+.project
+.settings/
 
-# IntelliJ HTTP Client environments
-src/test/http-client.private.env.json
-src/test/http-client.env.json
+# macOS
+.DS_Store
+
+# ===================================================
+# SECURITY - NEVER COMMIT SECRETS
+# ===================================================
+application-local.yml
+application-local.properties
+*.env
+.env
+.env.*
+
+# ===================================================
+# Node / Frontend (should not exist in a BE project)
+# ===================================================
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Log files
+*.log
+logs/
+
+# Spring Boot DevTools restart file
+.spring-boot-devtools.properties
+
+# JVM crash logs
+hs_err_pid*
+replay_pid*

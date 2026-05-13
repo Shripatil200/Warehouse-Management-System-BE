@@ -25,11 +25,8 @@ public class WarehouseLayoutRequest {
 
             @Schema(description = "Functional purpose of the zone", example = "BULK")
             @NotNull(message = "Zone type is required")
-            ZoneType zoneType, // Added for industrial logic[cite: 1]
+            ZoneType zoneType// Added for industrial logic[cite: 1]
 
-            @Schema(description = "The UUID of the parent warehouse facility")
-            @NotBlank(message = "Warehouse ID is required")
-            String warehouseId
     ) {}
 
     /**
@@ -43,11 +40,7 @@ public class WarehouseLayoutRequest {
 
             @Schema(description = "The UUID of the parent zone")
             @NotBlank(message = "Zone ID is required")
-            String zoneId,
-
-            @Schema(description = "The UUID of the warehouse for cross-verification")
-            @NotBlank(message = "Warehouse ID is required")
-            String warehouseId
+            String zoneId
     ) {}
 
     /**
@@ -55,8 +48,6 @@ public class WarehouseLayoutRequest {
      */
     @Schema(description = "Payload for bulk generating storage bins with physical and functional constraints")
     public record BulkBinRequest(
-            @NotBlank(message = "Warehouse ID is required")
-            String warehouseId,
 
             @NotBlank(message = "Zone ID is required")
             String zoneId,

@@ -7,6 +7,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.ParamDef;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -34,6 +36,10 @@ import java.time.LocalDate;
                 @Index(name = "idx_inv_product_expiry", columnList = "product_id, expiryDate"),
                 @Index(name = "idx_inv_bin", columnList = "storage_bin_id")
         }
+)
+@FilterDef(
+        name = "warehouseFilter",
+        parameters = @ParamDef(name = "warehouseId", type = String.class)
 )
 public class InventoryItem extends TenantAwareEntity {
 

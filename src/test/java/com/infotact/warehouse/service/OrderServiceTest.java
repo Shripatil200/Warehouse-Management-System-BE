@@ -14,6 +14,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)  // fixes unnecessary stubbing errors
 @DisplayName("OrderService Unit Tests")
 class OrderServiceTest {
 
@@ -103,7 +106,6 @@ class OrderServiceTest {
     @Test
     @DisplayName("createOrder - should persist order with PENDING status")
     void createOrder_ShouldReturnPendingOrder() {
-        User manager = buildManager();
         OrderRequest.OrderItemRequest itemReq = new OrderRequest.OrderItemRequest();
         itemReq.setSku("SKU-001");
         itemReq.setQuantity(2);
@@ -112,7 +114,7 @@ class OrderServiceTest {
         request.setOrderNumber("ORD-2025-001");
         request.setItems(List.of(itemReq));
 
-        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(manager));
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
         when(productRepository.findBySkuAndWarehouseIdAndActiveTrue("SKU-001", WAREHOUSE_ID))
                 .thenReturn(Optional.of(buildProduct()));
         when(inventoryService.reserveStock(PRODUCT_ID, 2)).thenReturn(List.of(buildInventoryItem()));

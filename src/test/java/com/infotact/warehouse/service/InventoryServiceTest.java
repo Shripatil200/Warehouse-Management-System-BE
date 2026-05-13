@@ -116,7 +116,11 @@ class InventoryServiceTest {
                 .thenReturn(List.of(bin));
         when(binRepository.findByIdWithLock(BIN_ID, WAREHOUSE_ID)).thenReturn(Optional.of(bin));
         when(userService.getAuthenticatedUser()).thenReturn(buildOperator());
-        when(inventoryRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(inventoryRepository.save(any(InventoryItem.class))).thenAnswer(i -> {
+            InventoryItem item = i.getArgument(0);
+            item.setId("inv-" + System.nanoTime()); // ensure ID is populated
+            return item;
+        });
         when(transactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         assertThatNoException().isThrownBy(() -> inventoryService.receiveShipment(request));

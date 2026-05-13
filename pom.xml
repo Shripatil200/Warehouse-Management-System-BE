@@ -156,6 +156,7 @@
                             <goal>read-project-properties</goal>
                         </goals>
                         <configuration>
+                            <quiet>true</quiet>
                             <files>
                                 <!-- This points to your .env file -->
                                 <file>${project.basedir}/.env</file>

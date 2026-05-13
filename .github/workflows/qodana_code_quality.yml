@@ -15,9 +15,9 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_DB: wms_test
-          POSTGRES_USER: wms_user
-          POSTGRES_PASSWORD: wms_pass
+          POSTGRES_DB: wms
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 0000
         ports:
           - 5432:5432
         options: >-
@@ -37,14 +37,16 @@ jobs:
           --health-retries 5
 
     env:
-      DB_URL: jdbc:postgresql://localhost:5432/wms_test
-      DB_USERNAME: wms_user
-      DB_PASSWORD: wms_pass
-      JWT_SECRET_KEY: dGVzdC1zZWNyZXQta2V5LWZvci1jaS10ZXN0aW5nLW9ubHktbm90LWZvci1wcm9k
+      DB_URL: jdbc:postgresql://localhost:5432/wms
+      DB_USERNAME: postgres
+      DB_PASSWORD: 0000
+      JWT_SECRETE_KEY: dGVzdC1zZWNyZXQta2V5LWZvci1jaS10ZXN0aW5nLW9ubHktbm90LWZvci1wcm9k
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
       REDIS_SSL_ENABLED: "false"
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
       SMTP_USER: test@example.com
       SMTP_PASS: test
       SMS_API_KEY: test-key

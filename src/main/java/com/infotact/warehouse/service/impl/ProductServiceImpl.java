@@ -151,7 +151,6 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "products", key = "#pageable.pageNumber + '-' + #includeInactive")
     public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
         User manager = userService.getAuthenticatedUser();
         String whId = manager.getWarehouse().getId();

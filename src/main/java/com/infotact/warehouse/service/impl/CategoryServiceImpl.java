@@ -104,7 +104,6 @@ public class CategoryServiceImpl implements CategoryService {
      */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "categories", key = "'list-' + #includeInactive + '-' + #pageable.pageNumber")
     public Page<ProductCategoryResponse> getAllCategories(Pageable pageable, boolean includeInactive) {
         User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();

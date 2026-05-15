@@ -149,7 +149,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userProfiles", allEntries = true)
+    @CacheEvict(value = "userProfilesV2", allEntries = true)
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public String createUser(UserRequest request) {
         User currentUser = getAuthenticatedUser();
@@ -195,7 +195,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userProfiles", allEntries = true)
+    @CacheEvict(value = "userProfilesV2", allEntries = true)
     public String updateUserDetails(String id, UserUpdate request) {
         User currentUser = getAuthenticatedUser();
         User targetUser = userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found."));
@@ -225,7 +225,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userProfiles", allEntries = true)
+    @CacheEvict(value = "userProfilesV2", allEntries = true)
     public void deleteUser(String id) {
         if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Only Admins can deactivate accounts.");
 
@@ -251,7 +251,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userProfiles", allEntries = true)
+    @CacheEvict(value = "userProfilesV2", allEntries = true)
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public void updateStatus(String userId, UserStatus status) {
         User currentUser = getAuthenticatedUser();
@@ -276,7 +276,7 @@ public class UserServiceImpl implements UserService {
         return getCachedUser(auth.getName());
     }
 
-    @Cacheable(value = "userProfiles", key = "#email")
+    @Cacheable(value = "userProfilesV2", key = "#email")
     public User getCachedUser(String email) {
         return userRepository.findByEmail(email).orElseThrow(() -> new UnauthorizedException("User profile not found."));
     }

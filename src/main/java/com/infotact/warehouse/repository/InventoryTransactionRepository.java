@@ -66,6 +66,13 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
             @Param("endDate") LocalDateTime endDate,
             Pageable pageable);
 
+    @Query("SELECT t FROM InventoryTransaction t " +
+            "JOIN FETCH t.inventoryItem i " +
+            "JOIN FETCH i.product p " +
+            "WHERE t.warehouse.id = :warehouseId " +
+            "ORDER BY t.transactionDate DESC")
+    Page<InventoryTransaction> findRecentActivityByWarehouseId(@Param("warehouseId") String warehouseId, Pageable pageable);
+
     @Query("SELECT new com.infotact.warehouse.dto.v1.response.FinancialMetricResponse(" +
             "CAST(FUNCTION('DATE_FORMAT', t.transactionDate, :format) AS string), " +
             "SUM(CAST(t.quantityChange * t.unitPrice AS double)), " +

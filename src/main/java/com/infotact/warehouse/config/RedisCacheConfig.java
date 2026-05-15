@@ -11,7 +11,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -42,8 +44,11 @@ public class RedisCacheConfig {
                 JsonTypeInfo.As.PROPERTY
         );
 
-        // 4. Register Mixin so Jackson can reconstruct PageImpl from cached JSON
+        // 4. Register Mixins so Jackson can reconstruct PageImpl, PageRequest, and Sort from cached JSON
         redisMapper.addMixIn(PageImpl.class, PageImplMixin.class);
+        redisMapper.addMixIn(PageRequest.class, PageRequestMixin.class);
+        redisMapper.addMixIn(Sort.class, SortMixin.class);
+        redisMapper.addMixIn(Sort.Order.class, SortOrderMixin.class);
 
         // 5. Build the serializer with the configured mapper
         GenericJackson2JsonRedisSerializer serializer =
@@ -74,6 +79,42 @@ public class RedisCacheConfig {
                 @JsonProperty("content") List<T> content,
                 @JsonProperty("pageable") Pageable pageable,
                 @JsonProperty("totalElements") long totalElements
+        ) {}
+    }
+
+    /**
+     * Mixin to teach Jackson how to reconstruct a Spring Data PageRequest.
+     * PageRequest has no default constructor either; we map the page number,
+     * page size, and sort info from the cached JSON.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    abstract static class PageRequestMixin {
+        @JsonCreator
+        PageRequestMixin(
+                @JsonProperty("pageNumber") int pageNumber,
+                @JsonProperty("pageSize") int pageSize,
+                @JsonProperty("sort") Sort sort
+        ) {}
+    }
+
+    /**
+     * Mixin for Sort — constructed from its list of Order objects.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    abstract static class SortMixin {
+        @JsonCreator
+        SortMixin(@JsonProperty("orders") List<Sort.Order> orders) {}
+    }
+
+    /**
+     * Mixin for Sort.Order — constructed from direction and property name.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    abstract static class SortOrderMixin {
+        @JsonCreator
+        SortOrderMixin(
+                @JsonProperty("direction") Sort.Direction direction,
+                @JsonProperty("property") String property
         ) {}
     }
 }

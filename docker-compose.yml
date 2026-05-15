@@ -58,15 +58,15 @@ services:
       REDIS_SSL_ENABLED: "false"
 
       # CORS / Frontend
-      APP_CORS_ALLOWED_ORIGINS: http://localhost:5173
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:5174,http://localhost:5175
       APP_FRONTEND_URL: http://localhost:5173
 
       # Mail (Gmail SMTP — fill in your credentials)
-      SMTP_USER: your-email@gmail.com
-      SMTP_PASS: your-app-password
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
 
       # SMS
-      SMS_API_KEY: your-sms-api-key
+      SMS_API_KEY: ${SMS_API_KEY}
 
       # JWT (default from application.yml is used if not set)
       # JWT_SECRET_KEY: your-secret-key

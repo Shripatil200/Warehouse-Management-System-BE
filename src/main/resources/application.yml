@@ -73,3 +73,12 @@ logging:
     org.hibernate.SQL: DEBUG               # 👈 SQL queries
     org.hibernate.orm.jdbc.bind: TRACE     # 👈 query parameters (CRITICAL)
     org.springframework.security: INFO
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  packages-to-scan: com.infotact.warehouse.controller

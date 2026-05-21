@@ -145,6 +145,35 @@ public class Product extends TenantAwareEntity {
      * Automatically calculates the volumetric footprint of the product
      * before persisting or updating.
      */
+
+    /**
+     * Indicates whether this product is owned by a supplier under a consignment
+     * agreement rather than purchased outright by the warehouse.
+     *
+     * <p>When {@code true}:
+     * <ul>
+     *   <li>The warehouse does NOT record a cost in its own P&L for this product.</li>
+     *   <li>Each sale generates a {@link com.infotact.warehouse.entity.ConsignmentSale}
+     *       record splitting revenue between warehouse and supplier.</li>
+     *   <li>The product's {@code costPrice} field stores the supplier's declared
+     *       cost for insurance/valuation purposes only — not for warehouse COGS.</li>
+     * </ul>
+     */
+    @Column(nullable = false)
+    private boolean isConsignment = false;
+
+    /**
+     * Direct link to the consignment agreement governing this product.
+     * Null for warehouse-owned products (isConsignment = false).
+     *
+     * <p>This is a convenience denormalization: the canonical source of truth
+     * is {@link com.infotact.warehouse.entity.ConsignmentProduct}, but this
+     * FK allows very fast single-table lookups during order processing.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "consignment_agreement_id")
+    private ConsignmentAgreement consignmentAgreement;
+
     @PrePersist
     @PreUpdate
     private void calculateUnitVolume() {

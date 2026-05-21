@@ -47,7 +47,7 @@ public class OrderServiceImpl implements OrderService {
     private final UserRepository userRepository;
     private final InventoryService inventoryService;
     private final LayoutService layoutService;
-    private final BarcodeAuditService auditService; // Added for scan-tracking
+    private final BarcodeAuditService auditService;
     private final ConsignmentService consignmentService;
 
     private User getAuthenticatedUser() {
@@ -86,9 +86,24 @@ public class OrderServiceImpl implements OrderService {
                 item.setProduct(product);
                 item.setQuantity(itemReq.getQuantity());
                 item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
-
                 item.setSuggestedBinId(layer.getStorageBin().getId());
                 item.setInventoryItemId(layer.getId());
+
+                // ★ PROFIT TRACKING — snapshot cost and compute profit at order creation time
+                item.setConsignment(product.isConsignment());
+                if (product.isConsignment()) {
+                    // Cost is zero for consignment; profit will be updated in verifyAndPack()
+                    // once warehouseShare is known from the ConsignmentSale record.
+                    item.setCostPriceAtTimeOfOrder(BigDecimal.ZERO);
+                    item.setProfit(BigDecimal.ZERO);
+                } else {
+                    BigDecimal cost   = product.getCostPrice();
+                    BigDecimal sell   = product.getSellingPrice();
+                    BigDecimal profit = sell.subtract(cost)
+                            .multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+                    item.setCostPriceAtTimeOfOrder(cost);
+                    item.setProfit(profit);
+                }
 
                 orderItems.add(item);
             }
@@ -108,7 +123,6 @@ public class OrderServiceImpl implements OrderService {
     @CacheEvict(value = "orders", allEntries = true)
     public void verifyAndPack(String orderId, String scannedSku, String scannedBinCode) {
         User operator = getAuthenticatedUser();
-        String warehouseId = operator.getWarehouse().getId();
 
         SellingOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
@@ -148,13 +162,17 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.PACKED);
         orderRepository.save(order);
 
-        // ★ CONSIGNMENT PATCH — record consignment sale for any consigned products
+        // ★ CONSIGNMENT + PROFIT PATCH — record sale and back-fill profit = warehouseShare
         for (SellingOrderItem item : order.getItems()) {
             Product product = item.getProduct();
             if (product.isConsignment()) {
-                consignmentService.recordConsignmentSale(item, product, LocalDateTime.now());
+                ConsignmentSale sale = consignmentService.recordConsignmentSale(item, product, LocalDateTime.now());
+                if (sale != null) {
+                    item.setProfit(sale.getWarehouseShare());
+                }
             }
         }
+        orderRepository.save(order);
 
         log.info("Order {} successfully verified and packed via handheld scan.", order.getOrderNumber());
     }

@@ -206,11 +206,11 @@ public class ConsignmentServiceImpl implements ConsignmentService {
      * @param soldAt     the timestamp of commitment
      */
     @Transactional
-    public void recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt) {
+    public ConsignmentSale recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt) {
         ConsignmentAgreement agreement = product.getConsignmentAgreement();
         if (agreement == null) {
             log.warn("Product {} flagged as consignment but has no agreement — skipping sale record", product.getId());
-            return;
+            return null;
         }
 
         BigDecimal unitPrice    = orderItem.getSellPriceAtTimeOfOrder();
@@ -236,8 +236,9 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         sale.setSoldAt(soldAt);
         sale.setSettled(false);
 
-        saleRepo.save(sale);
+        ConsignmentSale saved = saleRepo.save(sale);
         log.debug("Consignment sale recorded: product={} qty={} supplierShare={}", product.getId(), qty, supplierShare);
+        return saved;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

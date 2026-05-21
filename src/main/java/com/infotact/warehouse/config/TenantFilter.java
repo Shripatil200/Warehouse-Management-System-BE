@@ -1,6 +1,7 @@
 package com.infotact.warehouse.config;
 
 import com.infotact.warehouse.config.JWT.UserPrincipal;
+import com.infotact.warehouse.entity.enums.Role;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,8 +26,7 @@ public class TenantFilter extends OncePerRequestFilter {
     private final EntityManager entityManager;
 
     /**
-     * Set of exact paths that do not require a tenant/warehouse context.
-     * Note: Swagger UI sub-resources are handled via prefix matching in isPublicApi().
+     * Paths that bypass tenant resolution entirely (no authentication required).
      */
     private static final Set<String> PUBLIC_APIS = Set.of(
             "/api/v1/auth/login",
@@ -36,7 +36,8 @@ public class TenantFilter extends OncePerRequestFilter {
             "/api/v1/auth/otp/send-email",
             "/api/v1/auth/otp/verify-email",
             "/api/v1/auth/otp/send-contact",
-            "/api/v1/auth/otp/verify-contact"
+            "/api/v1/auth/otp/verify-contact",
+            "/api/v1/supplier/register"
     );
 
     @Override
@@ -45,27 +46,38 @@ public class TenantFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Using getServletPath() is more reliable for matching routes in Spring Boot
         String path = request.getServletPath();
 
         try {
-            // 🔥 STEP 1: Skip tenant logic for public APIs and Swagger resources
             if (isPublicApi(path)) {
                 log.debug("TenantFilter skipping public path: {}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // 🔐 STEP 2: Extract tenant (only for protected APIs)
-            // This will throw IllegalStateException if the user isn't logged in
-            String warehouseId = extractWarehouseId();
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+            if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+                throw new IllegalStateException("No valid authentication found");
+            }
+
+            // SUPPLIER users are global — they have no warehouse context.
+            // Skip Hibernate filter activation; they access only supplier-scoped endpoints.
+            if (isSupplierRole(principal)) {
+                log.debug("TenantFilter skipping warehouse filter for SUPPLIER: {}, path={}", principal.getUsername(), path);
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            String warehouseId = principal.getWarehouseId();
+            if (warehouseId == null || warehouseId.isBlank()) {
+                throw new IllegalStateException("No warehouseId found for the authenticated user");
+            }
 
             log.debug("TenantFilter → warehouse={}, path={}", warehouseId, path);
 
-            // Set the ID in the ThreadLocal context
             TenantContext.set(warehouseId);
 
-            // 🔥 STEP 3: Enable Hibernate data isolation filter
             Session session = entityManager.unwrap(Session.class);
             if (session.getEnabledFilter("warehouseFilter") == null) {
                 session.enableFilter("warehouseFilter")
@@ -83,43 +95,21 @@ public class TenantFilter extends OncePerRequestFilter {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             response.getWriter().write("Internal Server Error");
         } finally {
-            // Always clear the context to prevent memory leaks or data cross-contamination
             TenantContext.clear();
         }
     }
 
-    /**
-     * Determines if a path should bypass the Tenant Filter.
-     * Includes exact matches for Auth and prefix/contains matching for Swagger UI.
-     */
     private boolean isPublicApi(String path) {
-        // 1. Check exact matches (Auth endpoints)
         if (PUBLIC_APIS.contains(path)) {
             return true;
         }
-
-        // 2. Check for Swagger/OpenAPI resources (which use dynamic sub-paths for CSS/JS)
         return path.contains("/swagger-ui") ||
                 path.contains("/v3/api-docs") ||
                 path.contains("/webjars");
     }
 
-    /**
-     * Retrieves the warehouseId from the current SecurityContext.
-     */
-    private String extractWarehouseId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
-            throw new IllegalStateException("No valid authentication found");
-        }
-
-        String warehouseId = principal.getWarehouseId();
-
-        if (warehouseId == null || warehouseId.isBlank()) {
-            throw new IllegalStateException("No warehouseId found for the authenticated user");
-        }
-
-        return warehouseId;
+    private boolean isSupplierRole(UserPrincipal principal) {
+        return principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_" + Role.SUPPLIER.name()));
     }
 }

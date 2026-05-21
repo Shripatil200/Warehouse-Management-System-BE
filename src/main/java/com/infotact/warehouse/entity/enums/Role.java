@@ -5,5 +5,6 @@ public enum Role {
     ADMIN,
     MANAGER,
     OPERATOR,
-    EMPLOYEE
+    EMPLOYEE,
+    SUPPLIER
 }

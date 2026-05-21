@@ -11,7 +11,7 @@ import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.ProductRepository;
-import com.infotact.warehouse.repository.ProductSupplierRepository;
+import com.infotact.warehouse.repository.SupplierProductRepository;
 import com.infotact.warehouse.service.ProductService;
 import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +24,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -36,8 +37,9 @@ import java.util.stream.Collectors;
  * <p>
  * <b>Update Highlights (v3.2):</b>
  * <ul>
- *     <li><b>Replenishment Logic:</b> Captures {@code minReplenishThreshold} and {@code maxPickFaceCapacity} for automated Bulk-to-Picking moves.</li>
- *     <li><b>Picking Health:</b> Dynamic response mapping now identifies if a product requires internal movement (needsReplenishment).</li>
+ * <li><b>Replenishment Logic:</b> Captures {@code minReplenishThreshold} and {@code maxPickFaceCapacity} for automated Bulk-to-Picking moves.</li>
+ * <li><b>Picking Health:</b> Dynamic response mapping now identifies if a product requires internal movement (needsReplenishment).</li>
+ * <li><b>Supplier System (v4.0):</b> Sourcing options now resolve via {@link SupplierProductRepository} against the global {@code ProductMaster}, replacing the old warehouse-scoped {@code ProductSupplier} table.</li>
  * </ul>
  * </p>
  */
@@ -49,7 +51,7 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductCategoryRepository categoryRepository;
-    private final ProductSupplierRepository productSupplierRepository;
+    private final SupplierProductRepository supplierProductRepository;
     private final UserService userService;
 
     /**
@@ -261,7 +263,7 @@ public class ProductServiceImpl implements ProductService {
                 .maxPickFaceCapacity(entity.getMaxPickFaceCapacity())
                 .maxThreshold(entity.getMaxThreshold())
                 .isLowStock(totalStock <= entity.getMinThreshold())
-                .needsReplenishment(needsReplenishment) // Added indicator
+                .needsReplenishment(needsReplenishment)
                 .isSerialized(entity.isSerialized())
                 .isBatchTracked(entity.isBatchTracked())
                 .categoryId(entity.getCategory().getId())
@@ -270,16 +272,22 @@ public class ProductServiceImpl implements ProductService {
                 .updatedAt(entity.getUpdatedAt())
                 .build();
 
-        // Vendor sourcing mapping
-        response.setSourcingOptions(
-                productSupplierRepository.findByProductId(entity.getId()).stream()
-                        .map(ps -> ProductSupplierResponse.builder()
-                                .supplierName(ps.getSupplier().getName())
-                                .currentSupplyPrice(ps.getCurrentSupplyPrice())
-                                .leadTimeDays(ps.getLeadTimeDays())
-                                .build())
-                        .collect(Collectors.toList())
-        );
+        // Vendor sourcing — resolved via ProductMaster → SupplierProduct chain.
+        List<ProductSupplierResponse> sourcingOptions;
+        if (entity.getProductMaster() != null) {
+            sourcingOptions = supplierProductRepository
+                    .findByProductMasterIdAndActiveTrue(entity.getProductMaster().getId())
+                    .stream()
+                    .map(sp -> ProductSupplierResponse.builder()
+                            .supplierName(sp.getSupplier().getName())
+                            .supplyPrice(sp.getSupplyPrice()) // ✅ Using the corrected supplyPrice property field footprint
+                            .leadTimeDays(sp.getLeadTimeDays())
+                            .build())
+                    .collect(Collectors.toList());
+        } else {
+            sourcingOptions = List.of();
+        }
+        response.setSourcingOptions(sourcingOptions);
 
         return response;
     }

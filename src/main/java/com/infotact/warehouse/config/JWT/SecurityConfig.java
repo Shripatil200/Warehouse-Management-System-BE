@@ -55,21 +55,22 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
-                                        "/api/v1/auth/login",
-                                        "/api/v1/auth/forgot-password",
-                                        "/api/v1/auth/reset-password",
-                                        "/api/v1/warehouses/setup",
-                                        "/api/v1/auth/otp/send-email",
-                                        "/api/v1/auth/otp/verify-email",
-                                        "/api/v1/auth/otp/send-contact",
-                                        "/api/v1/auth/otp/verify-contact",
-                                        "/v3/api-docs/**",
-                                        "/v3/api-docs.yaml",
-                                        "/swagger-ui/**",
-                                        "/swagger-ui.html",
-                                        "/swagger-resources/**",
-                                        "/webjars/**"
-                                ).permitAll()
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/warehouses/setup",
+                                "/api/v1/auth/otp/send-email",
+                                "/api/v1/auth/otp/verify-email",
+                                "/api/v1/auth/otp/send-contact",
+                                "/api/v1/auth/otp/verify-contact",
+                                "/api/v1/supplier/register",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
 

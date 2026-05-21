@@ -28,12 +28,10 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"warehouse"})
     Optional<User> findByEmail(String email);
 
-
     Optional<User> findByContactNumber(String contactNumber);
 
     /**
      * Retrieves non-deleted staff for a specific facility.
-     * REFACTORED: Removed hardcoded DELETED path.
      */
     @Query(value = "SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId " +
@@ -48,7 +46,6 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
 
     /**
      * Retrieves currently operational staff.
-     * REFACTORED: Now uses status parameter.
      */
     @Query("SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId " +
@@ -58,8 +55,7 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
             @Param("status") UserStatus status);
 
     /**
-     * Filters staff by specialized responsibility.
-     * REFACTORED: Standardized exclusion logic.
+     * Filters staff by role within a warehouse.
      */
     @Query("SELECT u FROM User u JOIN FETCH u.warehouse " +
             "WHERE u.warehouse.id = :warehouseId AND u.role = :role " +
@@ -69,11 +65,22 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
             @Param("role") Role role,
             @Param("excludedStatus") UserStatus excludedStatus);
 
+    /**
+     * Used by legacy internal callers that don't need pagination.
+     */
     Collection<User> findByRole(Role role);
+
+    /**
+     * Returns a paginated list of users with a specific role.
+     * Used by {@code SupplierServiceImpl.getAllSuppliers()} to list all
+     * registered supplier accounts globally.
+     */
+    Page<User> findByRole(Role role, Pageable pageable);
 
     boolean existsByEmail(@Email @NotBlank String email);
 
-    boolean existsByContactNumber(@NotBlank @Size(min = 10, max = 15) @Pattern(regexp = "^\\d+$") String contactNumber);
+    boolean existsByContactNumber(
+            @NotBlank @Size(min = 10, max = 15) @Pattern(regexp = "^\\d+$") String contactNumber);
 
     @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
     long countAssignedWarehouseForUser(@Param("email") String email);

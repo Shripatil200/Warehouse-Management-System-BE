@@ -29,6 +29,13 @@ import java.util.List;
  *
  * <p>Settlement can be triggered manually by a MANAGER or automatically by
  * the scheduled job {@code ConsignmentSettlementScheduler}.
+ *
+ * <p><b>Update v3.0 (Supplier System):</b> The standalone {@code Supplier}
+ * entity has been replaced. The {@code supplier} field now references a
+ * {@link User} account with {@code role = SUPPLIER}. The FK column name
+ * ({@code supplier_id}) and table structure are unchanged — no new migration
+ * is required for this entity beyond V9 (which made {@code warehouse_id}
+ * nullable on users).
  */
 @Getter
 @Setter
@@ -40,8 +47,8 @@ import java.util.List;
 @Table(
         name = "consignment_agreements",
         indexes = {
-                @Index(name = "idx_consignment_supplier", columnList = "supplier_id"),
-                @Index(name = "idx_consignment_status",   columnList = "status"),
+                @Index(name = "idx_consignment_supplier",  columnList = "supplier_id"),
+                @Index(name = "idx_consignment_status",    columnList = "status"),
                 @Index(name = "idx_consignment_warehouse", columnList = "warehouse_id")
         }
 )
@@ -53,10 +60,15 @@ public class ConsignmentAgreement extends TenantAwareEntity {
 
     /**
      * The supplier whose products are being consigned.
+     * <p>
+     * This is a {@link User} with {@code role = SUPPLIER}. Using the {@code User}
+     * entity directly keeps supplier authentication, profile, and consignment
+     * relationships in a single table without a separate {@code suppliers} table.
+     * </p>
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "supplier_id", nullable = false)
-    private Supplier supplier;
+    private User supplier;
 
     /**
      * Percentage of selling revenue retained by the warehouse as commission.

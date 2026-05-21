@@ -95,6 +95,24 @@ public class User extends BaseEntity {
      * </p>
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id", nullable = false)
+    @JoinColumn(name = "warehouse_id", nullable = true)
     private Warehouse warehouse;
+
+    // --- Supplier-specific profile fields (null for non-SUPPLIER roles) ---
+
+    /** Registered business/company name of the supplier. */
+    @Column(name = "company_name", length = 200)
+    private String companyName;
+
+    /** GST or tax registration number of the supplier. */
+    @Column(name = "gst_number", length = 50)
+    private String gstNumber;
+
+    /** Physical or billing address of the supplier. */
+    @Column(name = "address", length = 500)
+    private String address;
+
+    /** Supplier's website URL. */
+    @Column(name = "website", length = 255)
+    private String website;
 }

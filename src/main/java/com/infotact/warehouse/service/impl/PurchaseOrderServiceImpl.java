@@ -4,8 +4,8 @@ import com.infotact.warehouse.dto.v1.request.PurchaseOrderRequest;
 import com.infotact.warehouse.dto.v1.response.PurchaseOrderResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
-import com.infotact.warehouse.exception.EntityNotFoundException;
-import com.infotact.warehouse.exception.UnauthorizedException;
+import com.infotact.warehouse.entity.enums.Role;
+import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.PurchaseOrderService;
 import com.infotact.warehouse.service.UserService;
@@ -14,8 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +24,6 @@ import java.util.stream.Collectors;
 
 /**
  * Implementation of {@link PurchaseOrderService} for inbound logistics management.
- * <p>
- * <b>Update v2.3:</b> Synchronized with the Multi-Tenant Product Repository.
- * All SKU resolutions are now strictly bound to the manager's Warehouse ID.
- * </p>
  */
 @Slf4j
 @Service
@@ -38,12 +32,10 @@ import java.util.stream.Collectors;
 public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private final PurchaseOrderRepository poRepository;
-    private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
+    private final SupplierProductRepository supplierProductRepository;
     private final UserRepository userRepository;
     private final UserService userService;
-
-
 
     /**
      * {@inheritDoc}
@@ -59,8 +51,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         User manager = userService.getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
-        Supplier supplier = supplierRepository.findById(request.supplierId())
-                .orElseThrow(() -> new EntityNotFoundException("Supplier not found"));
+        // Resolve supplier — must be a User with role=SUPPLIER
+        User supplier = userRepository.findById(request.supplierId())
+                .filter(u -> u.getRole() == Role.SUPPLIER)
+                .orElseThrow(() -> new ResourceNotFoundException("Supplier not found with ID: " + request.supplierId()));
 
         PurchaseOrder po = new PurchaseOrder();
         po.setSupplier(supplier);
@@ -70,13 +64,22 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         po.setStatus(PurchaseOrderStatus.PENDING);
 
         List<PurchaseOrderItem> items = request.items().stream().map(itemRequest -> {
-            // FIX: Use warehouse-scoped search to resolve the product
+            // Warehouse-scoped search to resolve the local product mapping reference
             Product product = productRepository.findBySkuAndWarehouseIdAndActiveTrue(itemRequest.sku(), warehouseId)
-                    .orElseThrow(() -> new EntityNotFoundException("Product SKU '" + itemRequest.sku() + "' not found in your facility."));
+                    .orElseThrow(() -> new ResourceNotFoundException("Product SKU '" + itemRequest.sku() + "' not found in your facility."));
+
+            // Safely attempt resolving the commercial Layer 2 link entry for pricing snapshots
+            SupplierProduct supplierProduct = null;
+            if (product.getProductMaster() != null) {
+                supplierProduct = supplierProductRepository
+                        .findByProductMasterIdAndSupplierId(product.getProductMaster().getId(), supplier.getId())
+                        .orElse(null);
+            }
 
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(po);
-            item.setProduct(product);
+            item.setProduct(product); // Retained for local stock calculation adjustments
+            item.setSupplierProduct(supplierProduct); // Set Layer 2 link context safely
             item.setQuantity(itemRequest.quantity());
             item.setUnitCost(itemRequest.unitCost());
 
@@ -94,9 +97,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Cacheable(value = "purchaseOrders", key = "#id")
     public PurchaseOrderResponse getPurchaseOrder(String id) {
         User manager = userService.getAuthenticatedUser();
-        // poRepository must implement findByIdAndWarehouseId to ensure isolation
         PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
-                .orElseThrow(() -> new EntityNotFoundException("Purchase Order not found or access denied."));
+                .orElseThrow(() -> new ResourceNotFoundException("Purchase Order not found or access denied."));
         return mapToResponse(po);
     }
 

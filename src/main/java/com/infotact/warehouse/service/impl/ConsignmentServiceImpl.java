@@ -9,6 +9,7 @@ import com.infotact.warehouse.dto.v1.response.ConsignmentSettlementResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.ConsignmentSettlementStatus;
 import com.infotact.warehouse.entity.enums.ConsignmentStatus;
+import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.ConsignmentService;
 import jakarta.persistence.EntityNotFoundException;
@@ -21,7 +22,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -34,6 +34,15 @@ import java.util.stream.Collectors;
  *   <li>Generating settlement reports</li>
  *   <li>Approving and marking settlements as paid</li>
  * </ul>
+ *
+ * <p><b>Update v3.0 (Supplier System):</b> The standalone {@code Supplier} entity
+ * and {@code SupplierRepository} have been removed. Suppliers are now
+ * {@link User} accounts with {@code role = SUPPLIER}, resolved via
+ * {@link UserRepository} with a role guard.
+ * {@link ConsignmentAgreement#getSupplier()} now returns a {@link User}.
+ * All call sites using {@code supplier.getName()} and {@code supplier.getId()}
+ * are unaffected — {@link User} exposes both.
+ * </p>
  */
 @Slf4j
 @Service
@@ -43,7 +52,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     private final ConsignmentAgreementRepository agreementRepo;
     private final ConsignmentSaleRepository       saleRepo;
     private final ConsignmentSettlementRepository settlementRepo;
-    private final SupplierRepository              supplierRepo;
+    private final UserRepository                  userRepository;
     private final ProductRepository               productRepo;
     private final WarehouseRepository             warehouseRepo;
 
@@ -59,7 +68,9 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     public ConsignmentAgreementResponse createAgreement(CreateConsignmentAgreementRequest req) {
         String warehouseId = TenantContext.get();
 
-        Supplier supplier = supplierRepo.findById(req.getSupplierId())
+        // Supplier must be a registered User with role=SUPPLIER
+        User supplier = userRepository.findById(req.getSupplierId())
+                .filter(u -> u.getRole() == Role.SUPPLIER)
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found: " + req.getSupplierId()));
 
         Warehouse warehouse = warehouseRepo.findById(warehouseId)
@@ -201,9 +212,9 @@ public class ConsignmentServiceImpl implements ConsignmentService {
      * <p>Called internally by {@code OrderService.commitPick()} after stock
      * deduction, when {@code product.isConsignment() == true}.
      *
-     * @param orderItem  the line item that was just committed
-     * @param product    the consigned product
-     * @param soldAt     the timestamp of commitment
+     * @param orderItem the line item that was just committed
+     * @param product   the consigned product
+     * @param soldAt    the timestamp of commitment
      */
     @Transactional
     public ConsignmentSale recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt) {
@@ -221,7 +232,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         BigDecimal warehouseShare = grossRevenue
                 .multiply(commPct)
                 .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-        BigDecimal supplierShare  = grossRevenue.subtract(warehouseShare);
+        BigDecimal supplierShare = grossRevenue.subtract(warehouseShare);
 
         ConsignmentSale sale = new ConsignmentSale();
         sale.setAgreement(agreement);
@@ -271,8 +282,8 @@ public class ConsignmentServiceImpl implements ConsignmentService {
      */
     @Transactional
     public ConsignmentSettlement generateSettlementInternal(ConsignmentAgreement agreement, String notes) {
-        LocalDate today = LocalDate.now();
-        LocalDate periodEnd = today;
+        LocalDate today       = LocalDate.now();
+        LocalDate periodEnd   = today;
 
         // Determine period start
         Optional<LocalDate> lastEnd = settlementRepo.findLastSettledPeriodEnd(agreement.getId());
@@ -285,15 +296,16 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 saleRepo.findUnsettledSalesForPeriod(agreement.getId(), from, to);
 
         if (unsettledSales.isEmpty()) {
-            log.info("No unsettled sales for agreement {} between {} and {}", agreement.getAgreementCode(), from, to);
+            log.info("No unsettled sales for agreement {} between {} and {}",
+                    agreement.getAgreementCode(), from, to);
             return null;
         }
 
         // Aggregate totals
-        BigDecimal totalGross       = BigDecimal.ZERO;
-        BigDecimal totalWarehouse   = BigDecimal.ZERO;
-        BigDecimal totalSupplier    = BigDecimal.ZERO;
-        int        totalUnits       = 0;
+        BigDecimal totalGross     = BigDecimal.ZERO;
+        BigDecimal totalWarehouse = BigDecimal.ZERO;
+        BigDecimal totalSupplier  = BigDecimal.ZERO;
+        int        totalUnits     = 0;
 
         for (ConsignmentSale s : unsettledSales) {
             totalGross     = totalGross.add(s.getGrossRevenue());
@@ -320,7 +332,9 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         ConsignmentSettlement saved = settlementRepo.save(settlement);
 
         // Mark all included sales as settled
-        List<String> saleIds = unsettledSales.stream().map(ConsignmentSale::getId).collect(Collectors.toList());
+        List<String> saleIds = unsettledSales.stream()
+                .map(ConsignmentSale::getId)
+                .collect(Collectors.toList());
         saleRepo.markAsSettled(saleIds, saved.getId());
 
         log.info("Settlement {} generated: supplierPayout={} for agreement {}",
@@ -404,23 +418,23 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     private ConsignmentAgreementResponse mapToAgreementResponse(ConsignmentAgreement a) {
         List<ConsignmentAgreementResponse.ConsignmentProductResponse> products =
                 a.getConsignmentProducts() == null ? List.of() :
-                a.getConsignmentProducts().stream().map(cp ->
-                        ConsignmentAgreementResponse.ConsignmentProductResponse.builder()
-                                .id(cp.getId())
-                                .productId(cp.getProduct().getId())
-                                .productName(cp.getProduct().getName())
-                                .sku(cp.getProduct().getSku())
-                                .mrp(cp.getMrp())
-                                .floorPrice(cp.getFloorPrice())
-                                .active(cp.isActive())
-                                .build()
-                ).collect(Collectors.toList());
+                        a.getConsignmentProducts().stream().map(cp ->
+                                ConsignmentAgreementResponse.ConsignmentProductResponse.builder()
+                                        .id(cp.getId())
+                                        .productId(cp.getProduct().getId())
+                                        .productName(cp.getProduct().getName())
+                                        .sku(cp.getProduct().getSku())
+                                        .mrp(cp.getMrp())
+                                        .floorPrice(cp.getFloorPrice())
+                                        .active(cp.isActive())
+                                        .build()
+                        ).collect(Collectors.toList());
 
         return ConsignmentAgreementResponse.builder()
                 .id(a.getId())
                 .agreementCode(a.getAgreementCode())
-                .supplierId(a.getSupplier().getId())
-                .supplierName(a.getSupplier().getName())
+                .supplierId(a.getSupplier().getId())       // User.getId()
+                .supplierName(a.getSupplier().getName())   // User.getName()
                 .warehouseCommissionPct(a.getWarehouseCommissionPct())
                 .status(a.getStatus())
                 .effectiveFrom(a.getEffectiveFrom())
@@ -462,7 +476,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 .settlementNumber(s.getSettlementNumber())
                 .agreementId(s.getAgreement().getId())
                 .agreementCode(s.getAgreement().getAgreementCode())
-                .supplierName(s.getAgreement().getSupplier().getName())
+                .supplierName(s.getAgreement().getSupplier().getName())  // User.getName()
                 .periodFrom(s.getPeriodFrom())
                 .periodTo(s.getPeriodTo())
                 .totalGrossRevenue(s.getTotalGrossRevenue())

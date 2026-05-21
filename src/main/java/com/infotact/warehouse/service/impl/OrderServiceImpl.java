@@ -11,10 +11,7 @@ import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.OrderRepository;
 import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.repository.UserRepository;
-import com.infotact.warehouse.service.BarcodeAuditService;
-import com.infotact.warehouse.service.InventoryService;
-import com.infotact.warehouse.service.LayoutService;
-import com.infotact.warehouse.service.OrderService;
+import com.infotact.warehouse.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -51,6 +48,7 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryService inventoryService;
     private final LayoutService layoutService;
     private final BarcodeAuditService auditService; // Added for scan-tracking
+    private final ConsignmentService consignmentService;
 
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -149,6 +147,15 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(OrderStatus.PACKED);
         orderRepository.save(order);
+
+        // ★ CONSIGNMENT PATCH — record consignment sale for any consigned products
+        for (SellingOrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            if (product.isConsignment()) {
+                consignmentService.recordConsignmentSale(item, product, LocalDateTime.now());
+            }
+        }
+
         log.info("Order {} successfully verified and packed via handheld scan.", order.getOrderNumber());
     }
 

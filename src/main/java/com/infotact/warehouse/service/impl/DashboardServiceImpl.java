@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -43,7 +44,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "dashboardSummaries", key = "#root.target.getAuthenticatedUserWarehouseId()")
+    @Cacheable(value = "dashboardSummariesV3", key = "#root.target.getAuthenticatedUserWarehouseId()")
     public DashboardSummaryResponse getSummary() {
         User currentUser = getAuthenticatedUser();
         String warehouseId = currentUser.getWarehouse().getId();
@@ -60,10 +61,11 @@ public class DashboardServiceImpl implements DashboardService {
                 .outboundOrders(orderRepository.countByWarehouseIdAndStatus(warehouseId, OrderStatus.PENDING))
                 .pendingPurchases(purchaseOrderRepository.countByWarehouseIdAndStatus(warehouseId, PurchaseOrderStatus.PENDING))
                 .totalWarehouses(userRepository.countAssignedWarehouseForUser(currentUser.getEmail()))
-                .userStatusCounts(fetchUserStatusCounts())
+                .userStatusCounts(fetchUserStatusCounts(warehouseId))
                 .utilizationPercentage(calculateUtilization(warehouseId))
                 .totalInventoryValue(calculateStockValue(warehouseId))
                 .alerts(getRecentAlerts(warehouseId))
+                .recentActivity(fetchRecentActivity(warehouseId))
                 .topProducts(orderRepository.findTopSellingProductsMonthly(warehouseId, thirtyDaysAgo, PageRequest.of(0, 3)))
                 .build();
     }
@@ -106,8 +108,8 @@ public class DashboardServiceImpl implements DashboardService {
                 .orElse(BigDecimal.ZERO);
     }
 
-    private DashboardSummaryResponse.UserStatusCountDTO fetchUserStatusCounts() {
-        List<Object[]> results = userRepository.countUsersByStatus();
+    private DashboardSummaryResponse.UserStatusCountDTO fetchUserStatusCounts(String warehouseId) {
+        List<Object[]> results = userRepository.countUsersByStatus(warehouseId);
         long active = 0, inactive = 0, suspended = 0, pending = 0;
 
         for (Object[] result : results) {
@@ -151,6 +153,39 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         return alerts;
+    }
+
+    private List<DashboardSummaryResponse.ActivityDTO> fetchRecentActivity(String warehouseId) {
+        return transactionRepository.findRecentActivityByWarehouseId(warehouseId, PageRequest.of(0, 3))
+                .stream()
+                .map(t -> DashboardSummaryResponse.ActivityDTO.builder()
+                        .message(buildActivityMessage(t))
+                        .timeAgo(calculateTimeAgo(t.getTransactionDate()))
+                        .build())
+                .toList();
+    }
+
+    private String buildActivityMessage(com.infotact.warehouse.entity.InventoryTransaction t) {
+        String name = t.getInventoryItem().getProduct().getName();
+        return switch (t.getType()) {
+            case INBOUND -> "Received " + t.getQuantityChange() + " units of " + name;
+            case OUTBOUND -> "Dispatched " + Math.abs(t.getQuantityChange()) + " units of " + name;
+            case TRANSFER -> "Transferred " + Math.abs(t.getQuantityChange()) + " units of " + name;
+            case ADJUSTMENT -> "Adjusted " + name + " stock by " + t.getQuantityChange();
+            default -> "Inventory updated for " + name;
+        };
+    }
+
+    private String calculateTimeAgo(LocalDateTime past) {
+        if (past == null) return "Just now";
+        Duration duration = Duration.between(past, LocalDateTime.now());
+        if (duration.toMinutes() < 60) {
+            return duration.toMinutes() <= 1 ? "Just now" : duration.toMinutes() + " minutes ago";
+        } else if (duration.toHours() < 24) {
+            return duration.toHours() + " hours ago";
+        } else {
+            return duration.toDays() + " days ago";
+        }
     }
 
     public String getAuthenticatedUserWarehouseId() {

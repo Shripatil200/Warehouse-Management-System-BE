@@ -81,6 +81,6 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
     /**
      * Dashboard aggregation for user statuses.
      */
-    @Query("SELECT u.status, COUNT(u) FROM User u GROUP BY u.status")
-    List<Object[]> countUsersByStatus();
+    @Query("SELECT u.status, COUNT(u) FROM User u WHERE u.warehouse.id = :warehouseId GROUP BY u.status")
+    List<Object[]> countUsersByStatus(@Param("warehouseId") String warehouseId);
 }

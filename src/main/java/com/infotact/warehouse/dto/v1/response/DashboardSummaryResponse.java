@@ -67,6 +67,18 @@ public class DashboardSummaryResponse implements Serializable {
     @Schema(description = "Count of users categorized by their account status")
     private UserStatusCountDTO userStatusCounts;
 
+    @Schema(description = "Recent inventory transactions acting as an activity feed")
+    private List<ActivityDTO> recentActivity;
+
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class ActivityDTO implements Serializable {
+        private String message;
+        private String timeAgo;
+    }
+
     /**
      * Inner DTO representing user lifecycle distribution.
      */

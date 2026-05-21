@@ -6,6 +6,7 @@ import com.infotact.warehouse.dto.v1.request.UpdateSettlementStatusRequest;
 import com.infotact.warehouse.dto.v1.response.ConsignmentAgreementResponse;
 import com.infotact.warehouse.dto.v1.response.ConsignmentSettlementResponse;
 import com.infotact.warehouse.entity.ConsignmentAgreement;
+import com.infotact.warehouse.entity.ConsignmentSale;
 import com.infotact.warehouse.entity.ConsignmentSettlement;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.SellingOrderItem;
@@ -33,7 +34,13 @@ public interface ConsignmentService {
 
     // ── Sale Recording (called from OrderService) ─────────────────────────────
 
-    void recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt);
+    /**
+     * Records a consignment sale for a packed order item.
+     * Returns the persisted {@link ConsignmentSale} so that the caller
+     * (OrderServiceImpl.verifyAndPack) can update the order item's profit field
+     * with the computed warehouseShare.
+     */
+    ConsignmentSale recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt);
 
     // ── Settlement ────────────────────────────────────────────────────────────
 

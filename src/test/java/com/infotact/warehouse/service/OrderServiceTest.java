@@ -39,6 +39,7 @@ class OrderServiceTest {
     @Mock private InventoryService inventoryService;
     @Mock private LayoutService layoutService;
     @Mock private BarcodeAuditService auditService;
+    @Mock private ConsignmentService consignmentService;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -76,6 +77,7 @@ class OrderServiceTest {
         p.setSku("SKU-001");
         p.setName("Widget");
         p.setSellingPrice(new BigDecimal("25.00"));
+        p.setCostPrice(new BigDecimal("15.00"));  // ← ADD THIS
         p.setWarehouse(wh);
         return p;
     }

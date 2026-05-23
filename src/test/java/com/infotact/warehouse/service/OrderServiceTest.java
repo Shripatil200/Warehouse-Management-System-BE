@@ -29,7 +29,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)  // fixes unnecessary stubbing errors
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("OrderService Unit Tests")
 class OrderServiceTest {
 
@@ -40,6 +40,7 @@ class OrderServiceTest {
     @Mock private LayoutService layoutService;
     @Mock private BarcodeAuditService auditService;
     @Mock private ConsignmentService consignmentService;
+    @Mock private TaskAssignmentService taskEngine; // Safely wired by @InjectMocks
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -77,7 +78,7 @@ class OrderServiceTest {
         p.setSku("SKU-001");
         p.setName("Widget");
         p.setSellingPrice(new BigDecimal("25.00"));
-        p.setCostPrice(new BigDecimal("15.00"));  // ← ADD THIS
+        p.setCostPrice(new BigDecimal("15.00"));
         p.setWarehouse(wh);
         return p;
     }
@@ -116,6 +117,7 @@ class OrderServiceTest {
         request.setOrderNumber("ORD-2025-001");
         request.setItems(List.of(itemReq));
 
+        // Stubbing data layer and infrastructure behaviors
         when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
         when(productRepository.findBySkuAndWarehouseIdAndActiveTrue("SKU-001", WAREHOUSE_ID))
                 .thenReturn(Optional.of(buildProduct()));
@@ -127,12 +129,21 @@ class OrderServiceTest {
         });
         when(layoutService.getBinCodeById(anyString())).thenReturn("A-01-001");
 
+        // Stubbing taskEngine to avoid deep return NullPointerExceptions during order post-processing hooks
+        when(taskEngine.createPickingTask(any(SellingOrder.class), anyString(), eq(WAREHOUSE_ID)))
+                .thenReturn(new Task());
+
+        // Execution
         OrderResponse response = orderService.createOrder(request);
 
+        // Verifications
         assertThat(response).isNotNull();
         assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
         verify(orderRepository).save(any(SellingOrder.class));
         verify(inventoryService).reserveStock(PRODUCT_ID, 2);
+
+        // Verifying that the task engine pipeline was triggered with correct parameters
+        verify(taskEngine).createPickingTask(any(SellingOrder.class), anyString(), eq(WAREHOUSE_ID));
     }
 
     @Test
@@ -154,6 +165,7 @@ class OrderServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(orderRepository, never()).save(any());
+        verifyNoInteractions(taskEngine); // Task engine shouldn't be touched if validation fails
     }
 
     @Test

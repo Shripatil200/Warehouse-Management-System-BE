@@ -7,9 +7,33 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ProfitReportRepository extends JpaRepository<SellingOrderItem, String> {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DASHBOARD PROFIT BLOCK
+    // Returns Object[] rows: [ownedProfit, consignmentProfit, ownedRevenue]
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Query("""
+           SELECT
+               SUM(CASE WHEN CAST(i.consignment AS boolean) = false THEN i.profit ELSE 0 END),
+               SUM(CASE WHEN CAST(i.consignment AS boolean) = true  THEN i.profit ELSE 0 END),
+               SUM(CASE WHEN CAST(i.consignment AS boolean) = false THEN i.sellPriceAtTimeOfOrder * i.quantity ELSE 0 END)
+           FROM SellingOrderItem i
+           JOIN i.order o
+           WHERE o.warehouse.id = :warehouseId
+             AND o.createdAt >= :from
+             AND o.createdAt <= :to
+             AND o.status NOT IN ('CANCELLED')
+           """)
+    List<Object[]> sumProfitBlockForDashboard(
+            @Param("warehouseId") String warehouseId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
 
     // ─────────────────────────────────────────────────────────────────────────
     // WAREHOUSE-WIDE PROFIT

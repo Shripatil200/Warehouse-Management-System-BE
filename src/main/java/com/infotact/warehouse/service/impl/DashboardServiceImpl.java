@@ -18,8 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.time.Duration;
+import java.time.*;
 import java.util.*;
 
 /**
@@ -41,6 +40,9 @@ public class DashboardServiceImpl implements DashboardService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository transactionRepository;
+    private final ProfitReportRepository profitReportRepository;
+    private final SupplierRevenueRepository supplierRevenueRepository;
+    private final BinRentalPaymentRepository binRentalPaymentRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -56,7 +58,6 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardSummaryResponse.builder()
                 .totalProducts(productRepository.countByWarehouseId(warehouseId))
                 .lowStockCount(productRepository.countGlobalLowStock(warehouseId))
-                // Refactored: Now passing BinType.PICK_FACE as a parameter
                 .replenishmentCount(productRepository.countProductsNeedingReplenishment(warehouseId, BinType.PICK_FACE))
                 .outboundOrders(orderRepository.countByWarehouseIdAndStatus(warehouseId, OrderStatus.PENDING))
                 .pendingPurchases(purchaseOrderRepository.countByWarehouseIdAndStatus(warehouseId, PurchaseOrderStatus.PENDING))
@@ -67,6 +68,7 @@ public class DashboardServiceImpl implements DashboardService {
                 .alerts(getRecentAlerts(warehouseId))
                 .recentActivity(fetchRecentActivity(warehouseId))
                 .topProducts(orderRepository.findTopSellingProductsMonthly(warehouseId, thirtyDaysAgo, PageRequest.of(0, 3)))
+                .profitSummary(buildProfitSummary(warehouseId))
                 .build();
     }
 
@@ -80,9 +82,60 @@ public class DashboardServiceImpl implements DashboardService {
         return transactionRepository.getFinancialAnalytics(warehouseId, null, start, end, format);
     }
 
-    /**
-     * Internal helper to resolve warehouse occupancy/utilization.
-     */
+    // ── Profit Summary ────────────────────────────────────────────────────────
+
+    private DashboardProfitSummary buildProfitSummary(String warehouseId) {
+        LocalDate today = LocalDate.now();
+
+        LocalDate thisMonthStart = today.withDayOfMonth(1);
+        LocalDate thisMonthEnd   = today;
+
+        LocalDate lastMonthStart = today.minusMonths(1).withDayOfMonth(1);
+        LocalDate lastMonthEnd   = today.minusMonths(1).withDayOfMonth(
+                today.minusMonths(1).lengthOfMonth());
+
+        LocalDate thisYearStart  = today.withDayOfYear(1);
+        LocalDate thisYearEnd    = today;
+
+        return DashboardProfitSummary.builder()
+                .thisMonth(buildProfitBlock(warehouseId, thisMonthStart, thisMonthEnd))
+                .lastMonth(buildProfitBlock(warehouseId, lastMonthStart, lastMonthEnd))
+                .thisYear(buildProfitBlock(warehouseId, thisYearStart, thisYearEnd))
+                .build();
+    }
+
+    private DashboardProfitSummary.ProfitBlock buildProfitBlock(String warehouseId, LocalDate from, LocalDate to) {
+        LocalDateTime fromDt = from.atStartOfDay();
+        LocalDateTime toDt   = to.atTime(LocalTime.MAX);
+
+        List<Object[]> profitRows = profitReportRepository.sumProfitBlockForDashboard(warehouseId, fromDt, toDt);
+
+        BigDecimal ownedProfit       = BigDecimal.ZERO;
+        BigDecimal consignmentProfit = BigDecimal.ZERO;
+        BigDecimal totalRevenue      = BigDecimal.ZERO;
+
+        if (!profitRows.isEmpty()) {
+            Object[] row = profitRows.get(0);
+            ownedProfit       = row[0] != null ? (BigDecimal) row[0] : BigDecimal.ZERO;
+            consignmentProfit = row[1] != null ? (BigDecimal) row[1] : BigDecimal.ZERO;
+            totalRevenue      = row[2] != null ? (BigDecimal) row[2] : BigDecimal.ZERO;
+        }
+
+        BigDecimal binRentalRevenue = Optional.ofNullable(
+                        binRentalPaymentRepository.sumTotalRentalRevenue(warehouseId, from, to))
+                .orElse(BigDecimal.ZERO);
+
+        return DashboardProfitSummary.ProfitBlock.builder()
+                .ownedProfit(ownedProfit)
+                .consignmentProfit(consignmentProfit)
+                .totalProfit(ownedProfit.add(consignmentProfit))
+                .totalRevenue(totalRevenue)
+                .binRentalRevenue(binRentalRevenue)
+                .build();
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
     private Double calculateUtilization(String warehouseId) {
         List<Object[]> results = warehouseRepository.findWarehouseUtilization(warehouseId);
 
@@ -118,33 +171,27 @@ public class DashboardServiceImpl implements DashboardService {
             long count = ((Number) result[1]).longValue();
 
             switch (status) {
-                case "ACTIVE" -> active = count;
-                case "INACTIVE" -> inactive = count;
+                case "ACTIVE"    -> active    = count;
+                case "INACTIVE"  -> inactive  = count;
                 case "SUSPENDED" -> suspended = count;
-                case "PENDING" -> pending = count;
+                case "PENDING"   -> pending   = count;
             }
         }
         return new DashboardSummaryResponse.UserStatusCountDTO(active, inactive, suspended, pending);
     }
 
-    /**
-     * Generates a list of high-priority operational alerts.
-     */
     private List<AlertDTO> getRecentAlerts(String warehouseId) {
         List<AlertDTO> alerts = new ArrayList<>();
 
-        // 1. Procurement Alerts: Items missing from the entire warehouse
         productRepository.findGlobalLowStockProducts(warehouseId).stream()
                 .limit(2)
                 .forEach(p -> alerts.add(new AlertDTO(p.getName() + " - Low Global Stock", "LOW_STOCK")));
 
-        // 2. Operational Alerts: Items available in Bulk but missing from Picking shelf
         long replenishNeeded = productRepository.countProductsNeedingReplenishment(warehouseId, BinType.PICK_FACE);
         if (replenishNeeded > 0) {
             alerts.add(new AlertDTO(replenishNeeded + " Products require Picking Replenishment", "REPLENISHMENT"));
         }
 
-        // 3. Logistics Alerts: Delayed outbound orders
         List<OrderStatus> excluded = List.of(OrderStatus.SHIPPED, OrderStatus.DELIVERED);
         long delayed = orderRepository.countDelayedOrders(warehouseId, excluded);
 
@@ -168,15 +215,15 @@ public class DashboardServiceImpl implements DashboardService {
     private String buildActivityMessage(com.infotact.warehouse.entity.InventoryTransaction t) {
         String name = t.getInventoryItem().getProduct().getName();
         return switch (t.getType()) {
-            case INBOUND -> "Received " + t.getQuantityChange() + " units of " + name;
-            case OUTBOUND -> "Dispatched " + Math.abs(t.getQuantityChange()) + " units of " + name;
-            case TRANSFER -> "Transferred " + Math.abs(t.getQuantityChange()) + " units of " + name;
+            case INBOUND    -> "Received " + t.getQuantityChange() + " units of " + name;
+            case OUTBOUND   -> "Dispatched " + Math.abs(t.getQuantityChange()) + " units of " + name;
+            case TRANSFER   -> "Transferred " + Math.abs(t.getQuantityChange()) + " units of " + name;
             case ADJUSTMENT -> "Adjusted " + name + " stock by " + t.getQuantityChange();
-            default -> "Inventory updated for " + name;
+            default         -> "Inventory updated for " + name;
         };
     }
 
-    private String calculateTimeAgo(LocalDateTime past) {
+    private String calculateTimeAgo(java.time.LocalDateTime past) {
         if (past == null) return "Just now";
         Duration duration = Duration.between(past, LocalDateTime.now());
         if (duration.toMinutes() < 60) {
@@ -203,11 +250,11 @@ public class DashboardServiceImpl implements DashboardService {
 
     private String resolveFormat(String granularity) {
         return switch (granularity.toLowerCase()) {
-            case "day" -> "%Y-%m-%d";
-            case "week" -> "%Y-Week%u";
+            case "day"   -> "%Y-%m-%d";
+            case "week"  -> "%Y-Week%u";
             case "month" -> "%Y-%m";
-            case "year" -> "%Y";
-            default -> "%Y-%m-%d";
+            case "year"  -> "%Y";
+            default      -> "%Y-%m-%d";
         };
     }
 }

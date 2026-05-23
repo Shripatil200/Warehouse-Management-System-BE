@@ -1,6 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.enums.OperatorStatus;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import jakarta.persistence.*;
@@ -65,4 +66,17 @@ public class User extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
+
+    /**
+     * Real-time floor availability for operators.
+     *
+     * <p>Only meaningful when {@code role == OPERATOR}.  Other roles (ADMIN,
+     * MANAGER, EMPLOYEE) are ignored by the assignment engine.
+     *
+     * <p>Default: {@link OperatorStatus#AVAILABLE} — existing rows get this value
+     * via the Flyway migration V2__add_operator_status_to_users.sql (see below).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "operator_status", nullable = false)
+    private OperatorStatus operatorStatus = OperatorStatus.AVAILABLE;
 }

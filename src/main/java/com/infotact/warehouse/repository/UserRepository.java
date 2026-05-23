@@ -2,6 +2,7 @@ package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.entity.enums.Role;
+import com.infotact.warehouse.entity.enums.OperatorStatus;
 import com.infotact.warehouse.entity.enums.UserStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -62,4 +63,28 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
 
     @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
     long countAssignedWarehouseForUser(@Param("email") String email);
+
+    /**
+     * Finds the first AVAILABLE operator in the given warehouse.
+     *
+     * <p>Spring Data JPA derives the query automatically from the method name:
+     * {@code WHERE warehouse_id = ? AND operator_status = ?}.
+     *
+     * <p>The "first" guarantees we always get at most one result even if several
+     * operators are AVAILABLE — the engine will assign more tasks as completions
+     * trickle in.  No explicit LIMIT needed; Spring Data handles it.
+     */
+    Optional<User> findFirstByWarehouseIdAndOperatorStatus(
+            String warehouseId,
+            OperatorStatus operatorStatus
+    );
+
+    /**
+     * Returns all operators with AVAILABLE status in a warehouse.
+     * Used by the manager dashboard to show operator capacity.
+     */
+    List<User> findByWarehouseIdAndOperatorStatus(
+            String warehouseId,
+            OperatorStatus operatorStatus
+    );
 }

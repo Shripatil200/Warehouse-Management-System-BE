@@ -4,6 +4,7 @@ import com.infotact.warehouse.config.TenantFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -28,43 +29,59 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private final UsersDetailsService    usersDetailsService;
+    private final UsersDetailsService usersDetailsService;
     private final SupplierDetailsService supplierDetailsService;
-    private final JwtFilter              jwtFilter;
-    private final TenantFilter           tenantFilter;
+    private final JwtFilter jwtFilter;
+    private final TenantFilter tenantFilter;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
-    public SecurityConfig(UsersDetailsService usersDetailsService,
-                          SupplierDetailsService supplierDetailsService,
-                          JwtFilter jwtFilter,
-                          TenantFilter tenantFilter) {
-        this.usersDetailsService    = usersDetailsService;
+    public SecurityConfig(
+            UsersDetailsService usersDetailsService,
+            SupplierDetailsService supplierDetailsService,
+            JwtFilter jwtFilter,
+            TenantFilter tenantFilter
+    ) {
+        this.usersDetailsService = usersDetailsService;
         this.supplierDetailsService = supplierDetailsService;
-        this.jwtFilter              = jwtFilter;
-        this.tenantFilter           = tenantFilter;
+        this.jwtFilter = jwtFilter;
+        this.tenantFilter = tenantFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
                 .authorizeHttpRequests(auth -> auth
+
+                        // Preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // Public APIs
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-                                "/api/v1/warehouses/setup",
+
                                 "/api/v1/auth/otp/send-email",
                                 "/api/v1/auth/otp/verify-email",
                                 "/api/v1/auth/otp/send-contact",
                                 "/api/v1/auth/otp/verify-contact",
+
                                 "/api/v1/supplier/register",
-                                "/api/v1/supplier/login",   // supplier login is public
+                                "/api/v1/supplier/login",
+
+                                "/api/v1/warehouses/setup",
+
+                                // Swagger
                                 "/v3/api-docs/**",
                                 "/v3/api-docs.yaml",
                                 "/swagger-ui/**",
@@ -72,50 +89,88 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**"
                         ).permitAll()
+
+                        // SSE endpoints
+                        .requestMatchers(
+                                "/api/v1/tasks/stream/**"
+                        ).authenticated()
+
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(tenantFilter, JwtFilter.class);
+
+                .addFilterBefore(
+                        jwtFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
+
+                .addFilterAfter(
+                        tenantFilter,
+                        JwtFilter.class
+                );
 
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration configuration = new CorsConfiguration();
-        List<String> origins = Arrays.asList(allowedOrigins.split(","));
+
+        List<String> origins = Arrays.asList(
+                allowedOrigins.split(",")
+        );
+
         configuration.setAllowedOrigins(origins);
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Cache-Control"));
+
+        configuration.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
+
+        configuration.setAllowedHeaders(List.of("Authorization","Content-Type","Cache-Control","Accept","Origin"));
+
+        configuration.setExposedHeaders(List.of("Authorization","Content-Type"));
+
         configuration.setAllowCredentials(true);
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration(
+                "/**",
+                configuration
+        );
+
         return source;
     }
 
     /**
-     * PRIMARY authentication manager for warehouse staff (users table).
-     * Marked @Primary so Spring injects this wherever AuthenticationManager
-     * is needed without a @Qualifier. Used by AuthServiceImpl.
+     * Authentication manager for warehouse users.
      */
     @Bean(name = "userAuthenticationManager")
-    @org.springframework.context.annotation.Primary
+    @Primary
     public AuthenticationManager userAuthenticationManager() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider();
+
         provider.setUserDetailsService(usersDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
+
         return new ProviderManager(provider);
     }
 
     /**
-     * Authentication manager for suppliers (suppliers table).
-     * Injected via @Qualifier("supplierAuthenticationManager") in SupplierServiceImpl.
+     * Authentication manager for suppliers.
      */
     @Bean(name = "supplierAuthenticationManager")
     public AuthenticationManager supplierAuthenticationManager() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider();
+
         provider.setUserDetailsService(supplierDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
+
         return new ProviderManager(provider);
     }
 

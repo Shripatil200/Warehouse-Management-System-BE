@@ -1,0 +1,86 @@
+package com.infotact.warehouse.repository;
+
+import com.infotact.warehouse.entity.Task;
+import com.infotact.warehouse.entity.enums.TaskStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Data-access layer for {@link Task}.
+ *
+ * <h3>Key queries</h3>
+ * <ul>
+ *   <li>{@link #findTopWaitingTask} — the heart of the assignment engine.
+ *       Fetches the single highest-priority WAITING task using a PESSIMISTIC
+ *       write lock to prevent two threads from claiming the same row.</li>
+ *   <li>{@link #findByAssignedOperatorIdAndStatus} — lets an operator's mobile
+ *       app retrieve their current active task on reconnect.</li>
+ * </ul>
+ */
+@Repository
+public interface TaskRepository extends JpaRepository<Task, String> {
+
+    // ── Assignment engine query ───────────────────────────────────────────────
+
+    /**
+     * Returns the single highest-priority WAITING task for a given warehouse,
+     * ordered by priority weight (DESC) then creation time (ASC — FIFO).
+     *
+     * <p><b>SKIP LOCKED</b> ensures that if two operators free up at the same
+     * millisecond and two threads call this concurrently, each thread locks a
+     * different row instead of blocking on the same one.  Combined with the
+     * {@code synchronized} block in {@link com.infotact.warehouse.service.impl.TaskAssignmentEngine}
+     * this gives a belt-and-suspenders concurrency guarantee.</p>
+     *
+     * <p>Note: SKIP LOCKED is supported on PostgreSQL 9.5+ and MySQL 8.0+.</p>
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+       SELECT t FROM Task t \
+       WHERE t.warehouse.id = :warehouseId AND t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING \
+       ORDER BY t.priority DESC, t.createdAt ASC\
+       """)
+    Optional<Task> findTopWaitingTask(@Param("warehouseId") String warehouseId);
+
+    // ── Operator mobile-app queries ───────────────────────────────────────────
+
+    /**
+     * Returns the current task being worked on by an operator.
+     * Used when the operator's app reconnects via SSE to rebuild UI state.
+     */
+    Optional<Task> findByAssignedOperatorIdAndStatus(String operatorId, TaskStatus status);
+
+    /**
+     * Returns all tasks assigned to an operator across all statuses.
+     * Useful for a task-history screen in the mobile app.
+     */
+    List<Task> findByAssignedOperatorIdOrderByCreatedAtDesc(String operatorId);
+
+    // ── Manager / dashboard queries ───────────────────────────────────────────
+
+    /**
+     * All currently queued (WAITING) tasks for a warehouse, in priority order.
+     * Drives the manager dashboard pending-queue view.
+     */
+    @Query("""
+       SELECT t FROM Task t \
+       WHERE t.warehouse.id = :warehouseId AND t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING \
+       ORDER BY t.priority DESC, t.createdAt ASC\
+       """)
+    List<Task> findWaitingQueueByWarehouse(@Param("warehouseId") String warehouseId);
+
+    /**
+     * Count of tasks currently in WAITING state for a warehouse.
+     * Used by the dashboard summary card.
+     */
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.warehouse.id = :warehouseId AND t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING")
+    long countWaitingByWarehouse(@Param("warehouseId") String warehouseId);
+
+}

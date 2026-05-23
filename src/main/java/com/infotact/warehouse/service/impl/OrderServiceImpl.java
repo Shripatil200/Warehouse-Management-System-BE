@@ -49,6 +49,7 @@ public class OrderServiceImpl implements OrderService {
     private final LayoutService layoutService;
     private final BarcodeAuditService auditService;
     private final ConsignmentService consignmentService;
+    private final TaskAssignmentService taskEngine; // Programmed using the interface type
 
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -92,8 +93,6 @@ public class OrderServiceImpl implements OrderService {
                 // ★ PROFIT TRACKING — snapshot cost and compute profit at order creation time
                 item.setConsignment(product.isConsignment());
                 if (product.isConsignment()) {
-                    // Cost is zero for consignment; profit will be updated in verifyAndPack()
-                    // once warehouseShare is known from the ConsignmentSale record.
                     item.setCostPriceAtTimeOfOrder(BigDecimal.ZERO);
                     item.setProfit(BigDecimal.ZERO);
                 } else {
@@ -110,13 +109,23 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setItems(orderItems);
-        return mapToResponse(orderRepository.save(order));
+        SellingOrder savedOrder = orderRepository.save(order);
+
+        // ── Task trigger hook: spawn PICKING task ─────────────────────────────────
+        String pickLocation = orderItems.stream()
+                .findFirst()
+                .map(item -> item.getSuggestedBinId() != null
+                        ? "Resolved Bin Location"
+                        : "See picking list")
+                .orElse("Warehouse floor");
+
+        taskEngine.createPickingTask(savedOrder, pickLocation, warehouseId);
+        log.info("PICKING task spawned for order {}", savedOrder.getOrderNumber());
+        // ─────────────────────────────────────────────────────────────────────
+
+        return mapToResponse(savedOrder);
     }
 
-    /**
-     * Physical Scan Verification Engine with Audit Trail.
-     * Logs every interaction to the Barcode Audit system.
-     */
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
@@ -133,26 +142,21 @@ public class OrderServiceImpl implements OrderService {
 
         for (SellingOrderItem item : order.getItems()) {
             try {
-                // 1. Verify Product Barcode
                 if (!item.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
                     throw new IllegalOperationException("Scan Mismatch: Product SKU does not match.");
                 }
 
-                // 2. Verify physical location barcode
                 boolean isCorrectBin = layoutService.verifyBinScan(scannedBinCode, item.getSuggestedBinId());
                 if (!isCorrectBin) {
                     throw new IllegalOperationException("Location Error: Incorrect bin code scanned.");
                 }
 
-                // 3. Commit the pick
                 inventoryService.commitPick(item.getInventoryItemId(), item.getQuantity());
 
-                // AUDIT LOG: Success
                 auditService.logSuccess(operator.getId(), item.getSuggestedBinId(),
                         orderId, AuditAction.PICKING, scannedBinCode);
 
             } catch (IllegalOperationException e) {
-                // AUDIT LOG: Failure (Logs exactly what went wrong)
                 auditService.logFailure(operator.getId(), item.getSuggestedBinId(),
                         orderId, AuditAction.PICKING, scannedBinCode, e.getMessage());
                 throw e;
@@ -162,7 +166,6 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.PACKED);
         orderRepository.save(order);
 
-        // ★ CONSIGNMENT + PROFIT PATCH — record sale and back-fill profit = warehouseShare
         for (SellingOrderItem item : order.getItems()) {
             Product product = item.getProduct();
             if (product.isConsignment()) {

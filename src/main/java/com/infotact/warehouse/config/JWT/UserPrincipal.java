@@ -12,24 +12,29 @@ import java.util.List;
 /**
  * Spring Security principal for warehouse {@link User} accounts.
  * <p>
- * Carries the {@code warehouseId} claim so the service layer can enforce
- * multi-tenant data isolation without extra DB queries. Since every {@link User}
- * now always has a warehouse (nullable = false), {@code warehouseId} is never null here.
+ * Carries the {@code id} and {@code warehouseId} claims so the service/controller layer can enforce
+ * multi-tenant data isolation and task assignments without extra DB queries.
  * </p>
  */
 @Getter
 public class UserPrincipal implements UserDetails {
 
+    private final String id; // Added to fix the controller 'getUserId' compilation errors
     private final String email;
     private final String password;
     private final String warehouseId;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public UserPrincipal(User user) {
+        this.id          = user.getId(); // Map the entity ID here
         this.email       = user.getEmail();
         this.password    = user.getPassword();
         this.warehouseId = user.getWarehouse().getId();
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    }
+
+    public String getUserId() {
+        return this.id;
     }
 
     @Override public Collection<? extends GrantedAuthority> getAuthorities() { return authorities; }

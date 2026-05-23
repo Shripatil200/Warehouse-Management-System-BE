@@ -36,17 +36,15 @@ import java.util.Optional;
  *
  * <h2>Concurrency model</h2>
  * <pre>
- *  JVM-level:  {@code synchronized} on {@code assignNextTaskToOperator} ensures that
- *              if two operators finish at the exact same millisecond, their threads
- *              are serialised and both get different tasks (no double-assignment).
- *
- *  DB-level:   {@code PESSIMISTIC_WRITE + SKIP LOCKED} in TaskRepository ensures
- *              that in a multi-instance (clustered) deployment, only one JVM node
- *              locks a given WAITING task row at a time.
+ *  DB-level:   A native PostgreSQL FOR UPDATE SKIP LOCKED query in TaskRepository
+ *              ensures that concurrent threads or cluster nodes each lock a different
+ *              WAITING task row. If a row is already locked by another transaction,
+ *              SKIP LOCKED skips it entirely rather than blocking, so two nodes
+ *              completing tasks simultaneously will each claim a distinct task.
  * </pre>
  *
- * <p>Together these provide belt-and-suspenders safety for both single-instance
- * and horizontally-scaled deployments.
+ * <p>This is a pure DB-level guarantee — no JVM-level synchronization is needed
+ * or used. The approach is correct for both single-instance and clustered deployments.
  */
 @Slf4j
 @Service
@@ -110,15 +108,15 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      *       assigns it to them.</li>
      * </ol>
      *
-     * <p>The {@code synchronized} keyword serialises concurrent completions at the
-     * JVM level.  Combined with {@code PESSIMISTIC_WRITE} in the repository query,
-     * this prevents double-assignment in clustered environments.
+     * <p>Double-assignment is prevented at the DB level: the native SKIP LOCKED
+     * query in {@code findTopWaitingTask} ensures each concurrent caller claims
+     * a distinct task row without blocking.
      *
      * @param completedTaskId The ID of the task the operator just finished.
      * @param operatorId      The ID of the operator who completed it.
      */
     @Transactional
-    public synchronized void completeTaskAndAssignNext(String completedTaskId, String operatorId) {
+    public void completeTaskAndAssignNext(String completedTaskId, String operatorId) {
 
         // ── a. Resolve entities ──────────────────────────────────────────────
         Task completedTask = taskRepository.findById(completedTaskId)
@@ -158,7 +156,7 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      * @param warehouseId Required to scope the queue lookup.
      */
     @Transactional
-    public synchronized void cancelTask(String taskId, String warehouseId) {
+    public void cancelTask(String taskId, String warehouseId) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found: " + taskId));
 
@@ -251,11 +249,11 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      * Fetches the top WAITING task for the operator's warehouse and assigns it.
      * No-op if the queue is empty (operator stays AVAILABLE, ready for next trigger).
      *
-     * <p>This method is intentionally {@code synchronized} to ensure that concurrent
-     * calls (e.g., two operators completing tasks simultaneously) serialize their
-     * queue pops and each gets a unique task.
+     * Concurrency is guaranteed at the DB level: the native SKIP LOCKED query
+     * in TaskRepository ensures each concurrent caller locks a distinct row,
+     * preventing double-assignment across both threads and cluster nodes.
      */
-    private synchronized void assignNextTaskToOperator(User operator) {
+    private void assignNextTaskToOperator(User operator) {
         String warehouseId = operator.getWarehouse().getId();
 
         taskRepository.findTopWaitingTask(warehouseId).ifPresentOrElse(

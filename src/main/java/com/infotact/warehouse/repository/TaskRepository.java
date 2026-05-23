@@ -2,9 +2,7 @@ package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.Task;
 import com.infotact.warehouse.entity.enums.TaskStatus;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -33,20 +31,31 @@ public interface TaskRepository extends JpaRepository<Task, String> {
      * Returns the single highest-priority WAITING task for a given warehouse,
      * ordered by priority weight (DESC) then creation time (ASC — FIFO).
      *
-     * <p><b>SKIP LOCKED</b> ensures that if two operators free up at the same
-     * millisecond and two threads call this concurrently, each thread locks a
-     * different row instead of blocking on the same one.  Combined with the
-     * {@code synchronized} block in {@link com.infotact.warehouse.service.impl.TaskAssignmentEngine}
-     * this gives a belt-and-suspenders concurrency guarantee.</p>
+     * Uses a native PostgreSQL query with FOR UPDATE SKIP LOCKED so that
+     * concurrent threads/nodes each claim a different row rather than
+     * blocking each other on the same lock. This is the DB-level guarantee
+     * that makes the assignment engine cluster-safe without relying on
+     * JVM-level synchronization.
      *
-     * <p>Note: SKIP LOCKED is supported on PostgreSQL 9.5+ and MySQL 8.0+.</p>
+     * Note: SKIP LOCKED requires PostgreSQL 9.5+ or MySQL 8.0+.
+     * The CASE ordering maps TaskPriority enum names to numeric weights
+     * matching the TaskPriority.weight values (URGENT=300, HIGH=200, STANDARD=100).
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-       SELECT t FROM Task t \
-       WHERE t.warehouse.id = :warehouseId AND t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING \
-       ORDER BY t.priority DESC, t.createdAt ASC\
-       """)
+    @Query(value = """
+        SELECT * FROM tasks
+        WHERE warehouse_id = :warehouseId
+          AND status = 'WAITING'
+        ORDER BY
+          CASE priority
+            WHEN 'URGENT'   THEN 300
+            WHEN 'HIGH'     THEN 200
+            WHEN 'STANDARD' THEN 100
+            ELSE 0
+          END DESC,
+          created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+        """, nativeQuery = true)
     Optional<Task> findTopWaitingTask(@Param("warehouseId") String warehouseId);
 
     // ── Operator mobile-app queries ───────────────────────────────────────────

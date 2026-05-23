@@ -216,4 +216,11 @@ public interface InventoryService {
      * </ul>
      */
     void replenishPickingFace(String productId, String targetBinId, Integer desiredQty);
+
+    /**
+     * Returns true if the given inventory item has been fully committed (reservedQuantity == 0),
+     * indicating the pick for that layer is complete.
+     * Used by verifyAndPack to determine when all items in an order have been picked.
+     */
+    boolean isFullyPicked(String inventoryItemId);
 }

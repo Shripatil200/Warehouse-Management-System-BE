@@ -18,6 +18,7 @@ import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import java.security.SecureRandom;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -48,6 +49,8 @@ public class AuthServiceImpl implements AuthService {
     private final OtpTokenRepository         otpRepo;
     private final VerifiedProofRepository    proofRepo;
     private final SmsUtils                   smsUtils;
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -140,7 +143,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void sendEmailOtp(String email) {
         otpRepo.findById(email).ifPresent(otpRepo::delete);
-        String otp = String.format("%06d", new java.util.Random().nextInt(1000000));
+        String otp = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
         otpRepo.save(new OtpToken(email, otp));
         try {
             emailUtils.sendOtpMail(email, "Email Verification Code", otp);
@@ -164,7 +167,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void sendContactOtp(String contact) {
         otpRepo.findById(contact).ifPresent(otpRepo::delete);
-        String otp = String.format("%06d", new java.util.Random().nextInt(1000000));
+        String otp = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
         otpRepo.save(new OtpToken(contact, otp));
         try {
             smsUtils.sendOtpSms(contact, otp);

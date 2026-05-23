@@ -130,7 +130,8 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     @CacheEvict(value = "orders", allEntries = true)
-    public void verifyAndPack(String orderId, String scannedSku, String scannedBinCode) {
+    public void verifyAndPack(String orderId, String inventoryItemId,
+                              String scannedSku, String scannedBinCode, int quantity) {
         User operator = getAuthenticatedUser();
 
         SellingOrder order = orderRepository.findById(orderId)
@@ -140,44 +141,64 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalOperationException("Order must be in PENDING or PICKING status for scan verification.");
         }
 
-        for (SellingOrderItem item : order.getItems()) {
-            try {
-                if (!item.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
-                    throw new IllegalOperationException("Scan Mismatch: Product SKU does not match.");
-                }
+        // Find the specific item the operator is scanning — one item per scan call
+        SellingOrderItem target = order.getItems().stream()
+                .filter(i -> inventoryItemId.equals(i.getInventoryItemId()))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Inventory item " + inventoryItemId + " is not part of order " + orderId));
 
-                boolean isCorrectBin = layoutService.verifyBinScan(scannedBinCode, item.getSuggestedBinId());
-                if (!isCorrectBin) {
-                    throw new IllegalOperationException("Location Error: Incorrect bin code scanned.");
-                }
-
-                inventoryService.commitPick(item.getInventoryItemId(), item.getQuantity());
-
-                auditService.logSuccess(operator.getId(), item.getSuggestedBinId(),
-                        orderId, AuditAction.PICKING, scannedBinCode);
-
-            } catch (IllegalOperationException e) {
-                auditService.logFailure(operator.getId(), item.getSuggestedBinId(),
-                        orderId, AuditAction.PICKING, scannedBinCode, e.getMessage());
-                throw e;
+        try {
+            if (!target.getProduct().getSku().equalsIgnoreCase(scannedSku)) {
+                throw new IllegalOperationException("Scan Mismatch: Scanned SKU does not match the reserved item.");
             }
-        }
 
-        order.setStatus(OrderStatus.PACKED);
-        orderRepository.save(order);
+            boolean isCorrectBin = layoutService.verifyBinScan(scannedBinCode, target.getSuggestedBinId());
+            if (!isCorrectBin) {
+                throw new IllegalOperationException("Location Error: Incorrect bin code scanned.");
+            }
 
-        for (SellingOrderItem item : order.getItems()) {
-            Product product = item.getProduct();
+            inventoryService.commitPickWithVerification(
+                    inventoryItemId, scannedBinCode, scannedSku, quantity);
+
+            auditService.logSuccess(operator.getId(), target.getSuggestedBinId(),
+                    orderId, AuditAction.PICKING, scannedBinCode);
+
+            // Record consignment sale immediately on pick commit
+            Product product = target.getProduct();
             if (product.isConsignment()) {
-                ConsignmentSale sale = consignmentService.recordConsignmentSale(item, product, LocalDateTime.now());
+                ConsignmentSale sale = consignmentService.recordConsignmentSale(
+                        target, product, LocalDateTime.now());
                 if (sale != null) {
-                    item.setProfit(sale.getWarehouseShare());
+                    target.setProfit(sale.getWarehouseShare());
                 }
             }
-        }
-        orderRepository.save(order);
 
-        log.info("Order {} successfully verified and packed via handheld scan.", order.getOrderNumber());
+        } catch (IllegalOperationException e) {
+            auditService.logFailure(operator.getId(), target.getSuggestedBinId(),
+                    orderId, AuditAction.PICKING, scannedBinCode, e.getMessage());
+            throw e;
+        }
+
+        // Advance order to PACKED only when every item has been picked (reservedQty == 0)
+        boolean allPicked = order.getItems().stream().allMatch(item -> {
+            // After commitPick, reservedQuantity for this item drops to 0
+            if (item.getInventoryItemId().equals(inventoryItemId)) return true;
+            // For other items, check if they are already fully committed (reservedQty == 0)
+            return inventoryService.isFullyPicked(item.getInventoryItemId());
+        });
+
+        if (allPicked) {
+            order.setStatus(OrderStatus.PACKED);
+            log.info("Order {} fully picked — status advanced to PACKED.", order.getOrderNumber());
+        } else {
+            order.setStatus(OrderStatus.PICKING);
+            log.info("Order {} partially picked — status set to PICKING.", order.getOrderNumber());
+        }
+
+        orderRepository.save(order);
+        log.info("Item {} verified and picked by operator {} for order {}.",
+                inventoryItemId, operator.getEmail(), order.getOrderNumber());
     }
 
     @Override
@@ -188,9 +209,9 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
         switch (nextStatus) {
-            case PICKING -> validateTransition(order.getStatus(), OrderStatus.PENDING);
+            case PICKING -> validateTransition(order.getStatus(), OrderStatus.PENDING, nextStatus);
             case PACKED -> throw new IllegalOperationException("PACKED status requires scanning via /verify-pack endpoint.");
-            case SHIPPED -> validateTransition(order.getStatus(), OrderStatus.PACKED);
+            case SHIPPED -> validateTransition(order.getStatus(), OrderStatus.PACKED, nextStatus);
             case CANCELLED -> releaseInventory(order);
             default -> throw new IllegalOperationException("Transition not supported via manual update.");
         }
@@ -205,9 +226,10 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private void validateTransition(OrderStatus current, OrderStatus expected) {
+    private void validateTransition(OrderStatus current, OrderStatus expected, OrderStatus nextStatus) {
         if (current != expected) {
-            throw new IllegalOperationException("State Error: Order must be " + expected + " before moving to " + current);
+            throw new IllegalOperationException(
+                    "State Error: Order must be " + expected + " before moving to " + nextStatus + ". Current status: " + current);
         }
     }
 

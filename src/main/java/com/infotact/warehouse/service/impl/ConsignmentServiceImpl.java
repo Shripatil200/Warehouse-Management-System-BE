@@ -22,7 +22,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -138,7 +137,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         String warehouseId = TenantContext.get();
         List<ConsignmentAgreement> agreements = status != null
                 ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId)
-                : agreementRepo.findAll();
+                : agreementRepo.findAllByWarehouseId(warehouseId);
         return agreements.stream().map(this::mapToAgreementResponse).collect(Collectors.toList());
     }
 
@@ -369,14 +368,14 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 .build();
     }
 
-    private static final AtomicInteger agreementCounter  = new AtomicInteger(1);
-    private static final AtomicInteger settlementCounter = new AtomicInteger(1);
-
     private String generateAgreementCode() {
-        return String.format("CONS-%d-%04d", LocalDate.now().getYear(), agreementCounter.getAndIncrement());
+        // UUID suffix guarantees uniqueness across restarts and cluster nodes
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        return String.format("CONS-%d-%s", LocalDate.now().getYear(), suffix);
     }
 
     private String generateSettlementNumber() {
-        return String.format("SETL-%d-%04d", LocalDate.now().getYear(), settlementCounter.getAndIncrement());
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        return String.format("SETL-%d-%s", LocalDate.now().getYear(), suffix);
     }
 }

@@ -1,53 +1,30 @@
 package com.infotact.warehouse.service;
 
+import com.infotact.warehouse.dto.v1.request.SupplierLoginRequest;
 import com.infotact.warehouse.dto.v1.request.SupplierProfileUpdateRequest;
 import com.infotact.warehouse.dto.v1.request.SupplierRegistrationRequest;
+import com.infotact.warehouse.dto.v1.response.AuthResponse;
 import com.infotact.warehouse.dto.v1.response.SupplierResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-/**
- * Service interface for supplier identity management.
- * Covers self-registration and self-service profile management.
- */
 public interface SupplierService {
 
-    /**
-     * Registers a new independent supplier account.
-     * Public endpoint — no authentication required.
-     *
-     * @param request Registration details.
-     * @return Confirmation message.
-     */
+    /** Public — registers a new supplier account. */
     String register(SupplierRegistrationRequest request);
 
-    /**
-     * Retrieves the profile of the currently authenticated supplier.
-     */
+    /** Public — authenticates a supplier and returns a JWT. */
+    AuthResponse login(SupplierLoginRequest request);
+
+    /** Authenticated supplier fetches their own profile. */
     SupplierResponse getMyProfile();
 
-    /**
-     * Updates the profile of the currently authenticated supplier.
-     *
-     * @param request Fields to update (all optional).
-     * @return Confirmation message.
-     */
+    /** Authenticated supplier updates their own profile. */
     String updateMyProfile(SupplierProfileUpdateRequest request);
 
-    /**
-     * Returns a paginated list of all active suppliers.
-     * Available to warehouse MANAGER and ADMIN for PO creation flows.
-     *
-     * @param pageable Pagination metadata.
-     * @return Page of supplier profiles.
-     */
+    /** Warehouse MANAGER/ADMIN — paginated list of all suppliers. */
     Page<SupplierResponse> getAllSuppliers(Pageable pageable);
 
-    /**
-     * Retrieves the public profile of a specific supplier by ID.
-     *
-     * @param supplierId Supplier user UUID.
-     * @return Supplier profile.
-     */
+    /** Warehouse MANAGER/ADMIN — fetch a specific supplier by ID. */
     SupplierResponse getById(String supplierId);
 }

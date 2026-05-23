@@ -4,10 +4,10 @@ import lombok.Builder;
 import lombok.Data;
 
 /**
- * Encapsulates authentication credentials and basic user context.
+ * Authentication response for both warehouse staff and supplier logins.
  * <p>
- * This structured response allows the client to persist essential session
- * metadata (like Warehouse identity) without redundant JWT decoding.
+ * For warehouse staff: {@code warehouseId} is populated, {@code supplierId} is null.
+ * For suppliers: {@code supplierId} is populated, {@code warehouseId} is null.
  * </p>
  */
 @Data
@@ -16,5 +16,8 @@ public class AuthResponse {
     private String token;
     private String email;
     private String role;
+    /** Populated for warehouse staff logins. Null for supplier logins. */
     private String warehouseId;
+    /** Populated for supplier logins. Null for warehouse staff logins. */
+    private String supplierId;
 }

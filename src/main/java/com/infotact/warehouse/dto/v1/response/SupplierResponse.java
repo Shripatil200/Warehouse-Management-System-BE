@@ -1,50 +1,35 @@
 package com.infotact.warehouse.dto.v1.response;
 
-import com.infotact.warehouse.entity.User;
+import com.infotact.warehouse.entity.Supplier;
+import com.infotact.warehouse.entity.enums.SupplierStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Public supplier profile, safe to expose via API.
- */
 @Data
 @NoArgsConstructor
-@Schema(name = "SupplierResponse", description = "Supplier profile information")
+@Schema(name = "SupplierResponse", description = "Supplier public profile")
 public class SupplierResponse {
 
-    @Schema(description = "Supplier user UUID")
     private String id;
-
-    @Schema(description = "Contact person name")
     private String name;
-
-    @Schema(description = "Business email")
     private String email;
-
-    @Schema(description = "Primary contact number")
     private String contactNumber;
-
-    @Schema(description = "Registered business name")
     private String companyName;
-
-    @Schema(description = "GST or tax registration number")
     private String gstNumber;
-
-    @Schema(description = "Physical or billing address")
     private String address;
-
-    @Schema(description = "Company website URL")
     private String website;
+    private SupplierStatus status;
 
-    public SupplierResponse(User user) {
-        this.id            = user.getId();
-        this.name          = user.getName();
-        this.email         = user.getEmail();
-        this.contactNumber = user.getContactNumber();
-        this.companyName   = user.getCompanyName();
-        this.gstNumber     = user.getGstNumber();
-        this.address       = user.getAddress();
-        this.website       = user.getWebsite();
+    public SupplierResponse(Supplier supplier) {
+        this.id            = supplier.getId();
+        this.name          = supplier.getName();
+        this.email         = supplier.getEmail();
+        this.contactNumber = supplier.getContactNumber();
+        this.companyName   = supplier.getCompanyName();
+        this.gstNumber     = supplier.getGstNumber();
+        this.address       = supplier.getAddress();
+        this.website       = supplier.getWebsite();
+        this.status        = supplier.getStatus();
     }
 }

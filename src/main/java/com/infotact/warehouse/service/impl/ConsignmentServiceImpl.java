@@ -9,7 +9,6 @@ import com.infotact.warehouse.dto.v1.response.ConsignmentSettlementResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.ConsignmentSettlementStatus;
 import com.infotact.warehouse.entity.enums.ConsignmentStatus;
-import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.ConsignmentService;
 import jakarta.persistence.EntityNotFoundException;
@@ -27,22 +26,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * Core service handling all consignment business logic:
- * <ul>
- *   <li>Creating and approving agreements</li>
- *   <li>Recording sales against consigned products</li>
- *   <li>Generating settlement reports</li>
- *   <li>Approving and marking settlements as paid</li>
- * </ul>
+ * Core service handling all consignment business logic.
  *
- * <p><b>Update v3.0 (Supplier System):</b> The standalone {@code Supplier} entity
- * and {@code SupplierRepository} have been removed. Suppliers are now
- * {@link User} accounts with {@code role = SUPPLIER}, resolved via
- * {@link UserRepository} with a role guard.
- * {@link ConsignmentAgreement#getSupplier()} now returns a {@link User}.
- * All call sites using {@code supplier.getName()} and {@code supplier.getId()}
- * are unaffected — {@link User} exposes both.
- * </p>
+ * Supplier System v4.0: Suppliers are now a dedicated {@link Supplier} entity
+ * stored in the suppliers table, resolved via {@link SupplierRepository}.
+ * {@link ConsignmentAgreement#getSupplier()} returns a {@link Supplier}.
  */
 @Slf4j
 @Service
@@ -52,26 +40,17 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     private final ConsignmentAgreementRepository agreementRepo;
     private final ConsignmentSaleRepository       saleRepo;
     private final ConsignmentSettlementRepository settlementRepo;
-    private final UserRepository                  userRepository;
+    private final SupplierRepository              supplierRepository;
     private final ProductRepository               productRepo;
     private final WarehouseRepository             warehouseRepo;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // AGREEMENT MANAGEMENT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Creates a new consignment agreement in PENDING_APPROVAL state.
-     * Only a MANAGER can subsequently approve it.
-     */
     @Transactional
     public ConsignmentAgreementResponse createAgreement(CreateConsignmentAgreementRequest req) {
         String warehouseId = TenantContext.get();
 
-        // Supplier must be a registered User with role=SUPPLIER
-        User supplier = userRepository.findById(req.getSupplierId())
-                .filter(u -> u.getRole() == Role.SUPPLIER)
-                .orElseThrow(() -> new EntityNotFoundException("Supplier not found: " + req.getSupplierId()));
+        Supplier supplier = supplierRepository.findById(req.getSupplierId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Supplier not found: " + req.getSupplierId()));
 
         Warehouse warehouse = warehouseRepo.findById(warehouseId)
                 .orElseThrow(() -> new EntityNotFoundException("Warehouse not found: " + warehouseId));
@@ -87,12 +66,10 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         agreement.setStatus(ConsignmentStatus.PENDING_APPROVAL);
         agreement.setAgreementCode(generateAgreementCode());
 
-        // Map product lines
         List<ConsignmentProduct> cpList = new ArrayList<>();
         for (CreateConsignmentAgreementRequest.ConsignmentProductRequest pr : req.getProducts()) {
             Product product = productRepo.findByIdAndWarehouseId(pr.getProductId(), warehouseId)
                     .orElseThrow(() -> new EntityNotFoundException("Product not found: " + pr.getProductId()));
-
             ConsignmentProduct cp = new ConsignmentProduct();
             cp.setAgreement(agreement);
             cp.setProduct(product);
@@ -104,118 +81,73 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         agreement.setConsignmentProducts(cpList);
 
         ConsignmentAgreement saved = agreementRepo.save(agreement);
-        log.info("Consignment agreement {} created for supplier {}", saved.getAgreementCode(), supplier.getName());
+        log.info("Consignment agreement {} created for supplier {}", saved.getAgreementCode(), supplier.getCompanyName());
         return mapToAgreementResponse(saved);
     }
 
-    /**
-     * Approves a PENDING_APPROVAL agreement and marks all linked products
-     * as consignment-owned, linking them back to the agreement.
-     */
     @Transactional
     public ConsignmentAgreementResponse approveAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
-
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
         if (agreement.getStatus() != ConsignmentStatus.PENDING_APPROVAL) {
-            throw new IllegalStateException(
-                    "Agreement " + agreementId + " is not in PENDING_APPROVAL state");
+            throw new IllegalStateException("Agreement " + agreementId + " is not in PENDING_APPROVAL state");
         }
-
         agreement.setStatus(ConsignmentStatus.ACTIVE);
-
-        // Mark each product as a consignment product
         for (ConsignmentProduct cp : agreement.getConsignmentProducts()) {
             Product p = cp.getProduct();
             p.setConsignment(true);
             p.setConsignmentAgreement(agreement);
             productRepo.save(p);
         }
-
         ConsignmentAgreement saved = agreementRepo.save(agreement);
         log.info("Consignment agreement {} approved and now ACTIVE", saved.getAgreementCode());
         return mapToAgreementResponse(saved);
     }
 
-    /**
-     * Rejects a PENDING_APPROVAL agreement.
-     */
     @Transactional
     public ConsignmentAgreementResponse rejectAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
-
         if (agreement.getStatus() != ConsignmentStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Only PENDING_APPROVAL agreements can be rejected");
         }
-
         agreement.setStatus(ConsignmentStatus.REJECTED);
         return mapToAgreementResponse(agreementRepo.save(agreement));
     }
 
-    /**
-     * Terminates an ACTIVE agreement.
-     * Products are un-flagged as consignment; existing unsettled sales are settled first.
-     */
     @Transactional
     public ConsignmentAgreementResponse terminateAgreement(String agreementId, String managerNotes) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
-
         if (agreement.getStatus() != ConsignmentStatus.ACTIVE) {
             throw new IllegalStateException("Only ACTIVE agreements can be terminated");
         }
-
-        // Auto-settle any remaining unsettled sales before terminating
         generateSettlementInternal(agreement, managerNotes);
-
-        // Un-flag products
         for (ConsignmentProduct cp : agreement.getConsignmentProducts()) {
             Product p = cp.getProduct();
             p.setConsignment(false);
             p.setConsignmentAgreement(null);
             productRepo.save(p);
         }
-
         agreement.setStatus(ConsignmentStatus.TERMINATED);
         return mapToAgreementResponse(agreementRepo.save(agreement));
     }
 
-    /**
-     * Returns all agreements for a warehouse, optionally filtered by status.
-     */
     @Transactional(readOnly = true)
     public List<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status) {
         String warehouseId = TenantContext.get();
         List<ConsignmentAgreement> agreements = status != null
                 ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId)
-                : agreementRepo.findAll(); // tenant filter applied via Hibernate filter
+                : agreementRepo.findAll();
         return agreements.stream().map(this::mapToAgreementResponse).collect(Collectors.toList());
     }
 
-    /**
-     * Returns a single agreement by ID.
-     */
     @Transactional(readOnly = true)
     public ConsignmentAgreementResponse getAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         return mapToAgreementResponse(findAgreement(agreementId, warehouseId));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // SALE RECORDING (called from OrderService)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Records a consignment sale when a consigned product's order is committed.
-     *
-     * <p>Called internally by {@code OrderService.commitPick()} after stock
-     * deduction, when {@code product.isConsignment() == true}.
-     *
-     * @param orderItem the line item that was just committed
-     * @param product   the consigned product
-     * @param soldAt    the timestamp of commitment
-     */
     @Transactional
     public ConsignmentSale recordConsignmentSale(SellingOrderItem orderItem, Product product, LocalDateTime soldAt) {
         ConsignmentAgreement agreement = product.getConsignmentAgreement();
@@ -223,14 +155,11 @@ public class ConsignmentServiceImpl implements ConsignmentService {
             log.warn("Product {} flagged as consignment but has no agreement — skipping sale record", product.getId());
             return null;
         }
-
         BigDecimal unitPrice    = orderItem.getSellPriceAtTimeOfOrder();
         int        qty          = orderItem.getQuantity();
         BigDecimal grossRevenue = unitPrice.multiply(BigDecimal.valueOf(qty));
         BigDecimal commPct      = agreement.getWarehouseCommissionPct();
-
-        BigDecimal warehouseShare = grossRevenue
-                .multiply(commPct)
+        BigDecimal warehouseShare = grossRevenue.multiply(commPct)
                 .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
         BigDecimal supplierShare = grossRevenue.subtract(warehouseShare);
 
@@ -252,23 +181,13 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         return saved;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // SETTLEMENT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Manually triggers a settlement for a specific agreement.
-     * Used by MANAGER via the API.
-     */
     @Transactional
     public ConsignmentSettlementResponse triggerSettlement(TriggerSettlementRequest req) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(req.getAgreementId(), warehouseId);
-
         if (agreement.getStatus() != ConsignmentStatus.ACTIVE) {
             throw new IllegalStateException("Settlement can only be triggered for ACTIVE agreements");
         }
-
         ConsignmentSettlement settlement = generateSettlementInternal(agreement, req.getManagerNotes());
         if (settlement == null) {
             throw new IllegalStateException("No unsettled sales found for this agreement in the current period");
@@ -276,16 +195,10 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         return mapToSettlementResponse(settlement);
     }
 
-    /**
-     * Internal settlement generator — used by both manual trigger and the scheduler.
-     * Returns null if there are no unsettled sales in the period.
-     */
     @Transactional
     public ConsignmentSettlement generateSettlementInternal(ConsignmentAgreement agreement, String notes) {
         LocalDate today       = LocalDate.now();
         LocalDate periodEnd   = today;
-
-        // Determine period start
         Optional<LocalDate> lastEnd = settlementRepo.findLastSettledPeriodEnd(agreement.getId());
         LocalDate periodStart = lastEnd.map(d -> d.plusDays(1)).orElse(agreement.getEffectiveFrom());
 
@@ -294,19 +207,14 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
         List<ConsignmentSale> unsettledSales =
                 saleRepo.findUnsettledSalesForPeriod(agreement.getId(), from, to);
-
         if (unsettledSales.isEmpty()) {
             log.info("No unsettled sales for agreement {} between {} and {}",
                     agreement.getAgreementCode(), from, to);
             return null;
         }
 
-        // Aggregate totals
-        BigDecimal totalGross     = BigDecimal.ZERO;
-        BigDecimal totalWarehouse = BigDecimal.ZERO;
-        BigDecimal totalSupplier  = BigDecimal.ZERO;
-        int        totalUnits     = 0;
-
+        BigDecimal totalGross = BigDecimal.ZERO, totalWarehouse = BigDecimal.ZERO, totalSupplier = BigDecimal.ZERO;
+        int totalUnits = 0;
         for (ConsignmentSale s : unsettledSales) {
             totalGross     = totalGross.add(s.getGrossRevenue());
             totalWarehouse = totalWarehouse.add(s.getWarehouseShare());
@@ -314,11 +222,9 @@ public class ConsignmentServiceImpl implements ConsignmentService {
             totalUnits    += s.getQuantity();
         }
 
-        Warehouse warehouse = agreement.getWarehouse();
-
         ConsignmentSettlement settlement = new ConsignmentSettlement();
         settlement.setAgreement(agreement);
-        settlement.setWarehouse(warehouse);
+        settlement.setWarehouse(agreement.getWarehouse());
         settlement.setSettlementNumber(generateSettlementNumber());
         settlement.setPeriodFrom(periodStart);
         settlement.setPeriodTo(periodEnd);
@@ -330,11 +236,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         settlement.setManagerNotes(notes);
 
         ConsignmentSettlement saved = settlementRepo.save(settlement);
-
-        // Mark all included sales as settled
-        List<String> saleIds = unsettledSales.stream()
-                .map(ConsignmentSale::getId)
-                .collect(Collectors.toList());
+        List<String> saleIds = unsettledSales.stream().map(ConsignmentSale::getId).collect(Collectors.toList());
         saleRepo.markAsSettled(saleIds, saved.getId());
 
         log.info("Settlement {} generated: supplierPayout={} for agreement {}",
@@ -342,56 +244,37 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         return saved;
     }
 
-    /**
-     * Approves a PENDING settlement (MANAGER reviews and signs off).
-     */
     @Transactional
     public ConsignmentSettlementResponse approveSettlement(String settlementId, UpdateSettlementStatusRequest req) {
         String warehouseId = TenantContext.get();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);
-
         if (settlement.getStatus() != ConsignmentSettlementStatus.PENDING) {
             throw new IllegalStateException("Only PENDING settlements can be approved");
         }
-
         settlement.setStatus(ConsignmentSettlementStatus.APPROVED);
         if (req.getManagerNotes() != null) settlement.setManagerNotes(req.getManagerNotes());
-
         return mapToSettlementResponse(settlementRepo.save(settlement));
     }
 
-    /**
-     * Marks an APPROVED settlement as PAID (payment confirmed).
-     */
     @Transactional
     public ConsignmentSettlementResponse markSettlementPaid(String settlementId, UpdateSettlementStatusRequest req) {
         String warehouseId = TenantContext.get();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);
-
         if (settlement.getStatus() != ConsignmentSettlementStatus.APPROVED) {
             throw new IllegalStateException("Only APPROVED settlements can be marked as PAID");
         }
-
         settlement.setStatus(ConsignmentSettlementStatus.PAID);
         settlement.setPaidAt(LocalDateTime.now());
         if (req.getManagerNotes() != null) settlement.setManagerNotes(req.getManagerNotes());
-
         return mapToSettlementResponse(settlementRepo.save(settlement));
     }
 
-    /**
-     * Returns all settlements for a given agreement.
-     */
     @Transactional(readOnly = true)
     public List<ConsignmentSettlementResponse> listSettlementsForAgreement(String agreementId) {
         return settlementRepo.findByAgreementIdOrderByPeriodFromDesc(agreementId)
                 .stream().map(this::mapToSettlementResponse).collect(Collectors.toList());
     }
 
-    /**
-     * Returns all settlements with a given status (e.g., all PENDING settlements
-     * across the warehouse — for the manager's dashboard).
-     */
     @Transactional(readOnly = true)
     public List<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status) {
         String warehouseId = TenantContext.get();
@@ -399,9 +282,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 .stream().map(this::mapToSettlementResponse).collect(Collectors.toList());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // HELPERS & MAPPERS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── helpers ──────────────────────────────────────────────────────────────
 
     private ConsignmentAgreement findAgreement(String id, String warehouseId) {
         return agreementRepo.findById(id)
@@ -433,8 +314,8 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         return ConsignmentAgreementResponse.builder()
                 .id(a.getId())
                 .agreementCode(a.getAgreementCode())
-                .supplierId(a.getSupplier().getId())       // User.getId()
-                .supplierName(a.getSupplier().getName())   // User.getName()
+                .supplierId(a.getSupplier().getId())
+                .supplierName(a.getSupplier().getCompanyName())   // Supplier.getCompanyName()
                 .warehouseCommissionPct(a.getWarehouseCommissionPct())
                 .status(a.getStatus())
                 .effectiveFrom(a.getEffectiveFrom())
@@ -446,7 +327,6 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     private ConsignmentSettlementResponse mapToSettlementResponse(ConsignmentSettlement s) {
-        // Build per-product breakdown from linked sales
         Map<String, ConsignmentSettlementResponse.ProductBreakdown> breakdownMap = new LinkedHashMap<>();
         if (s.getSales() != null) {
             for (ConsignmentSale sale : s.getSales()) {
@@ -470,13 +350,12 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 });
             }
         }
-
         return ConsignmentSettlementResponse.builder()
                 .id(s.getId())
                 .settlementNumber(s.getSettlementNumber())
                 .agreementId(s.getAgreement().getId())
                 .agreementCode(s.getAgreement().getAgreementCode())
-                .supplierName(s.getAgreement().getSupplier().getName())  // User.getName()
+                .supplierName(s.getAgreement().getSupplier().getCompanyName())  // Supplier.getCompanyName()
                 .periodFrom(s.getPeriodFrom())
                 .periodTo(s.getPeriodTo())
                 .totalGrossRevenue(s.getTotalGrossRevenue())
@@ -494,12 +373,10 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     private static final AtomicInteger settlementCounter = new AtomicInteger(1);
 
     private String generateAgreementCode() {
-        return String.format("CONS-%d-%04d",
-                LocalDate.now().getYear(), agreementCounter.getAndIncrement());
+        return String.format("CONS-%d-%04d", LocalDate.now().getYear(), agreementCounter.getAndIncrement());
     }
 
     private String generateSettlementNumber() {
-        return String.format("SETL-%d-%04d",
-                LocalDate.now().getYear(), settlementCounter.getAndIncrement());
+        return String.format("SETL-%d-%04d", LocalDate.now().getYear(), settlementCounter.getAndIncrement());
     }
 }

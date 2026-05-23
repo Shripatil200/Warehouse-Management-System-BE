@@ -1,6 +1,6 @@
 package com.infotact.warehouse.config.JWT;
 
-import com.infotact.warehouse.entity.User;
+import com.infotact.warehouse.entity.Supplier;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -10,26 +10,25 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Spring Security principal for warehouse {@link User} accounts.
+ * Spring Security principal for {@link Supplier} accounts.
  * <p>
- * Carries the {@code warehouseId} claim so the service layer can enforce
- * multi-tenant data isolation without extra DB queries. Since every {@link User}
- * now always has a warehouse (nullable = false), {@code warehouseId} is never null here.
+ * Suppliers are global — they have no warehouse context, so there is no
+ * {@code warehouseId} here. The authority is always {@code ROLE_SUPPLIER}.
  * </p>
  */
 @Getter
-public class UserPrincipal implements UserDetails {
+public class SupplierPrincipal implements UserDetails {
 
+    private final String id;
     private final String email;
     private final String password;
-    private final String warehouseId;
     private final Collection<? extends GrantedAuthority> authorities;
 
-    public UserPrincipal(User user) {
-        this.email       = user.getEmail();
-        this.password    = user.getPassword();
-        this.warehouseId = user.getWarehouse().getId();
-        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    public SupplierPrincipal(Supplier supplier) {
+        this.id          = supplier.getId();
+        this.email       = supplier.getEmail();
+        this.password    = supplier.getPassword();
+        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_SUPPLIER"));
     }
 
     @Override public Collection<? extends GrantedAuthority> getAuthorities() { return authorities; }

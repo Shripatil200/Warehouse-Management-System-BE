@@ -3,19 +3,18 @@ package com.infotact.warehouse.service.impl;
 import com.infotact.warehouse.dto.v1.request.SupplierProductRequest;
 import com.infotact.warehouse.dto.v1.response.SupplierProductResponse;
 import com.infotact.warehouse.entity.ProductMaster;
+import com.infotact.warehouse.entity.Supplier;
 import com.infotact.warehouse.entity.SupplierProduct;
-import com.infotact.warehouse.entity.User;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.ProductMasterRepository;
 import com.infotact.warehouse.repository.SupplierProductRepository;
-import com.infotact.warehouse.repository.UserRepository;
+import com.infotact.warehouse.repository.SupplierRepository;
 import com.infotact.warehouse.service.SupplierCatalogueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,17 +28,18 @@ public class SupplierCatalogueServiceImpl implements SupplierCatalogueService {
 
     private final SupplierProductRepository supplierProductRepository;
     private final ProductMasterRepository   productMasterRepository;
-    private final UserRepository            userRepository;
+    private final SupplierRepository        supplierRepository;
 
     @Override
     @Transactional
     @PreAuthorize("hasRole('SUPPLIER')")
     public SupplierProductResponse addProduct(SupplierProductRequest request) {
-        User supplier = getAuthenticatedUser();
+        Supplier supplier = getAuthenticatedSupplier();
 
         if (supplierProductRepository.existsByProductMasterIdAndSupplierId(
                 request.getProductMasterId(), supplier.getId())) {
-            throw new AlreadyExistsException("You have already listed this product. Update the existing entry instead.");
+            throw new AlreadyExistsException(
+                    "You have already listed this product. Update the existing entry instead.");
         }
 
         ProductMaster pm = productMasterRepository.findById(request.getProductMasterId())
@@ -79,7 +79,7 @@ public class SupplierCatalogueServiceImpl implements SupplierCatalogueService {
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('SUPPLIER')")
     public List<SupplierProductResponse> getMyCatalogue() {
-        User supplier = getAuthenticatedUser();
+        Supplier supplier = getAuthenticatedSupplier();
         return supplierProductRepository.findBySupplierIdAndActiveTrue(supplier.getId())
                 .stream()
                 .map(SupplierProductResponse::new)
@@ -100,7 +100,7 @@ public class SupplierCatalogueServiceImpl implements SupplierCatalogueService {
     }
 
     private SupplierProduct getOwnedSupplierProduct(String id) {
-        User supplier = getAuthenticatedUser();
+        Supplier supplier = getAuthenticatedSupplier();
         SupplierProduct sp = supplierProductRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("SupplierProduct not found."));
         if (!sp.getSupplier().getId().equals(supplier.getId())) {
@@ -109,9 +109,9 @@ public class SupplierCatalogueServiceImpl implements SupplierCatalogueService {
         return sp;
     }
 
-    private User getAuthenticatedUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found."));
+    private Supplier getAuthenticatedSupplier() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return supplierRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Supplier not found."));
     }
 }

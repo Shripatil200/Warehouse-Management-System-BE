@@ -9,17 +9,14 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.math.BigDecimal;
 
 /**
- * Layer 2 — A supplier's offering of a specific {@link ProductMaster}.
+ * Layer 2 — A {@link Supplier}'s commercial offering of a specific {@link ProductMaster}.
  * <p>
- * {@code SupplierProduct} captures the commercial relationship between a supplier
- * and a product: the price they charge and their typical lead time. Multiple
- * suppliers can each have a {@code SupplierProduct} row for the same
- * {@link ProductMaster}, enabling side-by-side price/lead-time comparison
- * when a warehouse manager raises a Purchase Order.
+ * Captures the price and lead time a supplier charges for a product.
+ * Multiple suppliers can each have a row for the same {@link ProductMaster},
+ * enabling side-by-side price/lead-time comparison when a warehouse manager raises a PO.
  * </p>
  * <p>
- * Note: This entity has no warehouse FK. It is intentionally global — the
- * same supplier offering is visible to all warehouses that search for it.
+ * No warehouse FK — intentionally global. The same offering is visible to all warehouses.
  * </p>
  */
 @Getter
@@ -56,12 +53,12 @@ public class SupplierProduct extends BaseEntity {
     private ProductMaster productMaster;
 
     /**
-     * The supplier (User with role=SUPPLIER) making this offering.
-     * Using User entity directly keeps auth, profile, and catalogue in one table.
+     * The supplier making this offering.
+     * References the dedicated {@link Supplier} entity — not User.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "supplier_id", nullable = false)
-    private User supplier;
+    private Supplier supplier;
 
     /** The unit price this supplier charges for this product. */
     @Column(nullable = false, precision = 19, scale = 4)

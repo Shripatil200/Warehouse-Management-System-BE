@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProductMasterServiceImpl implements ProductMasterService {
 
-    private final ProductMasterRepository productMasterRepository;
+    private final ProductMasterRepository   productMasterRepository;
     private final ProductCategoryRepository productCategoryRepository;
 
     @Override
@@ -30,12 +30,11 @@ public class ProductMasterServiceImpl implements ProductMasterService {
     @PreAuthorize("hasAnyRole('SUPPLIER', 'ADMIN')")
     public ProductMasterResponse create(ProductMasterRequest request) {
         if (request.getBarcode() != null && productMasterRepository.existsByBarcode(request.getBarcode())) {
-            throw new AlreadyExistsException("A ProductMaster with barcode '" + request.getBarcode() + "' already exists.");
+            throw new AlreadyExistsException(
+                    "A ProductMaster with barcode '" + request.getBarcode() + "' already exists.");
         }
-
         ProductMaster pm = new ProductMaster();
         mapRequestToEntity(request, pm);
-
         return new ProductMasterResponse(productMasterRepository.save(pm));
     }
 
@@ -46,12 +45,12 @@ public class ProductMasterServiceImpl implements ProductMasterService {
         ProductMaster pm = productMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("ProductMaster not found."));
 
-        if (request.getBarcode() != null &&
-                !request.getBarcode().equals(pm.getBarcode()) &&
-                productMasterRepository.existsByBarcode(request.getBarcode())) {
-            throw new AlreadyExistsException("A ProductMaster with barcode '" + request.getBarcode() + "' already exists.");
+        if (request.getBarcode() != null
+                && !request.getBarcode().equals(pm.getBarcode())
+                && productMasterRepository.existsByBarcode(request.getBarcode())) {
+            throw new AlreadyExistsException(
+                    "A ProductMaster with barcode '" + request.getBarcode() + "' already exists.");
         }
-
         mapRequestToEntity(request, pm);
         return new ProductMasterResponse(productMasterRepository.save(pm));
     }

@@ -2,16 +2,17 @@ package com.infotact.warehouse.dto.v1.response;
 
 import com.infotact.warehouse.entity.SupplierProduct;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor; // Add this
-import lombok.Builder;        // Add this
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 
 @Data
+@Builder
 @NoArgsConstructor
-@AllArgsConstructor // Required for Builder
-@Builder            // Fixes the compilation error in ProductServiceImpl
+@AllArgsConstructor
 @Schema(name = "SupplierProductResponse", description = "A supplier's product offering with pricing and lead time")
 public class SupplierProductResponse {
 

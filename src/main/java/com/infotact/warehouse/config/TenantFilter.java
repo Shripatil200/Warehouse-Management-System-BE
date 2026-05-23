@@ -1,7 +1,7 @@
 package com.infotact.warehouse.config;
 
+import com.infotact.warehouse.config.JWT.SupplierPrincipal;
 import com.infotact.warehouse.config.JWT.UserPrincipal;
-import com.infotact.warehouse.entity.enums.Role;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -18,6 +18,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * Activates the Hibernate {@code warehouseFilter} for warehouse staff requests.
+ * <p>
+ * If the authenticated principal is a {@link SupplierPrincipal}, the filter is
+ * skipped entirely — suppliers are global and have no tenant scope.
+ * If the principal is a {@link UserPrincipal}, the warehouseId is always present
+ * (non-null) because {@code User.warehouse} is now non-nullable.
+ * </p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -25,9 +34,6 @@ public class TenantFilter extends OncePerRequestFilter {
 
     private final EntityManager entityManager;
 
-    /**
-     * Paths that bypass tenant resolution entirely (no authentication required).
-     */
     private static final Set<String> PUBLIC_APIS = Set.of(
             "/api/v1/auth/login",
             "/api/v1/auth/forgot-password",
@@ -37,7 +43,8 @@ public class TenantFilter extends OncePerRequestFilter {
             "/api/v1/auth/otp/verify-email",
             "/api/v1/auth/otp/send-contact",
             "/api/v1/auth/otp/verify-contact",
-            "/api/v1/supplier/register"
+            "/api/v1/supplier/register",
+            "/api/v1/supplier/login"
     );
 
     @Override
@@ -50,48 +57,44 @@ public class TenantFilter extends OncePerRequestFilter {
 
         try {
             if (isPublicApi(path)) {
-                log.debug("TenantFilter skipping public path: {}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
 
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-            if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
-                throw new IllegalStateException("No valid authentication found");
-            }
-
-            // SUPPLIER users are global — they have no warehouse context.
-            // Skip Hibernate filter activation; they access only supplier-scoped endpoints.
-            if (isSupplierRole(principal)) {
-                log.debug("TenantFilter skipping warehouse filter for SUPPLIER: {}, path={}", principal.getUsername(), path);
+            if (authentication == null || !authentication.isAuthenticated()) {
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            String warehouseId = principal.getWarehouseId();
-            if (warehouseId == null || warehouseId.isBlank()) {
-                throw new IllegalStateException("No warehouseId found for the authenticated user");
+            Object principal = authentication.getPrincipal();
+
+            // Supplier — global, no tenant filter needed
+            if (principal instanceof SupplierPrincipal) {
+                log.debug("TenantFilter: skipping warehouse filter for supplier, path={}", path);
+                filterChain.doFilter(request, response);
+                return;
             }
 
-            log.debug("TenantFilter → warehouse={}, path={}", warehouseId, path);
+            // Warehouse staff — activate tenant filter
+            if (principal instanceof UserPrincipal userPrincipal) {
+                String warehouseId = userPrincipal.getWarehouseId();
+                log.debug("TenantFilter: warehouse={}, path={}", warehouseId, path);
 
-            TenantContext.set(warehouseId);
+                TenantContext.set(warehouseId);
 
-            Session session = entityManager.unwrap(Session.class);
-            if (session.getEnabledFilter("warehouseFilter") == null) {
-                session.enableFilter("warehouseFilter")
-                        .setParameter("warehouseId", warehouseId);
+                Session session = entityManager.unwrap(Session.class);
+                if (session.getEnabledFilter("warehouseFilter") == null) {
+                    session.enableFilter("warehouseFilter")
+                            .setParameter("warehouseId", warehouseId);
+                }
             }
 
             filterChain.doFilter(request, response);
 
-        } catch (IllegalStateException e) {
-            log.warn("TenantFilter authentication check failed for path {}: {}", path, e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("User not authenticated");
         } catch (Exception e) {
-            log.error("TenantFilter unexpected error", e);
+            log.error("TenantFilter unexpected error for path {}: {}", path, e.getMessage());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             response.getWriter().write("Internal Server Error");
         } finally {
@@ -100,16 +103,9 @@ public class TenantFilter extends OncePerRequestFilter {
     }
 
     private boolean isPublicApi(String path) {
-        if (PUBLIC_APIS.contains(path)) {
-            return true;
-        }
-        return path.contains("/swagger-ui") ||
-                path.contains("/v3/api-docs") ||
-                path.contains("/webjars");
-    }
-
-    private boolean isSupplierRole(UserPrincipal principal) {
-        return principal.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_" + Role.SUPPLIER.name()));
+        return PUBLIC_APIS.contains(path)
+                || path.contains("/swagger-ui")
+                || path.contains("/v3/api-docs")
+                || path.contains("/webjars");
     }
 }

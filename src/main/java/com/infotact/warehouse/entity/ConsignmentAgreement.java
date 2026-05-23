@@ -12,30 +12,15 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Represents a formal consignment agreement between a Supplier and the Warehouse.
- *
- * <p><b>Business logic:</b>
+ * Represents a formal consignment agreement between a {@link Supplier} and a Warehouse.
+ * <p>
  * Under a consignment agreement the supplier retains ownership of the goods.
- * The warehouse stores and sells them on the supplier's behalf.
- * When a sale occurs:
- * <ul>
- *   <li>The full selling price is collected by the warehouse.</li>
- *   <li>At settlement time, the warehouse keeps {@code warehouseCommissionPct}
- *       of the revenue and remits the remainder to the supplier.</li>
- * </ul>
- *
- * <p>Each {@link ConsignmentProduct} line within this agreement maps exactly
- * one {@link Product} to consignment terms (MRP, floor price, etc.).
- *
- * <p>Settlement can be triggered manually by a MANAGER or automatically by
- * the scheduled job {@code ConsignmentSettlementScheduler}.
- *
- * <p><b>Update v3.0 (Supplier System):</b> The standalone {@code Supplier}
- * entity has been replaced. The {@code supplier} field now references a
- * {@link User} account with {@code role = SUPPLIER}. The FK column name
- * ({@code supplier_id}) and table structure are unchanged — no new migration
- * is required for this entity beyond V9 (which made {@code warehouse_id}
- * nullable on users).
+ * The warehouse stores and sells them on the supplier's behalf, keeping a commission
+ * percentage of each sale and remitting the remainder at settlement time.
+ * </p>
+ * <p>
+ * The {@code supplier} field references the dedicated {@link Supplier} entity.
+ * </p>
  */
 @Getter
 @Setter
@@ -60,72 +45,40 @@ public class ConsignmentAgreement extends TenantAwareEntity {
 
     /**
      * The supplier whose products are being consigned.
-     * <p>
-     * This is a {@link User} with {@code role = SUPPLIER}. Using the {@code User}
-     * entity directly keeps supplier authentication, profile, and consignment
-     * relationships in a single table without a separate {@code suppliers} table.
-     * </p>
+     * References the dedicated {@link Supplier} entity — not User.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "supplier_id", nullable = false)
-    private User supplier;
+    private Supplier supplier;
 
-    /**
-     * Percentage of selling revenue retained by the warehouse as commission.
-     * Range: 0.00 – 100.00.
-     * Example: 15.00 means warehouse keeps 15%, supplier gets 85%.
-     */
+    /** Percentage of selling revenue retained by the warehouse as commission (0.00–100.00). */
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal warehouseCommissionPct;
 
-    /**
-     * Human-readable reference code (e.g., CONS-2026-0001).
-     */
+    /** Human-readable reference code (e.g., CONS-2026-0001). */
     @Column(unique = true, nullable = false)
     private String agreementCode;
 
-    /**
-     * Current lifecycle state of the agreement.
-     */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ConsignmentStatus status = ConsignmentStatus.PENDING_APPROVAL;
 
-    /**
-     * Date from which the agreement is effective.
-     */
     @Column(nullable = false)
     private LocalDate effectiveFrom;
 
-    /**
-     * Optional expiry date. Null means open-ended.
-     * The scheduler terminates agreements automatically on this date.
-     */
+    /** Optional expiry date. Null means open-ended. */
     private LocalDate effectiveTo;
 
-    /**
-     * Settlement frequency in days (e.g., 30 = monthly settlement).
-     * Default: 30.
-     */
+    /** Settlement frequency in days. Default: 30. */
     @Column(nullable = false)
     private Integer settlementCycleDays = 30;
 
-    /**
-     * Free-text notes agreed between supplier and warehouse manager
-     * (special handling, return policy, etc.).
-     */
     @Column(length = 2000)
     private String notes;
 
-    /**
-     * Products included in this consignment agreement.
-     */
     @OneToMany(mappedBy = "agreement", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ConsignmentProduct> consignmentProducts;
 
-    /**
-     * Settlement records produced each cycle.
-     */
     @OneToMany(mappedBy = "agreement", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ConsignmentSettlement> settlements;
 }

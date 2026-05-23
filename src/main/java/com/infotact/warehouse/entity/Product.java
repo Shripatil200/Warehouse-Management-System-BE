@@ -174,6 +174,19 @@ public class Product extends TenantAwareEntity {
     @JoinColumn(name = "consignment_agreement_id")
     private ConsignmentAgreement consignmentAgreement;
 
+
+    /**
+     * Reference to the global {@link ProductMaster} this warehouse product is derived from.
+     * <p>
+     * Nullable for legacy products created before the ProductMaster system was introduced.
+     * When present, it allows cross-warehouse product identity resolution and
+     * supplier catalogue browsing when raising Purchase Orders.
+     * </p>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_master_id")
+    private ProductMaster productMaster;
+
     @PrePersist
     @PreUpdate
     private void calculateUnitVolume() {

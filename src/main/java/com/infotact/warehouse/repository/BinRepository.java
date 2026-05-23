@@ -149,6 +149,8 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     // LOCKING (CRITICAL FOR CONCURRENCY)
     // ============================================================
 
+    Optional<StorageBin> findByIdAndWarehouseId(String id, String warehouseId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "5000"))
     @Query("""

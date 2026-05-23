@@ -71,4 +71,16 @@ public class PurchaseOrderItem extends TenantAwareEntity {
      */
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal unitCost;
+
+    /**
+     * The specific supplier offering this PO line item was raised against.
+     * <p>
+     * Captures the agreed price and lead time at the time the PO was created,
+     * via {@link SupplierProduct#getSupplyPrice()}. Nullable for legacy PO items
+     * created before the SupplierProduct system was introduced.
+     * </p>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_product_id")
+    private SupplierProduct supplierProduct;
 }

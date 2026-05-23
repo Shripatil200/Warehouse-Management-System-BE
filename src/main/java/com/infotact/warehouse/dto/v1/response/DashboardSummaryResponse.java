@@ -70,6 +70,13 @@ public class DashboardSummaryResponse implements Serializable {
     @Schema(description = "Recent inventory transactions acting as an activity feed")
     private List<ActivityDTO> recentActivity;
 
+    /**
+     * Profit and revenue summary broken down into thisMonth, lastMonth, and thisYear windows.
+     * Each block contains ownedProfit, consignmentProfit, totalProfit, totalRevenue, and binRentalRevenue.
+     */
+    @Schema(description = "Profit summary for this month, last month, and this year")
+    private DashboardProfitSummary profitSummary;
+
     @Data
     @Builder
     @AllArgsConstructor

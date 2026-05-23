@@ -10,6 +10,10 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+/**
+ * Spring Security {@link UserDetailsService} for warehouse staff ({@code users} table).
+ * Supplier accounts are loaded separately by {@link SupplierDetailsService}.
+ */
 @Service
 @RequiredArgsConstructor
 public class UsersDetailsService implements UserDetailsService {

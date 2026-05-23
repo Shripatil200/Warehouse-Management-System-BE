@@ -1,5 +1,6 @@
 package com.infotact.warehouse.config;
 
+import com.infotact.warehouse.config.JWT.SupplierPrincipal;
 import com.infotact.warehouse.config.JWT.UserPrincipal;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.FilterChain;
@@ -17,6 +18,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * Activates the Hibernate {@code warehouseFilter} for warehouse staff requests.
+ * <p>
+ * If the authenticated principal is a {@link SupplierPrincipal}, the filter is
+ * skipped entirely — suppliers are global and have no tenant scope.
+ * If the principal is a {@link UserPrincipal}, the warehouseId is always present
+ * (non-null) because {@code User.warehouse} is now non-nullable.
+ * </p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -24,10 +34,6 @@ public class TenantFilter extends OncePerRequestFilter {
 
     private final EntityManager entityManager;
 
-    /**
-     * Set of exact paths that do not require a tenant/warehouse context.
-     * Note: Swagger UI sub-resources are handled via prefix matching in isPublicApi().
-     */
     private static final Set<String> PUBLIC_APIS = Set.of(
             "/api/v1/auth/login",
             "/api/v1/auth/forgot-password",
@@ -36,7 +42,9 @@ public class TenantFilter extends OncePerRequestFilter {
             "/api/v1/auth/otp/send-email",
             "/api/v1/auth/otp/verify-email",
             "/api/v1/auth/otp/send-contact",
-            "/api/v1/auth/otp/verify-contact"
+            "/api/v1/auth/otp/verify-contact",
+            "/api/v1/supplier/register",
+            "/api/v1/supplier/login"
     );
 
     @Override
@@ -45,81 +53,59 @@ public class TenantFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Using getServletPath() is more reliable for matching routes in Spring Boot
         String path = request.getServletPath();
 
         try {
-            // 🔥 STEP 1: Skip tenant logic for public APIs and Swagger resources
             if (isPublicApi(path)) {
-                log.debug("TenantFilter skipping public path: {}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // 🔐 STEP 2: Extract tenant (only for protected APIs)
-            // This will throw IllegalStateException if the user isn't logged in
-            String warehouseId = extractWarehouseId();
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-            log.debug("TenantFilter → warehouse={}, path={}", warehouseId, path);
+            if (authentication == null || !authentication.isAuthenticated()) {
+                filterChain.doFilter(request, response);
+                return;
+            }
 
-            // Set the ID in the ThreadLocal context
-            TenantContext.set(warehouseId);
+            Object principal = authentication.getPrincipal();
 
-            // 🔥 STEP 3: Enable Hibernate data isolation filter
-            Session session = entityManager.unwrap(Session.class);
-            if (session.getEnabledFilter("warehouseFilter") == null) {
-                session.enableFilter("warehouseFilter")
-                        .setParameter("warehouseId", warehouseId);
+            // Supplier — global, no tenant filter needed
+            if (principal instanceof SupplierPrincipal) {
+                log.debug("TenantFilter: skipping warehouse filter for supplier, path={}", path);
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // Warehouse staff — activate tenant filter
+            if (principal instanceof UserPrincipal userPrincipal) {
+                String warehouseId = userPrincipal.getWarehouseId();
+                log.debug("TenantFilter: warehouse={}, path={}", warehouseId, path);
+
+                TenantContext.set(warehouseId);
+
+                Session session = entityManager.unwrap(Session.class);
+                if (session.getEnabledFilter("warehouseFilter") == null) {
+                    session.enableFilter("warehouseFilter")
+                            .setParameter("warehouseId", warehouseId);
+                }
             }
 
             filterChain.doFilter(request, response);
 
-        } catch (IllegalStateException e) {
-            log.warn("TenantFilter authentication check failed for path {}: {}", path, e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("User not authenticated");
         } catch (Exception e) {
-            log.error("TenantFilter unexpected error", e);
+            log.error("TenantFilter unexpected error for path {}: {}", path, e.getMessage());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             response.getWriter().write("Internal Server Error");
         } finally {
-            // Always clear the context to prevent memory leaks or data cross-contamination
             TenantContext.clear();
         }
     }
 
-    /**
-     * Determines if a path should bypass the Tenant Filter.
-     * Includes exact matches for Auth and prefix/contains matching for Swagger UI.
-     */
     private boolean isPublicApi(String path) {
-        // 1. Check exact matches (Auth endpoints)
-        if (PUBLIC_APIS.contains(path)) {
-            return true;
-        }
-
-        // 2. Check for Swagger/OpenAPI resources (which use dynamic sub-paths for CSS/JS)
-        return path.contains("/swagger-ui") ||
-                path.contains("/v3/api-docs") ||
-                path.contains("/webjars");
-    }
-
-    /**
-     * Retrieves the warehouseId from the current SecurityContext.
-     */
-    private String extractWarehouseId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
-            throw new IllegalStateException("No valid authentication found");
-        }
-
-        String warehouseId = principal.getWarehouseId();
-
-        if (warehouseId == null || warehouseId.isBlank()) {
-            throw new IllegalStateException("No warehouseId found for the authenticated user");
-        }
-
-        return warehouseId;
+        return PUBLIC_APIS.contains(path)
+                || path.contains("/swagger-ui")
+                || path.contains("/v3/api-docs")
+                || path.contains("/webjars");
     }
 }

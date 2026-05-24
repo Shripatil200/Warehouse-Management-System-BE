@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -246,15 +248,15 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<OrderResponse> getWarehouseOrders(String status) {
+    public Page<OrderResponse> getWarehouseOrders(String status, Pageable pageable) {
         User manager = getAuthenticatedUser();
         String warehouseId = manager.getWarehouse().getId();
 
-        List<SellingOrder> orders = (status != null && !status.isBlank())
-                ? orderRepository.findAllByWarehouseIdAndStatus(warehouseId, OrderStatus.valueOf(status.toUpperCase()))
-                : orderRepository.findAllByWarehouseId(warehouseId);
+        Page<SellingOrder> orders = (status != null && !status.isBlank())
+                ? orderRepository.findAllByWarehouseIdAndStatus(warehouseId, OrderStatus.valueOf(status.toUpperCase()), pageable)
+                : orderRepository.findAllByWarehouseId(warehouseId, pageable);
 
-        return orders.stream().map(this::mapToResponse).toList();
+        return orders.map(this::mapToResponse);
     }
 
     private OrderResponse mapToResponse(SellingOrder entity) {

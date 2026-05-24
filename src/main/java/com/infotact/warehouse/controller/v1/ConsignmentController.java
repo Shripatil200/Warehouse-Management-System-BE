@@ -12,13 +12,16 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 /**
  * REST controller for the Consignment feature.
  *
@@ -47,7 +50,7 @@ public class ConsignmentController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Create a consignment agreement",
-               description = "Creates a new supplier consignment agreement in PENDING_APPROVAL state.")
+            description = "Creates a new supplier consignment agreement in PENDING_APPROVAL state.")
     public ResponseEntity<ConsignmentAgreementResponse> createAgreement(
             @Valid @RequestBody CreateConsignmentAgreementRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -56,13 +59,15 @@ public class ConsignmentController {
 
     /**
      * List all consignment agreements, optionally filtered by status.
+     * Paginated: use ?page=0&size=20&sort=createdAt,desc
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','EMPLOYEE')")
-    @Operation(summary = "List consignment agreements")
-    public ResponseEntity<List<ConsignmentAgreementResponse>> listAgreements(
-            @RequestParam(required = false) ConsignmentStatus status) {
-        return ResponseEntity.ok(consignmentService.listAgreements(status));
+    @Operation(summary = "List consignment agreements (paginated)")
+    public ResponseEntity<Page<ConsignmentAgreementResponse>> listAgreements(
+            @RequestParam(required = false) ConsignmentStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(consignmentService.listAgreements(status, pageable));
     }
 
     /**
@@ -108,7 +113,7 @@ public class ConsignmentController {
     @PatchMapping("/{agreementId}/terminate")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Terminate an active consignment agreement",
-               description = "Triggers a final settlement for any unsettled sales before terminating.")
+            description = "Triggers a final settlement for any unsettled sales before terminating.")
     public ResponseEntity<ConsignmentAgreementResponse> terminateAgreement(
             @PathVariable String agreementId,
             @RequestParam(required = false, defaultValue = "") String notes) {
@@ -124,7 +129,7 @@ public class ConsignmentController {
     @PostMapping("/settlements/trigger")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Manually trigger a settlement",
-               description = "Generates a settlement for all unsettled sales in the current cycle period.")
+            description = "Generates a settlement for all unsettled sales in the current cycle period.")
     public ResponseEntity<ConsignmentSettlementResponse> triggerSettlement(
             @Valid @RequestBody TriggerSettlementRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -145,13 +150,15 @@ public class ConsignmentController {
     /**
      * List settlements across all agreements by status.
      * Useful for the manager's pending-approval dashboard.
+     * Paginated: use ?page=0&size=20&sort=createdAt,desc
      */
     @GetMapping("/settlements")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
-    @Operation(summary = "List settlements by status across all agreements")
-    public ResponseEntity<List<ConsignmentSettlementResponse>> listSettlementsByStatus(
-            @RequestParam(required = false) ConsignmentSettlementStatus status) {
-        return ResponseEntity.ok(consignmentService.listSettlementsByStatus(status));
+    @Operation(summary = "List settlements by status across all agreements (paginated)")
+    public ResponseEntity<Page<ConsignmentSettlementResponse>> listSettlementsByStatus(
+            @RequestParam(required = false) ConsignmentSettlementStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(consignmentService.listSettlementsByStatus(status, pageable));
     }
 
     /**

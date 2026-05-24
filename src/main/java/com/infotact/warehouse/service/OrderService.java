@@ -6,6 +6,8 @@ import com.infotact.warehouse.entity.SellingOrder;
 import com.infotact.warehouse.entity.SellingOrderItem;
 import com.infotact.warehouse.entity.enums.OrderStatus;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,7 +58,7 @@ public interface OrderService {
      * @param status Optional filter (e.g., 'PENDING', 'SHIPPED', 'CANCELLED').
      * @return A list of orders belonging strictly to the authenticated user's warehouse.
      */
-    List<OrderResponse> getWarehouseOrders(String status);
+    Page<OrderResponse> getWarehouseOrders(String status, Pageable pageable);
 
 
     /**

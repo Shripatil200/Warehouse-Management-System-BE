@@ -12,6 +12,8 @@ import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.SellingOrderItem;
 import com.infotact.warehouse.entity.enums.ConsignmentSettlementStatus;
 import com.infotact.warehouse.entity.enums.ConsignmentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,7 +32,7 @@ public interface ConsignmentService {
 
     ConsignmentAgreementResponse getAgreement(String agreementId);
 
-    List<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status);
+    Page<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status, Pageable pageable);
 
     // ── Sale Recording (called from OrderService) ─────────────────────────────
 
@@ -58,5 +60,5 @@ public interface ConsignmentService {
 
     List<ConsignmentSettlementResponse> listSettlementsForAgreement(String agreementId);
 
-    List<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status);
+    Page<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status, Pageable pageable);
 }

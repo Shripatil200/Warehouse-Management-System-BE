@@ -57,10 +57,28 @@ public class AuthController {
     }
 
     /**
+     * Logs out the currently authenticated user by immediately revoking the JWT.
+     * <p>
+     * The token is added to a Redis blacklist with a TTL matching its remaining
+     * lifetime, so subsequent requests using the same token receive 401 — even
+     * before the token's natural 10-hour expiry.
+     * </p>
+     */
+    @Operation(summary = "Logout", description = "Immediately revokes the current JWT so it cannot be reused.")
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(
+            @RequestHeader("Authorization") String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            authService.logout(authHeader.substring(7));
+        }
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully."));
+    }
+
+    /**
      * Updates the password for the currently logged-in user.
      * <p>
-     * This endpoint requires an 'Authorization' header. It compares the
-     * provided 'oldPassword' with the hashed value in the database.
+     * After a successful password change the current token is immediately revoked
+     * so the user must re-authenticate with the new credentials.
      * </p>
      */
     @Operation(summary = "Change Password", description = "Allows an authenticated user to update their password by providing the old one.")
@@ -70,8 +88,15 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "User not authenticated")
     })
     @PostMapping("/change-password")
-    public ResponseEntity<String> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
-        return ResponseEntity.ok(authService.changePassword(request));
+    public ResponseEntity<String> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        String result = authService.changePassword(request);
+        // Revoke the current token immediately — user must log in with new password
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            authService.logout(authHeader.substring(7));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**

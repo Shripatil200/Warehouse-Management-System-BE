@@ -15,6 +15,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -86,18 +90,19 @@ public class OrderController {
      */
     @Operation(
             summary = "List warehouse orders",
-            description = "Returns orders for the requester's warehouse. Cross-warehouse access is strictly blocked."
+            description = "Returns a paginated list of orders for the requester's warehouse. Use ?page=0&size=20&sort=createdAt,desc. Cross-warehouse access is strictly blocked."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Orders retrieved successfully",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = OrderResponse.class))))
+                    content = @Content(schema = @Schema(implementation = Page.class)))
     })
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
-    public ResponseEntity<List<OrderResponse>> getOrders(
+    public ResponseEntity<Page<OrderResponse>> getOrders(
             @Parameter(description = "Filter by order status", example = "PENDING")
-            @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(orderService.getWarehouseOrders(status));
+            @RequestParam(required = false) String status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(orderService.getWarehouseOrders(status, pageable));
     }
 
     /**

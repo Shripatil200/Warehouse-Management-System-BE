@@ -83,10 +83,7 @@ public class InventoryServiceImpl implements InventoryService {
 
             remaining -= putQty;
 
-            if ((locked.getMaxVolume() - locked.getCurrentVolumeOccupied()) <= 0) {
-                locked.setStatus(BinStatus.FULL);
-                binRepository.save(locked);
-            }
+            // Bin status (FULL/AVAILABLE) is now managed centrally in syncBinMetrics
 
             auditService.logSuccess(
                     operator.getId(),
@@ -409,11 +406,23 @@ public class InventoryServiceImpl implements InventoryService {
 
         BigDecimal deltaVol = product.getUnitVolume().multiply(BigDecimal.valueOf(qty));
 
-        locked.setCurrentVolumeOccupied(
-                locked.getCurrentVolumeOccupied() + deltaVol.doubleValue());
+        double newVolume = locked.getCurrentVolumeOccupied() + deltaVol.doubleValue();
+        double newWeight = locked.getCurrentWeightLoad() + (product.getWeight() * qty);
 
-        locked.setCurrentWeightLoad(
-                locked.getCurrentWeightLoad() + (product.getWeight() * qty));
+        // Clamp to zero — floating-point drift can produce tiny negatives after repeated operations
+        locked.setCurrentVolumeOccupied(Math.max(0.0, newVolume));
+        locked.setCurrentWeightLoad(Math.max(0.0, newWeight));
+
+        // Keep bin status in sync with actual occupancy
+        if (locked.getCurrentVolumeOccupied() <= 0.0 && locked.getCurrentWeightLoad() <= 0.0) {
+            locked.setStatus(BinStatus.AVAILABLE);
+        } else if (locked.getCurrentVolumeOccupied() >= locked.getMaxVolume()
+                || locked.getCurrentWeightLoad() >= locked.getMaxWeightCapacity()) {
+            locked.setStatus(BinStatus.FULL);
+        } else if (locked.getStatus() == BinStatus.FULL) {
+            // Was full, now has space — mark available again
+            locked.setStatus(BinStatus.AVAILABLE);
+        }
 
         binRepository.save(locked);
     }
@@ -432,5 +441,14 @@ public class InventoryServiceImpl implements InventoryService {
         String id = TenantContext.get();
         if (id == null) throw new IllegalStateException("Tenant missing");
         return id;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isFullyPicked(String inventoryItemId) {
+        String warehouseId = getWarehouseId();
+        return inventoryRepository.findByIdWithLock(inventoryItemId, warehouseId)
+                .map(item -> item.getReservedQuantity() == 0)
+                .orElse(true); // if item not found, treat as picked (already committed)
     }
 }

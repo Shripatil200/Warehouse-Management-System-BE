@@ -70,7 +70,14 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = resolveUserDetails(username);
+            String userType = null;
+            try {
+                userType = jwtUtil.extractClaims(token, claims -> claims.get("type", String.class));
+            } catch (Exception e) {
+                log.debug("No type claim found in JWT: {}", e.getMessage());
+            }
+
+            UserDetails userDetails = resolveUserDetails(username, userType);
 
             if (userDetails != null && jwtUtil.validateToken(token, userDetails.getUsername())) {
                 UsernamePasswordAuthenticationToken authToken =
@@ -84,10 +91,19 @@ public class JwtFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Tries warehouse users first, then falls back to suppliers.
-     * Returns null if the email is not found in either table.
+     * Tries loading from corresponding UserDetailsService based on token type.
+     * Defaults to warehouse users first, then falls back to suppliers.
      */
-    private UserDetails resolveUserDetails(String email) {
+    private UserDetails resolveUserDetails(String email, String userType) {
+        if ("SUPPLIER".equals(userType)) {
+            try {
+                return supplierDetailsService.loadUserByUsername(email);
+            } catch (UsernameNotFoundException ex) {
+                log.warn("Supplier user not found for email: {}", email);
+                return null;
+            }
+        }
+
         try {
             return usersDetailsService.loadUserByUsername(email);
         } catch (UsernameNotFoundException ex) {

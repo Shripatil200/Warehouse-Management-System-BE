@@ -19,6 +19,7 @@ import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.BinRentalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,6 +97,7 @@ public class BinRentalServiceImpl implements BinRentalService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public BinRentalResponse closeRental(String rentalId) {
         String warehouseId = TenantContext.get();
         BinRental rental = binRentalRepository.findByIdAndWarehouseId(rentalId, warehouseId)

@@ -14,6 +14,7 @@ import com.infotact.warehouse.service.ConsignmentService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,6 +86,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse approveAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -104,6 +106,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse rejectAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -115,6 +118,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse terminateAgreement(String agreementId, String managerNotes) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -256,6 +260,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentSettlementResponse markSettlementPaid(String settlementId, UpdateSettlementStatusRequest req) {
         String warehouseId = TenantContext.get();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);

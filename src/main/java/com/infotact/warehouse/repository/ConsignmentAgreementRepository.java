@@ -2,6 +2,8 @@ package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.ConsignmentAgreement;
 import com.infotact.warehouse.entity.enums.ConsignmentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,10 +18,17 @@ public interface ConsignmentAgreementRepository extends JpaRepository<Consignmen
 
     List<ConsignmentAgreement> findBySupplierIdAndWarehouseId(String supplierId, String warehouseId);
 
+    /** Filtered list (used internally by scheduler / terminal ops). */
     List<ConsignmentAgreement> findByStatusAndWarehouseId(ConsignmentStatus status, String warehouseId);
 
     /** Returns all agreements for a warehouse regardless of status — tenant-safe list-all. */
     List<ConsignmentAgreement> findAllByWarehouseId(String warehouseId);
+
+    /** Paginated — status-filtered, tenant-scoped. Default for API responses. */
+    Page<ConsignmentAgreement> findByStatusAndWarehouseId(ConsignmentStatus status, String warehouseId, Pageable pageable);
+
+    /** Paginated — unfiltered, tenant-scoped. Default for API responses. */
+    Page<ConsignmentAgreement> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
     /**
      * Find all ACTIVE agreements whose settlement cycle is due today or overdue.

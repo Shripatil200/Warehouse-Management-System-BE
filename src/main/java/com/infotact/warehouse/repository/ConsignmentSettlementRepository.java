@@ -2,6 +2,8 @@ package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.ConsignmentSettlement;
 import com.infotact.warehouse.entity.enums.ConsignmentSettlementStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,13 @@ public interface ConsignmentSettlementRepository extends JpaRepository<Consignme
 
     List<ConsignmentSettlement> findByStatusAndWarehouseId(
             ConsignmentSettlementStatus status, String warehouseId);
+
+    /** Paginated — used by the API list endpoint. */
+    Page<ConsignmentSettlement> findByStatusAndWarehouseId(
+            ConsignmentSettlementStatus status, String warehouseId, Pageable pageable);
+
+    /** All settlements across all statuses for this warehouse, paginated. */
+    Page<ConsignmentSettlement> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
     Optional<ConsignmentSettlement> findBySettlementNumberAndWarehouseId(
             String settlementNumber, String warehouseId);

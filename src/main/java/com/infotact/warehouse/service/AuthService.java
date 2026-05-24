@@ -32,6 +32,19 @@ public interface AuthService {
     AuthResponse login(LoginRequest request);
 
     /**
+     * Immediately invalidates the supplied JWT by adding it to the Redis blacklist.
+     * The token will be rejected by {@link com.infotact.warehouse.config.JWT.JwtFilter}
+     * on all subsequent requests, even before its natural 10-hour expiry.
+     * <p>
+     * This ensures password changes and role downgrades take effect immediately
+     * rather than being deferred until the token's natural expiry.
+     * </p>
+     *
+     * @param bearerToken the raw JWT (without the "Bearer " prefix)
+     */
+    void logout(String bearerToken);
+
+    /**
      * Updates the password for an authenticated session.
      * <p>
      * <b>Validation:</b> Must verify that the 'oldPassword' matches the

@@ -12,6 +12,7 @@ import com.infotact.warehouse.repository.ResetPasswordRepository;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.repository.VerifiedProofRepository;
 import com.infotact.warehouse.service.AuthService;
+import com.infotact.warehouse.service.TokenBlacklistService;
 import com.infotact.warehouse.util.EmailUtils;
 import com.infotact.warehouse.util.SmsUtils;
 import jakarta.mail.MessagingException;
@@ -49,12 +50,29 @@ public class AuthServiceImpl implements AuthService {
     private final OtpTokenRepository         otpRepo;
     private final VerifiedProofRepository    proofRepo;
     private final SmsUtils                   smsUtils;
+    private final TokenBlacklistService tokenBlacklistService;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private String getAuthenticatedUserEmail() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null) ? auth.getName() : null;
+    }
+
+    @Override
+    public void logout(String bearerToken) {
+        if (bearerToken == null || bearerToken.isBlank()) {
+            log.warn("Logout called with blank token — ignoring.");
+            return;
+        }
+        try {
+            long expiryMs = jwtUtil.extractExpirationMs(bearerToken);
+            tokenBlacklistService.blacklist(bearerToken, expiryMs);
+            log.info("User logged out — token blacklisted.");
+        } catch (Exception e) {
+            // If the token is already expired or malformed, there is nothing to revoke
+            log.warn("Could not blacklist token on logout: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -101,7 +119,7 @@ public class AuthServiceImpl implements AuthService {
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
-        return "Password updated successfully.";
+        return "Password updated successfully. Please log in again with your new password.";
     }
 
     @Override

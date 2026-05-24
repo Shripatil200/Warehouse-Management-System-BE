@@ -76,6 +76,14 @@ public class JwtUtil {
         return extractUsername(token).equals(username) && !isTokenExpired(token);
     }
 
+    /**
+     * Returns the absolute expiry time of the token as epoch-millis.
+     * Used by the logout flow to set the Redis blacklist entry TTL.
+     */
+    public long extractExpirationMs(String token) {
+        return extractClaims(token, Claims::getExpiration).getTime();
+    }
+
     private Boolean isTokenExpired(String token) {
         return extractClaims(token, Claims::getExpiration).before(new Date());
     }

@@ -14,6 +14,8 @@ import com.infotact.warehouse.service.ConsignmentService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -137,12 +139,12 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status) {
+    public Page<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status, Pageable pageable) {
         String warehouseId = TenantContext.get();
-        List<ConsignmentAgreement> agreements = status != null
-                ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId)
-                : agreementRepo.findAllByWarehouseId(warehouseId);
-        return agreements.stream().map(this::mapToAgreementResponse).collect(Collectors.toList());
+        Page<ConsignmentAgreement> agreements = status != null
+                ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId, pageable)
+                : agreementRepo.findAllByWarehouseId(warehouseId, pageable);
+        return agreements.map(this::mapToAgreementResponse);
     }
 
     @Transactional(readOnly = true)
@@ -280,10 +282,12 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status) {
+    public Page<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status, Pageable pageable) {
         String warehouseId = TenantContext.get();
-        return settlementRepo.findByStatusAndWarehouseId(status, warehouseId)
-                .stream().map(this::mapToSettlementResponse).collect(Collectors.toList());
+        Page<ConsignmentSettlement> page = status != null
+                ? settlementRepo.findByStatusAndWarehouseId(status, warehouseId, pageable)
+                : settlementRepo.findAllByWarehouseId(warehouseId, pageable);
+        return page.map(this::mapToSettlementResponse);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

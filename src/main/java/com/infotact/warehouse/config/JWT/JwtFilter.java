@@ -1,5 +1,6 @@
 package com.infotact.warehouse.config.JWT;
 
+import com.infotact.warehouse.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,6 +35,7 @@ public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil               jwtUtil;
     private final UsersDetailsService   usersDetailsService;
     private final SupplierDetailsService supplierDetailsService;
+    private final TokenBlacklistService  tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -58,6 +60,13 @@ public class JwtFilter extends OncePerRequestFilter {
             } catch (Exception e) {
                 log.error("JWT parse error: {}", e.getMessage());
             }
+        }
+
+        // Reject explicitly revoked tokens (logout / forced re-auth)
+        if (token != null && tokenBlacklistService.isBlacklisted(token)) {
+            log.warn("Rejected blacklisted token for request to {}", path);
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been revoked. Please log in again.");
+            return;
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {

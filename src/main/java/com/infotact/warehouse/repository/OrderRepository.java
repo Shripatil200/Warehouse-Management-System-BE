@@ -30,12 +30,14 @@ public interface OrderRepository extends JpaRepository<SellingOrder, String> {
     List<SellingOrder> findAllByWarehouseId(String warehouseId);
 
     /**
-     * RESOLVED: Method to fetch filtered orders for the OrderService.
-     * <p>
-     * Logic: <code>WHERE warehouse_id = ? AND status = ?</code>
-     * </p>
+     * Paginated retrieval of all orders for a facility.
      */
-    List<SellingOrder> findAllByWarehouseIdAndStatus(String warehouseId, OrderStatus status);
+    org.springframework.data.domain.Page<SellingOrder> findAllByWarehouseId(String warehouseId, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Paginated retrieval of orders filtered by status.
+     */
+    org.springframework.data.domain.Page<SellingOrder> findAllByWarehouseIdAndStatus(String warehouseId, OrderStatus status, org.springframework.data.domain.Pageable pageable);
 
     /**
      * Aggregates count of orders by status for dashboard metrics.

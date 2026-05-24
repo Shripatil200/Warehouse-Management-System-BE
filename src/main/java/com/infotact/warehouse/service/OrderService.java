@@ -59,7 +59,19 @@ public interface OrderService {
     List<OrderResponse> getWarehouseOrders(String status);
 
 
-    void verifyAndPack(String orderId, String scannedSku, String scannedBinCode);
+    /**
+     * Verifies a single physical scan and commits the pick for that inventory item.
+     * Called once per item scan from the operator's handheld device.
+     * When all items in the order are picked, the order status advances to PACKED.
+     *
+     * @param orderId         UUID of the order being fulfilled.
+     * @param inventoryItemId The specific stock layer reserved for this pick.
+     * @param scannedSku      Raw barcode from the product label (must match the reserved layer).
+     * @param scannedBinCode  Raw barcode from the bin label (must match the reserved bin).
+     * @param quantity        Units physically removed from the bin.
+     */
+    void verifyAndPack(String orderId, String inventoryItemId,
+                       String scannedSku, String scannedBinCode, int quantity);
 
     /**
      * Transitions an order through its operational lifecycle and triggers associated inventory actions.

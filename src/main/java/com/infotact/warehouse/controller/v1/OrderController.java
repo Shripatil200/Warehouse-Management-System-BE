@@ -122,7 +122,7 @@ public class OrderController {
     @PostMapping("/verify-pack")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public ResponseEntity<Void> verifyAndPack(@Valid @RequestBody PickVerificationRequest request) {
-        orderService.verifyAndPack(request.getOrderId(), request.getScannedProductSku(), request.getScannedBinCode());
+        orderService.verifyAndPack(request.getOrderId(),request.getInventoryItemId(), request.getScannedProductSku(), request.getScannedBinCode(),request.getQuantity());
         return ResponseEntity.ok().build();
     }
 

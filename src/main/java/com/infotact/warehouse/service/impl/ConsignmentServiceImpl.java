@@ -14,6 +14,7 @@ import com.infotact.warehouse.service.ConsignmentService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +23,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -86,6 +86,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse approveAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -105,6 +106,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse rejectAgreement(String agreementId) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -116,6 +118,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse terminateAgreement(String agreementId, String managerNotes) {
         String warehouseId = TenantContext.get();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
@@ -138,7 +141,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
         String warehouseId = TenantContext.get();
         List<ConsignmentAgreement> agreements = status != null
                 ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId)
-                : agreementRepo.findAll();
+                : agreementRepo.findAllByWarehouseId(warehouseId);
         return agreements.stream().map(this::mapToAgreementResponse).collect(Collectors.toList());
     }
 
@@ -257,6 +260,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     }
 
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentSettlementResponse markSettlementPaid(String settlementId, UpdateSettlementStatusRequest req) {
         String warehouseId = TenantContext.get();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);
@@ -369,14 +373,14 @@ public class ConsignmentServiceImpl implements ConsignmentService {
                 .build();
     }
 
-    private static final AtomicInteger agreementCounter  = new AtomicInteger(1);
-    private static final AtomicInteger settlementCounter = new AtomicInteger(1);
-
     private String generateAgreementCode() {
-        return String.format("CONS-%d-%04d", LocalDate.now().getYear(), agreementCounter.getAndIncrement());
+        // UUID suffix guarantees uniqueness across restarts and cluster nodes
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        return String.format("CONS-%d-%s", LocalDate.now().getYear(), suffix);
     }
 
     private String generateSettlementNumber() {
-        return String.format("SETL-%d-%04d", LocalDate.now().getYear(), settlementCounter.getAndIncrement());
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        return String.format("SETL-%d-%s", LocalDate.now().getYear(), suffix);
     }
 }

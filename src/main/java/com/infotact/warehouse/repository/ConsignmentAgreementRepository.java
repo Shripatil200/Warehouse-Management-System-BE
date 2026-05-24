@@ -18,6 +18,9 @@ public interface ConsignmentAgreementRepository extends JpaRepository<Consignmen
 
     List<ConsignmentAgreement> findByStatusAndWarehouseId(ConsignmentStatus status, String warehouseId);
 
+    /** Returns all agreements for a warehouse regardless of status — tenant-safe list-all. */
+    List<ConsignmentAgreement> findAllByWarehouseId(String warehouseId);
+
     /**
      * Find all ACTIVE agreements whose settlement cycle is due today or overdue.
      * Used by the settlement scheduler.

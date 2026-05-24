@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.argThat;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -215,5 +216,133 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.getOrder(ORDER_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ── verifyAndPack tests ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("verifyAndPack - should throw IllegalOperationException when scanned SKU doesn't match item")
+    void verifyAndPack_ShouldThrow_WhenSkuMismatch() {
+        Product product = buildProduct(); // SKU = "SKU-001"
+
+        SellingOrderItem item = new SellingOrderItem();
+        item.setInventoryItemId("inv-001");
+        item.setQuantity(1);
+        item.setProduct(product);
+        item.setSuggestedBinId("bin-001");
+        item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+
+        SellingOrder order = buildOrder(OrderStatus.PICKING);
+        order.setItems(List.of(item));
+
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        // Scanned SKU deliberately wrong
+        assertThatThrownBy(() ->
+                orderService.verifyAndPack(ORDER_ID, "inv-001", "WRONG-SKU", "A-01-001", 1))
+                .isInstanceOf(IllegalOperationException.class)
+                .hasMessageContaining("Mismatch");
+
+        // Audit failure must be recorded and inventory must NOT be committed
+        verify(auditService).logFailure(any(), any(), any(), any(), any(), any());
+        verify(inventoryService, never()).commitPickWithVerification(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("verifyAndPack - should throw IllegalOperationException when bin code doesn't match")
+    void verifyAndPack_ShouldThrow_WhenBinMismatch() {
+        Product product = buildProduct();
+
+        SellingOrderItem item = new SellingOrderItem();
+        item.setInventoryItemId("inv-001");
+        item.setQuantity(1);
+        item.setProduct(product);
+        item.setSuggestedBinId("bin-001");
+        item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+
+        SellingOrder order = buildOrder(OrderStatus.PICKING);
+        order.setItems(List.of(item));
+
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        // SKU matches but bin scan returns false (wrong bin)
+        when(layoutService.verifyBinScan(eq("WRONG-BIN"), eq("bin-001"))).thenReturn(false);
+
+        assertThatThrownBy(() ->
+                orderService.verifyAndPack(ORDER_ID, "inv-001", "SKU-001", "WRONG-BIN", 1))
+                .isInstanceOf(IllegalOperationException.class)
+                .hasMessageContaining("Location Error");
+
+        verify(auditService).logFailure(any(), any(), any(), any(), any(), any());
+        verify(inventoryService, never()).commitPickWithVerification(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("verifyAndPack - should advance order to PACKED when all items are picked")
+    void verifyAndPack_ShouldAdvanceToPacked_WhenAllItemsPicked() {
+        Product product = buildProduct();
+
+        SellingOrderItem item = new SellingOrderItem();
+        item.setInventoryItemId("inv-001");
+        item.setQuantity(2);
+        item.setProduct(product);
+        item.setSuggestedBinId("bin-001");
+        item.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+        item.setConsignment(false);
+
+        SellingOrder order = buildOrder(OrderStatus.PICKING);
+        order.setItems(List.of(item));
+
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(layoutService.verifyBinScan(eq("A-01-001"), eq("bin-001"))).thenReturn(true);
+        // After scanning the only item, it counts as fully picked
+        when(inventoryService.isFullyPicked("inv-001")).thenReturn(true);
+        when(orderRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        orderService.verifyAndPack(ORDER_ID, "inv-001", "SKU-001", "A-01-001", 2);
+
+        verify(inventoryService).commitPickWithVerification("inv-001", "A-01-001", "SKU-001", 2);
+        verify(auditService).logSuccess(any(), any(), any(), any(), any());
+        // Verify the order was saved with PACKED status
+        verify(orderRepository).save(argThat(o -> o.getStatus() == OrderStatus.PACKED));
+    }
+
+    @Test
+    @DisplayName("verifyAndPack - should set order to PICKING when not all items are scanned yet")
+    void verifyAndPack_ShouldRemainPicking_WhenMoreItemsPending() {
+        Product product = buildProduct();
+
+        SellingOrderItem item1 = new SellingOrderItem();
+        item1.setInventoryItemId("inv-001");
+        item1.setQuantity(1);
+        item1.setProduct(product);
+        item1.setSuggestedBinId("bin-001");
+        item1.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+        item1.setConsignment(false);
+
+        SellingOrderItem item2 = new SellingOrderItem();
+        item2.setInventoryItemId("inv-002");
+        item2.setQuantity(1);
+        item2.setProduct(product);
+        item2.setSuggestedBinId("bin-002");
+        item2.setSellPriceAtTimeOfOrder(product.getSellingPrice());
+        item2.setConsignment(false);
+
+        SellingOrder order = buildOrder(OrderStatus.PICKING);
+        order.setItems(List.of(item1, item2));
+
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(buildManager()));
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(layoutService.verifyBinScan(eq("A-01-001"), eq("bin-001"))).thenReturn(true);
+        // item2 is NOT yet picked
+        when(inventoryService.isFullyPicked("inv-002")).thenReturn(false);
+        when(orderRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        orderService.verifyAndPack(ORDER_ID, "inv-001", "SKU-001", "A-01-001", 1);
+
+        // Status must stay PICKING, not jump to PACKED
+        verify(orderRepository).save(argThat(o -> o.getStatus() == OrderStatus.PICKING));
     }
 }

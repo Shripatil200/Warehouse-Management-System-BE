@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/categories")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 @Tag(name = "2. Product Categories", description = "Endpoints for managing the hierarchical product category tree")
 public class CategoryController {
 
@@ -56,7 +57,6 @@ public class CategoryController {
             @ApiResponse(responseCode = "409", description = "Conflict: Category name already exists")
     })
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<ProductCategoryResponse> addCategory(@Valid @RequestBody ProductCategoryRequest request) {
         log.info("REST request to add category: {}", request.getName());
         return new ResponseEntity<>(categoryService.addCategory(request), HttpStatus.CREATED);
@@ -70,7 +70,6 @@ public class CategoryController {
      */
     @Operation(summary = "Get category by ID", description = "Retrieves full details of a specific category, including its parent reference.")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'SUPPLIER')")
     public ResponseEntity<ProductCategoryResponse> getCategory(
             @Parameter(description = "The UUID of the category", example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
             @PathVariable String id) {
@@ -86,7 +85,6 @@ public class CategoryController {
      */
     @Operation(summary = "List all categories", description = "Returns a paginated list of categories mapped to the current warehouse.")
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'SUPPLIER')")
     public ResponseEntity<Page<ProductCategoryResponse>> getAllCategories(
             @ParameterObject Pageable pageable,
             @Parameter(description = "If true, returns both active and inactive categories")
@@ -111,7 +109,6 @@ public class CategoryController {
             @ApiResponse(responseCode = "400", description = "Bad Request: Category has dependencies and cannot be removed")
     })
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Void> deleteCategory(@PathVariable String id) {
         log.warn("REST request to delete category: {}", id);
         categoryService.deleteCategory(id);
@@ -127,7 +124,6 @@ public class CategoryController {
      */
     @Operation(summary = "Update a category", description = "Updates category name or parent reference.")
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<ProductCategoryResponse> updateCategory(
             @PathVariable String id,
             @Valid @RequestBody ProductCategoryRequest request) {
@@ -138,14 +134,12 @@ public class CategoryController {
 
     @Operation(summary = "Activate a category", description = "Sets category status to active, making it visible for product assignment.")
     @PatchMapping("/{id}/activate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<ProductCategoryResponse> activate(@PathVariable String id) {
         return ResponseEntity.ok(categoryService.activateCategory(id));
     }
 
     @Operation(summary = "Deactivate a category", description = "Sets category status to inactive (Soft Delete).")
     @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<ProductCategoryResponse> deactivate(@PathVariable String id) {
         return ResponseEntity.ok(categoryService.deactivateCategory(id));
     }

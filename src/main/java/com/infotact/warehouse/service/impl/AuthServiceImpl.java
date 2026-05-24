@@ -16,6 +16,7 @@ import com.infotact.warehouse.service.TokenBlacklistService;
 import com.infotact.warehouse.util.EmailUtils;
 import com.infotact.warehouse.util.SmsUtils;
 import jakarta.mail.MessagingException;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -51,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
     private final VerifiedProofRepository    proofRepo;
     private final SmsUtils                   smsUtils;
     private final TokenBlacklistService tokenBlacklistService;
+    private final HttpServletRequest httpRequest;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -119,6 +121,19 @@ public class AuthServiceImpl implements AuthService {
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // Invalidate the token that authorised this request so the client is
+        // forced to log in with the new password immediately.
+        String header = httpRequest.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            try {
+                String token = header.substring(7);
+                tokenBlacklistService.blacklist(token, jwtUtil.extractExpirationMs(token));
+                log.info("Token blacklisted after password change for user {}", user.getEmail());
+            } catch (Exception e) {
+                log.warn("Could not blacklist token after password change: {}", e.getMessage());
+            }
+        }
         return "Password updated successfully. Please log in again with your new password.";
     }
 

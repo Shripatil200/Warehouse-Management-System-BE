@@ -19,6 +19,10 @@ public class JwtUtil {
     @Value("${app.jwt.secret}")
     private String secret;
 
+    /** Token lifetime in milliseconds. Default: 10 hours. Override via app.jwt.expiry-ms. */
+    @Value("${app.jwt.expiry-ms:36000000}")
+    private long expiryMs;
+
     public String extractUsername(String token) {
         return extractClaims(token, Claims::getSubject);
     }
@@ -67,7 +71,7 @@ public class JwtUtil {
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 10))
+                .setExpiration(new Date(System.currentTimeMillis() + expiryMs))
                 .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)), SignatureAlgorithm.HS256)
                 .compact();
     }

@@ -14,12 +14,10 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
-
-
+        format_sql: false
         cache:
           use_second_level_cache: false
           use_query_cache: false
@@ -65,14 +63,15 @@ app:
       key: ${SMS_API_KEY}
   jwt:
     secret: ${JWT_SECRET_KEY}
+    expiry-ms: ${JWT_EXPIRY_MS:36000000}   # Default 10 h; override via env var for tighter windows
 
 # Logging Configuration
 logging:
   level:
-    com.infotact.warehouse: DEBUG          # 👈 your logs (TenantFilter, services)
-    org.hibernate.SQL: DEBUG               # 👈 SQL queries
-    org.hibernate.orm.jdbc.bind: TRACE     # 👈 query parameters (CRITICAL)
-    org.springframework.security: INFO
+    com.infotact.warehouse: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    org.springframework.security: WARN
 
 springdoc:
   api-docs:

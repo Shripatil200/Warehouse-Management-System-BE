@@ -10,8 +10,11 @@ import com.infotact.warehouse.entity.enums.UserStatus;
 import com.infotact.warehouse.exception.*;
 import com.infotact.warehouse.repository.UserRepository;
 import com.infotact.warehouse.repository.WarehouseRepository;
+import com.infotact.warehouse.service.TokenBlacklistService;
 import com.infotact.warehouse.service.UserService;
+import com.infotact.warehouse.config.JWT.JwtUtil;
 import com.infotact.warehouse.util.EmailUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +30,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,9 +54,25 @@ public class UserServiceImpl implements UserService {
     private final WarehouseRepository warehouseRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailUtils emailUtils;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final JwtUtil jwtUtil;
+    private final HttpServletRequest httpRequest;
 
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
     private static final String ROLE_MANAGER = "ROLE_MANAGER";
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String TEMP_PW_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#";
+    private static final int TEMP_PW_LENGTH = 12;
+
+    /** Generates a cryptographically random temporary password. */
+    private static String generateTempPassword() {
+        StringBuilder sb = new StringBuilder(TEMP_PW_LENGTH);
+        for (int i = 0; i < TEMP_PW_LENGTH; i++) {
+            sb.append(TEMP_PW_CHARS.charAt(SECURE_RANDOM.nextInt(TEMP_PW_CHARS.length())));
+        }
+        return sb.toString();
+    }
 
     // --- SEARCH & RETRIEVAL LOGIC ---
 
@@ -180,8 +200,7 @@ public class UserServiceImpl implements UserService {
         newUser.setStatus(UserStatus.PENDING);
         newUser.setWarehouse(warehouse);
 
-        String phone = request.getContactNumber();
-        String tempPassword = "Welcome@" + (phone.length() >= 4 ? phone.substring(phone.length() - 4) : "1234");
+        String tempPassword = generateTempPassword();
         newUser.setPassword(passwordEncoder.encode(tempPassword));
 
         userRepository.save(newUser);
@@ -214,6 +233,8 @@ public class UserServiceImpl implements UserService {
         if (request.getRole() != null) {
             if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Role modifications require Admin clearance.");
             targetUser.setRole(Role.valueOf(request.getRole().toUpperCase()));
+            // Force re-login — the role claim in the existing token would be stale
+            blacklistCurrentToken();
         }
 
         userRepository.save(targetUser);
@@ -266,6 +287,15 @@ public class UserServiceImpl implements UserService {
 
         targetUser.setStatus(status);
         userRepository.save(targetUser);
+        // If deactivating or suspending, the target user's token should no longer be accepted.
+        // We can't reach into their session, but we log a warning for audit purposes.
+        // Full server-side revocation of another user's token requires storing the user's
+        // current token at login time (not currently done). This is a known limitation.
+        if (status == UserStatus.INACTIVE || status == UserStatus.DELETED) {
+            log.warn("User {} status set to {} by admin — existing tokens will expire naturally " +
+                            "within 10h. Consider adding per-user token versioning for immediate revocation.",
+                    targetUser.getEmail(), status);
+        }
     }
 
     // --- CACHING & AUTHENTICATION HELPERS ---
@@ -305,6 +335,21 @@ public class UserServiceImpl implements UserService {
     private void validateWarehouseAccess(User currentUser, User targetUser) {
         if (!currentUser.getWarehouse().getId().equals(targetUser.getWarehouse().getId())) {
             throw new UnauthorizedException("Access Denied: Silo boundary violation.");
+        }
+    }
+
+    /** Blacklists the JWT that authorised the current HTTP request. */
+    private void blacklistCurrentToken() {
+        String header = httpRequest.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
+            try {
+                long expiryMs = jwtUtil.extractExpirationMs(token);
+                tokenBlacklistService.blacklist(token, expiryMs);
+                log.info("Token blacklisted after sensitive account change.");
+            } catch (Exception e) {
+                log.warn("Could not blacklist token after account change: {}", e.getMessage());
+            }
         }
     }
 

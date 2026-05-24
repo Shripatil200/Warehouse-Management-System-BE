@@ -66,7 +66,10 @@ public class ProductMasterServiceImpl implements ProductMasterService {
     @Override
     @Transactional(readOnly = true)
     public Page<ProductMasterResponse> search(String query, Pageable pageable) {
-        return productMasterRepository.search(query, pageable).map(ProductMasterResponse::new);
+        if (query == null || query.trim().isEmpty()) {
+            return productMasterRepository.findAllWithCategory(pageable).map(ProductMasterResponse::new);
+        }
+        return productMasterRepository.search(query.trim(), pageable).map(ProductMasterResponse::new);
     }
 
     private void mapRequestToEntity(ProductMasterRequest request, ProductMaster pm) {

@@ -54,7 +54,13 @@ public record TaskNotificationPayload(
         String notes,
 
         /** Timestamp of assignment for display on the operator's screen. */
-        LocalDateTime assignedAt
+        LocalDateTime assignedAt,
+
+        /** The customer order associated with this task. */
+        String sourceOrderId,
+
+        /** The supplier purchase order associated with this task. */
+        String sourcePurchaseOrderId
 ) {
     /**
      * Factory method — builds the payload directly from a persisted task.
@@ -68,7 +74,9 @@ public record TaskNotificationPayload(
                 task.getSourceLocation(),
                 task.getDestinationLocation(),
                 task.getNotes(),
-                task.getAssignedAt()
+                task.getAssignedAt(),
+                task.getSourceOrder() != null ? task.getSourceOrder().getId() : null,
+                task.getSourcePurchaseOrder() != null ? task.getSourcePurchaseOrder().getId() : null
         );
     }
 }

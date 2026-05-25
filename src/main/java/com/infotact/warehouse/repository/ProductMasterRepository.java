@@ -17,8 +17,15 @@ public interface ProductMasterRepository extends JpaRepository<ProductMaster, St
 
     boolean existsByBarcode(String barcode);
 
-    @Query("SELECT pm FROM ProductMaster pm LEFT JOIN FETCH pm.category " +
-            "WHERE (:query IS NULL OR LOWER(pm.name) LIKE LOWER(CONCAT('%', :query, '%')) " +
-            "OR LOWER(pm.barcode) LIKE LOWER(CONCAT('%', :query, '%')))")
+    @Query(value = "SELECT pm FROM ProductMaster pm LEFT JOIN FETCH pm.category",
+           countQuery = "SELECT COUNT(pm) FROM ProductMaster pm")
+    Page<ProductMaster> findAllWithCategory(Pageable pageable);
+
+    @Query(value = "SELECT pm FROM ProductMaster pm LEFT JOIN FETCH pm.category " +
+            "WHERE LOWER(pm.name) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(pm.barcode) LIKE LOWER(CONCAT('%', :query, '%'))",
+           countQuery = "SELECT COUNT(pm) FROM ProductMaster pm " +
+            "WHERE LOWER(pm.name) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "OR LOWER(pm.barcode) LIKE LOWER(CONCAT('%', :query, '%'))")
     Page<ProductMaster> search(@Param("query") String query, Pageable pageable);
 }

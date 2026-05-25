@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.entity.BarcodeAudit;
 import com.infotact.warehouse.entity.Warehouse;
 import com.infotact.warehouse.entity.enums.AuditAction;
@@ -30,7 +30,7 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
                            AuditAction action,
                            String scannedValue) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         if (warehouseId == null) {
             throw new IllegalStateException("Tenant missing in context");
@@ -63,7 +63,7 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
                            String scannedValue,
                            String errorReason) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         if (warehouseId == null) {
             throw new IllegalStateException("Tenant missing in context");

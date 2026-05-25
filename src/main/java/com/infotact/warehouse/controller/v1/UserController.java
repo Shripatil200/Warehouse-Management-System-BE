@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * REST controller for managing warehouse personnel and administrative accounts.
  * <p>
- * Handles the lifecycle of users with strict multi-tenant data privacy (Silo Pattern).
+ * Handles the lifecycle of users with strict warehouse-scoped data privacy (Silo Pattern).
  * All data access is automatically scoped to the authenticated user's warehouse facility.
  * </p>
  */

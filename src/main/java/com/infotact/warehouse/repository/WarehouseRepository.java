@@ -102,7 +102,4 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, String> {
     boolean existsByNameIgnoreCaseAndLocationIgnoreCase(String name, String location);
 
     Optional<Warehouse> findByIdAndActiveTrue(String id);
-
-    @Query("SELECT w.id FROM Warehouse w WHERE w.active = true")
-    List<String> findAllActiveWarehouseIds();
 }

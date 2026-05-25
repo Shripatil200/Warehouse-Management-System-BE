@@ -50,7 +50,7 @@ public class SupplierRevenueController {
     }
 
     @GetMapping("/{supplierId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER') or (hasRole('SUPPLIER') and #supplierId == principal.id)")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(
             summary = "Single-supplier revenue report",
             description = "Returns commission, bin rental revenue, spend, and net position for a specific supplier."

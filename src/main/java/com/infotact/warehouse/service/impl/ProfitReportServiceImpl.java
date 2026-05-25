@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.response.ProductProfitResponse;
 import com.infotact.warehouse.dto.v1.response.ProfitPeriodResponse;
 import com.infotact.warehouse.repository.ProfitReportRepository;
@@ -60,7 +60,7 @@ public class ProfitReportServiceImpl implements ProfitReportService {
     }
 
     private String warehouseId() {
-        String id = TenantContext.get();
+        String id = WarehouseContext.get();
         if (id == null) {
             throw new IllegalStateException("Tenant context is missing — cannot resolve warehouse.");
         }

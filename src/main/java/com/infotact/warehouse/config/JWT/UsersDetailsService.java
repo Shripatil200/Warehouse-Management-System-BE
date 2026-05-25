@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Spring Security {@link UserDetailsService} for warehouse staff ({@code users} table).
- * Supplier accounts are loaded separately by {@link SupplierDetailsService}.
+ * Spring Security {@link UserDetailsService} for warehouse {@link User} accounts.
  */
 @Service
 @RequiredArgsConstructor

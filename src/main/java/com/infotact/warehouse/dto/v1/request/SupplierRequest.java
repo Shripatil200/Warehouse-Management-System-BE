@@ -4,9 +4,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
+/**
+ * Request payload for creating or updating a supplier record.
+ * Suppliers are managed by warehouse Admins/Managers.
+ */
 @Data
-@Schema(name = "SupplierRegistrationRequest", description = "Payload for supplier self-registration")
-public class SupplierRegistrationRequest {
+@Schema(name = "SupplierRequest", description = "Payload for creating or updating a supplier")
+public class SupplierRequest {
 
     @NotBlank(message = "Name is required")
     @Size(min = 2, max = 100)
@@ -22,11 +26,6 @@ public class SupplierRegistrationRequest {
     @Pattern(regexp = "^[0-9]{10}$", message = "Contact number must be exactly 10 digits")
     @Schema(example = "9876543210", requiredMode = Schema.RequiredMode.REQUIRED)
     private String contactNumber;
-
-    @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
-    private String password;
 
     @NotBlank(message = "Company name is required")
     @Size(max = 200)

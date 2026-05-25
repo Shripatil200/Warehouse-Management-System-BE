@@ -24,10 +24,10 @@ public interface ConsignmentAgreementRepository extends JpaRepository<Consignmen
     /** Returns all agreements for a warehouse regardless of status — tenant-safe list-all. */
     List<ConsignmentAgreement> findAllByWarehouseId(String warehouseId);
 
-    /** Paginated — status-filtered, tenant-scoped. Default for API responses. */
+    /** Paginated — status-filtered, warehouse-scoped. Default for API responses. */
     Page<ConsignmentAgreement> findByStatusAndWarehouseId(ConsignmentStatus status, String warehouseId, Pageable pageable);
 
-    /** Paginated — unfiltered, tenant-scoped. Default for API responses. */
+    /** Paginated — unfiltered, warehouse-scoped. Default for API responses. */
     Page<ConsignmentAgreement> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
     /**

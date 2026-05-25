@@ -1,7 +1,6 @@
 package com.infotact.warehouse.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.infotact.warehouse.entity.base.BaseEntity;
 import com.infotact.warehouse.entity.base.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -15,7 +14,7 @@ import java.util.List;
  * Persistence entity representing a master product in the catalog.
  * <p>
  * Updated to include replenishment thresholds for automated Bulk-to-Picking moves.
- * Designed for multi-tenant isolation, ensuring SKUs are unique per warehouse.
+ * Designed for warehouse-scoped isolation, ensuring SKUs are unique per warehouse.
  * </p>
  */
 @Getter
@@ -129,7 +128,7 @@ public class Product extends TenantAwareEntity {
     private ProductCategory category;
 
     /**
-     * Strict multi-tenancy: The warehouse that owns this product record.
+     * The warehouse that owns this product record.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "warehouse_id", nullable = false)
@@ -175,17 +174,7 @@ public class Product extends TenantAwareEntity {
     private ConsignmentAgreement consignmentAgreement;
 
 
-    /**
-     * Reference to the global {@link ProductMaster} this warehouse product is derived from.
-     * <p>
-     * Nullable for legacy products created before the ProductMaster system was introduced.
-     * When present, it allows cross-warehouse product identity resolution and
-     * supplier catalogue browsing when raising Purchase Orders.
-     * </p>
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_master_id")
-    private ProductMaster productMaster;
+
 
     @PrePersist
     @PreUpdate

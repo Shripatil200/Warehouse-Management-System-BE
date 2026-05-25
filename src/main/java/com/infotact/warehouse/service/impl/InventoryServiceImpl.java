@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.entity.*;
@@ -438,7 +438,7 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     private String getWarehouseId() {
-        String id = TenantContext.get();
+        String id = WarehouseContext.get();
         if (id == null) throw new IllegalStateException("Tenant missing");
         return id;
     }

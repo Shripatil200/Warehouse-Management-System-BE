@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * Core service responsible for managing physical stock movements and ensuring
- * inventory integrity across a multi-tenant warehouse system.
+ * inventory integrity across a warehouse-scoped warehouse system.
  *
  * <p>
  * This service represents the transactional backbone of the WMS (Warehouse Management System).
@@ -20,7 +20,7 @@ import java.util.List;
  *   <li><b>Cost Layering:</b> Each inventory record represents a distinct financial and physical layer.</li>
  *   <li><b>FEFO Picking:</b> Stock is allocated based on earliest expiry to minimize waste.</li>
  *   <li><b>Concurrency Safety:</b> All critical operations use pessimistic locking.</li>
- *   <li><b>Tenant Isolation:</b> All operations are scoped to the current warehouse via TenantContext.</li>
+ *   <li><b>Tenant Isolation:</b> All operations are scoped to the current warehouse via WarehouseContext.</li>
  *   <li><b>Traceability:</b> Every stock movement generates an immutable transaction record.</li>
  * </ul>
  *

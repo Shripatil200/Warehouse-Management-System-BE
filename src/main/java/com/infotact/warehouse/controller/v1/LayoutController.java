@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p>
  * Tenant-safe design: All operations are scoped automatically
- * to the authenticated warehouse via JWT → TenantContext.
+ * to the authenticated warehouse via JWT → WarehouseContext.
  * </p>
  */
 @RestController

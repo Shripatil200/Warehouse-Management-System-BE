@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 /**
  * Implementation of {@link CategoryService} managing product taxonomy.
  * <p>
- * This service enforces multi-tenant isolation, ensuring that managers only
+ * This service enforces warehouse-scoped isolation, ensuring that managers only
  * interact with categories belonging to their assigned warehouse. It supports
  * recursive nesting and provides safety checks for circular dependencies.
  * </p>

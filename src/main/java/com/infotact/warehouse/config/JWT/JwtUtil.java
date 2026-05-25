@@ -55,17 +55,6 @@ public class JwtUtil {
         return createToken(claims, principal.getUsername());
     }
 
-    /**
-     * Generates a JWT for a supplier.
-     * No warehouseId — suppliers are global.
-     */
-    public String generateToken(SupplierPrincipal principal) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", "ROLE_SUPPLIER");
-        claims.put("type", "SUPPLIER");
-        return createToken(claims, principal.getUsername());
-    }
-
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
                 .setClaims(claims)

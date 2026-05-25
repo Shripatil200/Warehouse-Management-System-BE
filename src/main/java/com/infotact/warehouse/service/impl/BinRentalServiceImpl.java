@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.CreateBinRentalRequest;
 import com.infotact.warehouse.dto.v1.response.BinRentalResponse;
 import com.infotact.warehouse.entity.BinRental;
@@ -44,7 +44,7 @@ public class BinRentalServiceImpl implements BinRentalService {
     @Override
     @Transactional
     public BinRentalResponse createRental(CreateBinRentalRequest request) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         Supplier supplier = supplierRepository.findById(request.getSupplierId())
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found: " + request.getSupplierId()));
@@ -78,7 +78,7 @@ public class BinRentalServiceImpl implements BinRentalService {
     @Override
     @Transactional(readOnly = true)
     public List<BinRentalResponse> getAllRentals() {
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
         return binRentalRepository.findAllByWarehouseIdAndActiveTrue(warehouseId)
                 .stream()
                 .map(this::toResponse)
@@ -88,7 +88,7 @@ public class BinRentalServiceImpl implements BinRentalService {
     @Override
     @Transactional(readOnly = true)
     public List<BinRentalResponse> getRentalsBySupplier(String supplierId) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
         return binRentalRepository.findAllBySupplierIdAndWarehouseId(supplierId, warehouseId)
                 .stream()
                 .map(this::toResponse)
@@ -99,7 +99,7 @@ public class BinRentalServiceImpl implements BinRentalService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public BinRentalResponse closeRental(String rentalId) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
         BinRental rental = binRentalRepository.findByIdAndWarehouseId(rentalId, warehouseId)
                 .orElseThrow(() -> new EntityNotFoundException("Bin rental not found: " + rentalId));
 
@@ -113,7 +113,7 @@ public class BinRentalServiceImpl implements BinRentalService {
     @Override
     @Transactional
     public BinRentalResponse.BinRentalPaymentResponse generatePayment(String rentalId, LocalDate from, LocalDate to) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
         BinRental rental = binRentalRepository.findByIdAndWarehouseId(rentalId, warehouseId)
                 .orElseThrow(() -> new EntityNotFoundException("Bin rental not found: " + rentalId));
 

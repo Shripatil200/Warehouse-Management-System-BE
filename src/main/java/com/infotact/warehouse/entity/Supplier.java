@@ -10,14 +10,8 @@ import org.hibernate.annotations.DynamicUpdate;
 /**
  * Persistence entity representing an independent supplier.
  * <p>
- * Suppliers are global entities — they are NOT scoped to any warehouse.
- * They register themselves, manage their own profile and product catalogue,
- * and are visible to all warehouses when raising Purchase Orders.
- * </p>
- * <p>
- * Authentication: Suppliers use their own {@code email}/{@code password} to log in.
- * The {@link com.infotact.warehouse.config.JWT.SupplierDetailsService} loads them
- * separately from warehouse {@link User} accounts so the two tables never mix.
+ * Suppliers are managed by warehouse Admins and Managers.
+ * They are referenced by Purchase Orders, Consignment Agreements, and Bin Rentals.
  * </p>
  */
 @Getter
@@ -46,17 +40,13 @@ public class Supplier extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    /** Business email — used as login username. */
+    /** Business email — contact email for the supplier. */
     @Column(unique = true, nullable = false)
     private String email;
 
     /** 10-digit primary mobile number. */
     @Column(unique = true, nullable = false)
     private String contactNumber;
-
-    /** BCrypt encoded password — never expose in DTOs. */
-    @Column(nullable = false)
-    private String password;
 
     /** Registered business / company name. */
     @Column(name = "company_name", length = 200, nullable = false)

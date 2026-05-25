@@ -1,10 +1,9 @@
 package com.infotact.warehouse.config.JWT;
 
-import com.infotact.warehouse.config.TenantFilter;
+import com.infotact.warehouse.config.WarehouseContextFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -30,23 +29,20 @@ import java.util.List;
 public class SecurityConfig {
 
     private final UsersDetailsService usersDetailsService;
-    private final SupplierDetailsService supplierDetailsService;
     private final JwtFilter jwtFilter;
-    private final TenantFilter tenantFilter;
+    private final WarehouseContextFilter warehouseContextFilter;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
     public SecurityConfig(
             UsersDetailsService usersDetailsService,
-            SupplierDetailsService supplierDetailsService,
             JwtFilter jwtFilter,
-            TenantFilter tenantFilter
+            WarehouseContextFilter warehouseContextFilter
     ) {
         this.usersDetailsService = usersDetailsService;
-        this.supplierDetailsService = supplierDetailsService;
         this.jwtFilter = jwtFilter;
-        this.tenantFilter = tenantFilter;
+        this.warehouseContextFilter = warehouseContextFilter;
     }
 
     @Bean
@@ -76,9 +72,6 @@ public class SecurityConfig {
                                 "/api/v1/auth/otp/send-contact",
                                 "/api/v1/auth/otp/verify-contact",
 
-                                "/api/v1/supplier/register",
-                                "/api/v1/supplier/login",
-
                                 "/api/v1/warehouses/setup",
 
                                 // Swagger
@@ -104,7 +97,7 @@ public class SecurityConfig {
                 )
 
                 .addFilterAfter(
-                        tenantFilter,
+                        warehouseContextFilter,
                         JwtFilter.class
                 );
 
@@ -121,56 +114,23 @@ public class SecurityConfig {
         );
 
         configuration.setAllowedOrigins(origins);
-
         configuration.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
-
         configuration.setAllowedHeaders(List.of("Authorization","Content-Type","Cache-Control","Accept","Origin"));
-
         configuration.setExposedHeaders(List.of("Authorization","Content-Type"));
-
         configuration.setAllowCredentials(true);
-
         configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration(
-                "/**",
-                configuration
-        );
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
 
         return source;
     }
 
-    /**
-     * Authentication manager for warehouse users.
-     */
-    @Bean(name = "userAuthenticationManager")
-    @Primary
+    @Bean
     public AuthenticationManager userAuthenticationManager() {
-
-        DaoAuthenticationProvider provider =
-                new DaoAuthenticationProvider();
-
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(usersDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
-
-        return new ProviderManager(provider);
-    }
-
-    /**
-     * Authentication manager for suppliers.
-     */
-    @Bean(name = "supplierAuthenticationManager")
-    public AuthenticationManager supplierAuthenticationManager() {
-
-        DaoAuthenticationProvider provider =
-                new DaoAuthenticationProvider();
-
-        provider.setUserDetailsService(supplierDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
-
         return new ProviderManager(provider);
     }
 

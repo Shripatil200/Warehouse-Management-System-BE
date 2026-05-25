@@ -16,17 +16,17 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * REST controller for tenant-scoped warehouse management.
+ * REST controller for warehouse-scoped warehouse management.
  *
  * <p>
- * This controller enforces strict multi-tenant isolation.
+ * This controller enforces strict warehouse-scoped isolation.
  * All operations (except setup) are automatically scoped to the
- * authenticated user's warehouse via JWT and TenantContext.
+ * authenticated user's warehouse via JWT and WarehouseContext.
  * </p>
  *
  * <p>
  * <b>Design Principle:</b> No API accepts warehouseId as input.
- * The system determines tenant context internally.
+ * The system determines warehouse context internally.
  * </p>
  */
 @RestController
@@ -96,7 +96,7 @@ public class WarehouseController {
     }
 
     /**
-     * Updates metadata of the current tenant warehouse.
+     * Updates metadata of the current warehouse.
      *
      * <p>
      * Only users with ADMIN role are authorized.
@@ -107,7 +107,7 @@ public class WarehouseController {
      */
     @Operation(
             summary = "Update Warehouse",
-            description = "Updates the name and location of the current tenant warehouse"
+            description = "Updates the name and location of the current warehouse"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Warehouse updated successfully"),
@@ -122,7 +122,7 @@ public class WarehouseController {
     }
 
     /**
-     * Activates the current tenant warehouse.
+     * Activates the current warehouse.
      *
      * <p>
      * Restores operational state.
@@ -130,7 +130,7 @@ public class WarehouseController {
      */
     @Operation(
             summary = "Activate Warehouse",
-            description = "Marks the current tenant warehouse as ACTIVE"
+            description = "Marks the current warehouse as ACTIVE"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Warehouse activated successfully"),
@@ -144,7 +144,7 @@ public class WarehouseController {
     }
 
     /**
-     * Deactivates the current tenant warehouse.
+     * Deactivates the current warehouse.
      *
      * <p>
      * This is a soft-delete operation.

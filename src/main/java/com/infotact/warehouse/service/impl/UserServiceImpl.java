@@ -37,8 +37,8 @@ import java.util.List;
 /**
  * Implementation of {@link UserService} for Identity and Access Management (IAM).
  * <p>
- * This service manages the staff lifecycle within strict multi-tenant boundaries.
- * It enforces a "Silo" architecture where users are isolated by their assigned warehouse facility
+ * This service manages the staff lifecycle within the single warehouse.
+ * It ensures users are always scoped to the warehouse they were created in
  * and administrative actions are governed by a hierarchical Role-Based Access Control (RBAC) model.
  * </p>
  *
@@ -181,16 +181,11 @@ public class UserServiceImpl implements UserService {
             throw new UnauthorizedException("Insufficient Privilege: Only Admins can provision management accounts.");
         }
 
-        // Silo Check
-        if (!currentUser.getWarehouse().getId().equals(request.getWarehouseId())) {
-            throw new UnauthorizedException("Multi-tenancy Error: Warehouse assignment mismatch.");
-        }
-
         if (userRepository.findByEmail(request.getEmail()).isPresent())
             throw new AlreadyExistsException("Email already registered.");
 
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found."));
+        // In a single-warehouse system, the warehouse is always the admin's warehouse.
+        Warehouse warehouse = currentUser.getWarehouse();
 
         User newUser = new User();
         newUser.setName(request.getName());
@@ -334,7 +329,7 @@ public class UserServiceImpl implements UserService {
 
     private void validateWarehouseAccess(User currentUser, User targetUser) {
         if (!currentUser.getWarehouse().getId().equals(targetUser.getWarehouse().getId())) {
-            throw new UnauthorizedException("Access Denied: Silo boundary violation.");
+            throw new UnauthorizedException("Access Denied: You may only manage users within your own warehouse.");
         }
     }
 

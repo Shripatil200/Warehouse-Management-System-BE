@@ -87,7 +87,7 @@ public class StorageBin extends TenantAwareEntity {
     private Aisle aisle;
 
     /**
-     * Multi-Tenant Isolation: Direct link to the parent Warehouse.
+     * Warehouse-Scoped Isolation: Direct link to the parent Warehouse.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "warehouse_id", nullable = false)

@@ -64,8 +64,8 @@ public class ProductCategory extends TenantAwareEntity {
     private ProductCategory parentCategory;
 
     /**
-     * Strict multi-tenancy link.
-     * Every category is owned by a specific warehouse.
+     * Warehouse link.
+     * Every category is owned by the warehouse.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "warehouse_id", nullable = false)

@@ -1,18 +1,13 @@
 package com.infotact.warehouse.config;
 
-public class TenantContext {
+/**
+ * @deprecated Use {@link WarehouseContext} instead.
+ * Kept as a thin delegate so existing call-sites compile without a big-bang rename.
+ */
+@Deprecated
+public class WarehouseContext {
 
-    private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();
-
-    public static void set(String warehouseId) {
-        CURRENT.set(warehouseId);
-    }
-
-    public static String get() {
-        return CURRENT.get();
-    }
-
-    public static void clear() {
-        CURRENT.remove();
-    }
+    public static void set(String warehouseId)  { WarehouseContext.set(warehouseId); }
+    public static String get()                  { return WarehouseContext.get(); }
+    public static void clear()                  { WarehouseContext.clear(); }
 }

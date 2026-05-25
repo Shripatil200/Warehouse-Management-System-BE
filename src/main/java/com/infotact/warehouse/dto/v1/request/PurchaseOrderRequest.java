@@ -8,11 +8,7 @@ import java.util.List;
 
 /**
  * Data Transfer Object for creating an inbound Purchase Order.
- * <p>
- * This request records the intent to receive stock from a specific supplier.
- * <b>Update:</b> Now captures the unitCost for each item to ensure the correct
- * purchase price is locked in for the incoming batch.
- * </p>
+ * Warehouse context is derived from the authenticated user's JWT — no warehouseId needed in the request.
  */
 @Schema(description = "Payload for creating a new inbound purchase order with specific batch pricing")
 public record PurchaseOrderRequest(
@@ -21,19 +17,11 @@ public record PurchaseOrderRequest(
                 example = "sup-8821-b321", requiredMode = Schema.RequiredMode.REQUIRED)
         String supplierId,
 
-        @NotBlank(message = "Target Warehouse ID is required")
-        @Schema(description = "The UUID of the destination warehouse",
-                example = "wh-550e-8400", requiredMode = Schema.RequiredMode.REQUIRED)
-        String warehouseId,
-
         @NotEmpty(message = "Purchase order must contain at least one item")
         @Valid
         @Schema(description = "List of products, quantities, and agreed costs")
         List<PurchaseOrderItemRequest> items
 ) {
-    /**
-     * Inner record representing an individual line item in the Purchase Order.
-     */
     @Schema(description = "Individual product line item including cost capture")
     public record PurchaseOrderItemRequest(
             @NotBlank(message = "Product SKU is required")
@@ -48,7 +36,7 @@ public record PurchaseOrderRequest(
 
             @NotNull(message = "Unit cost is required")
             @Positive(message = "Unit cost must be positive")
-            @Schema(description = "The negotiated purchase price per unit (e.g., 10.00 or 12.00)",
+            @Schema(description = "The negotiated purchase price per unit",
                     example = "72000.00", requiredMode = Schema.RequiredMode.REQUIRED)
             BigDecimal unitCost
     ) {

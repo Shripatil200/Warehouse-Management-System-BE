@@ -1,16 +1,15 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.entity.ConsignmentAgreement;
+import com.infotact.warehouse.entity.ConsignmentSettlement;
+import com.infotact.warehouse.repository.ConsignmentAgreementRepository;
+import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.ConsignmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import com.infotact.warehouse.entity.ConsignmentAgreement;
-import com.infotact.warehouse.entity.ConsignmentSettlement;
-import com.infotact.warehouse.repository.ConsignmentAgreementRepository;
-import com.infotact.warehouse.repository.WarehouseRepository;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -19,17 +18,11 @@ import java.util.List;
  * Scheduled job that automatically generates settlement records when a
  * consignment agreement's cycle period has elapsed.
  *
- * <p>Uses ShedLock to ensure the job runs on only one node in a clustered deployment.
+ * <p>Runs daily at 01:00 (server time). Uses ShedLock for exactly-once
+ * execution in clustered deployments.</p>
  *
- * <p><b>Schedule:</b> Daily at 01:00 AM (server time).
- * Override via {@code consignment.settlement.cron} in application.properties.
- *
- * <p><b>What it does:</b>
- * <ol>
- *   <li>Queries for ACTIVE agreements whose settlement cycle is due.</li>
- *   <li>For each, delegates to {@link ConsignmentService#generateSettlementInternal}.</li>
- *   <li>Also auto-terminates agreements whose {@code effectiveTo} has passed.</li>
- * </ol>
+ * <p>This is a single-warehouse system — the scheduler processes all
+ * agreements in the one warehouse without iterating over tenants.</p>
  */
 @Slf4j
 @Component
@@ -37,7 +30,7 @@ import java.util.List;
 public class ConsignmentSettlementScheduler {
 
     private final ConsignmentAgreementRepository agreementRepo;
-    private final ConsignmentService consignmentService;
+    private final ConsignmentService             consignmentService;
     private final WarehouseRepository            warehouseRepo;
 
     /**
@@ -46,7 +39,7 @@ public class ConsignmentSettlementScheduler {
      */
     @Scheduled(cron = "${consignment.settlement.cron:0 0 1 * * *}")
     @SchedulerLock(
-            name     = "consignmentSettlementJob",
+            name          = "consignmentSettlementJob",
             lockAtLeastFor = "PT5M",
             lockAtMostFor  = "PT30M"
     )
@@ -55,37 +48,47 @@ public class ConsignmentSettlementScheduler {
 
         LocalDate today = LocalDate.now();
 
-        // Fetch all warehouses and process per tenant
-        warehouseRepo.findAll().forEach(warehouse -> {
-            try {
-                processWarehouse(warehouse.getId(), today);
-            } catch (Exception e) {
-                log.error("Settlement failed for warehouse {}: {}", warehouse.getId(), e.getMessage(), e);
-            }
-        });
+        // Single-warehouse system — fetch the warehouse ID once
+        String warehouseId = warehouseRepo.findAll().stream()
+                .filter(w -> w.isActive())
+                .map(w -> w.getId())
+                .findFirst()
+                .orElse(null);
+
+        if (warehouseId == null) {
+            log.info("ConsignmentSettlementScheduler: no active warehouse found, skipping.");
+            return;
+        }
+
+        try {
+            runForWarehouse(warehouseId, today);
+        } catch (Exception e) {
+            log.error("Settlement run failed: {}", e.getMessage(), e);
+        }
 
         log.info("ConsignmentSettlementScheduler: daily settlement run complete");
     }
 
-    private void processWarehouse(String warehouseId, LocalDate today) {
-        // 1. Auto-terminate expired agreements
-        List<ConsignmentAgreement> expired = agreementRepo.findExpiredAgreements(today);
-        for (ConsignmentAgreement agreement : expired) {
-            if (!agreement.getWarehouse().getId().equals(warehouseId)) continue;
-            log.info("Auto-terminating expired agreement {}", agreement.getAgreementCode());
-            try {
-                consignmentService.terminateAgreement(
-                        agreement.getId(),
-                        "Auto-terminated: agreement effective-to date reached on " + today
-                );
-            } catch (Exception e) {
-                log.error("Failed to auto-terminate agreement {}: {}", agreement.getAgreementCode(), e.getMessage());
-            }
-        }
+    private void runForWarehouse(String warehouseId, LocalDate today) {
+        // 1. Auto-terminate agreements whose effectiveTo has passed
+        agreementRepo.findExpiredAgreements(today).stream()
+                .filter(a -> a.getWarehouse().getId().equals(warehouseId))
+                .forEach(agreement -> {
+                    log.info("Auto-terminating expired agreement {}", agreement.getAgreementCode());
+                    try {
+                        consignmentService.terminateAgreement(
+                                agreement.getId(),
+                                "Auto-terminated: effective-to date reached on " + today
+                        );
+                    } catch (Exception e) {
+                        log.error("Failed to auto-terminate agreement {}: {}",
+                                agreement.getAgreementCode(), e.getMessage());
+                    }
+                });
 
-        // 2. Generate settlements for due agreements
+        // 2. Generate settlements for agreements whose cycle is due
         List<ConsignmentAgreement> due = agreementRepo.findAgreementsDueForSettlement(warehouseId, today);
-        log.info("Found {} agreements due for settlement in warehouse {}", due.size(), warehouseId);
+        log.info("Found {} agreements due for settlement", due.size());
 
         for (ConsignmentAgreement agreement : due) {
             try {
@@ -97,7 +100,7 @@ public class ConsignmentSettlementScheduler {
                 }
             } catch (Exception e) {
                 log.error("Failed to generate settlement for agreement {}: {}",
-                        agreement.getAgreementCode(), e.getMessage(), e);
+                        agreement.getAgreementCode(), e.getMessage());
             }
         }
     }

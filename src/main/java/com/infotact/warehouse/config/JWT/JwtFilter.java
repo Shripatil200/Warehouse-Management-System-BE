@@ -18,14 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * JWT authentication filter.
- * <p>
- * Resolves the principal by checking the {@code users} table first via
- * {@link UsersDetailsService}. If the email is not found there, it falls back
- * to {@link SupplierDetailsService} which checks the {@code suppliers} table.
- * This keeps the two authentication domains (warehouse staff vs suppliers)
- * completely separate while sharing a single JWT format.
- * </p>
+ * JWT authentication filter for warehouse staff.
  */
 @Slf4j
 @Component
@@ -34,7 +27,6 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil               jwtUtil;
     private final UsersDetailsService   usersDetailsService;
-    private final SupplierDetailsService supplierDetailsService;
     private final TokenBlacklistService  tokenBlacklistService;
 
     @Override
@@ -75,50 +67,19 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            String userType = null;
             try {
-                userType = jwtUtil.extractClaims(token, claims -> claims.get("type", String.class));
-            } catch (Exception e) {
-                log.debug("No type claim found in JWT: {}", e.getMessage());
-            }
-
-            UserDetails userDetails = resolveUserDetails(username, userType);
-
-            if (userDetails != null && jwtUtil.validateToken(token, userDetails.getUsername())) {
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                UserDetails userDetails = usersDetailsService.loadUserByUsername(username);
+                if (jwtUtil.validateToken(token, userDetails.getUsername())) {
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            } catch (UsernameNotFoundException ex) {
+                log.warn("No user found for email: {}", username);
             }
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    /**
-     * Tries loading from corresponding UserDetailsService based on token type.
-     * Defaults to warehouse users first, then falls back to suppliers.
-     */
-    private UserDetails resolveUserDetails(String email, String userType) {
-        if ("SUPPLIER".equals(userType)) {
-            try {
-                return supplierDetailsService.loadUserByUsername(email);
-            } catch (UsernameNotFoundException ex) {
-                log.warn("Supplier user not found for email: {}", email);
-                return null;
-            }
-        }
-
-        try {
-            return usersDetailsService.loadUserByUsername(email);
-        } catch (UsernameNotFoundException ex) {
-            // Not a warehouse user — try supplier table
-        }
-        try {
-            return supplierDetailsService.loadUserByUsername(email);
-        } catch (UsernameNotFoundException ex) {
-            log.warn("No user or supplier found for email: {}", email);
-            return null;
-        }
     }
 }

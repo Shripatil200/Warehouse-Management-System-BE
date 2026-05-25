@@ -17,15 +17,15 @@ import org.springframework.data.domain.Pageable;
  * </p>
  *
  * <p>
- * <b>Multi-Tenant Design:</b>
+ * <b>Warehouse-Scoped Design:</b>
  * All operations are strictly scoped to the authenticated tenant (warehouse)
- * via TenantContext. No method accepts a warehouseId externally.
+ * via WarehouseContext. No method accepts a warehouseId externally.
  * </p>
  */
 public interface LayoutService {
 
     /**
-     * Creates a functional Zone within the current tenant warehouse.
+     * Creates a functional Zone within the current warehouse.
      *
      * <p>
      * <b>Validation:</b>
@@ -41,7 +41,7 @@ public interface LayoutService {
      *
      * <p>
      * <b>Security:</b>
-     * Validates that the provided zone belongs to the current tenant warehouse.
+     * Validates that the provided zone belongs to the current warehouse.
      * </p>
      *
      * @param request Aisle configuration.

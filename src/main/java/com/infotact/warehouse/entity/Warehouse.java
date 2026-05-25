@@ -15,7 +15,7 @@ import java.util.Set;
  * <p>
  * This is the top-level organizational unit of the system. It serves as the
  * parent container for physical infrastructure (Zones) and authorized staff (Users).
- * In this multi-tenant design, the Warehouse ID is the primary key used to
+ * In this warehouse-scoped design, the Warehouse ID is the primary key used to
  * partition data across the entire platform.
  * </p>
  */

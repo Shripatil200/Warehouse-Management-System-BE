@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Repository for StorageBin with strict tenant isolation and
+ * Repository for StorageBin with warehouse-level data isolation and
  * warehouse-grade putaway intelligence.
  */
 @Repository

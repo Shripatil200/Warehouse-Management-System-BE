@@ -13,7 +13,7 @@ import java.util.List;
  * Spring Security principal for warehouse {@link User} accounts.
  * <p>
  * Carries the {@code id} and {@code warehouseId} claims so the service/controller layer can enforce
- * multi-tenant data isolation and task assignments without extra DB queries.
+ * warehouse-scoped data isolation and task assignments without extra DB queries.
  * </p>
  */
 @Getter

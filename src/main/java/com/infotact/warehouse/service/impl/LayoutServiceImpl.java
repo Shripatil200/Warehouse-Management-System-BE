@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.WarehouseLayoutRequest.*;
 import com.infotact.warehouse.dto.v1.response.WarehouseLayoutResponse;
 import com.infotact.warehouse.entity.*;
@@ -28,10 +28,10 @@ import java.util.stream.Collectors;
  * Production-grade tenant-safe implementation of {@link LayoutService}.
  *
  * <p>
- * Enforces strict multi-tenant isolation:
+ * Enforces strict warehouse-scoped isolation:
  * <ul>
  *     <li>No external warehouseId usage</li>
- *     <li>All operations scoped via {@link TenantContext}</li>
+ *     <li>All operations scoped via {@link WarehouseContext}</li>
  *     <li>Cross-entity ownership validation enforced</li>
  * </ul>
  * </p>
@@ -55,7 +55,7 @@ public class LayoutServiceImpl implements LayoutService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
     )
     public WarehouseLayoutResponse getWarehouseLayout() {
         String warehouseId = getCurrentWarehouseId();
@@ -115,7 +115,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
     )
     public void addZoneToWarehouse(ZoneRequest request) {
         Warehouse warehouse = getCurrentWarehouse();
@@ -142,7 +142,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
     )
     public void addAisleToZone(AisleRequest request) {
         // Retrieve and validate the zone belongs to this tenant
@@ -173,7 +173,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.TenantContext).get()"
+            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
     )
     public void bulkCreateBins(BulkBinRequest request) {
         Aisle aisle = getValidatedAisle(request.aisleId());
@@ -299,7 +299,7 @@ public class LayoutServiceImpl implements LayoutService {
     }
 
     private String getCurrentWarehouseId() {
-        String id = TenantContext.get();
+        String id = WarehouseContext.get();
         if (id == null) throw new IllegalStateException("Tenant missing");
         return id;
     }

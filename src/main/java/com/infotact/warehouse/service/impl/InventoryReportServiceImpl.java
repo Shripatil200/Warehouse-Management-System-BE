@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.response.*;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import com.infotact.warehouse.entity.enums.TransactionType;
@@ -35,7 +35,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
     @Override
     public Page<InventorySummaryResponse> getGlobalSummary(Pageable pageable) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         return inventoryRepository.findGlobalInventorySummaryByWarehouse(
                 warehouseId,
@@ -53,7 +53,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             String binCode,
             Pageable pageable) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         return inventoryRepository.findDetailedInventory(
                         sku,
@@ -89,7 +89,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             TransactionType type,
             Pageable pageable) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         return transactionRepository.findFilteredTransactions(
                         sku,
@@ -121,7 +121,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             Integer threshold,
             Pageable pageable) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         return inventoryRepository.findLowStockSummaryByWarehouse(
                 threshold,
@@ -140,7 +140,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             AuditStatus status,
             Pageable pageable) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         return barcodeAuditRepository.findFilteredAudits(
                         userId,
@@ -171,7 +171,7 @@ public class InventoryReportServiceImpl implements InventoryReportService {
             LocalDateTime start,
             LocalDateTime end) {
 
-        String warehouseId = TenantContext.get();
+        String warehouseId = WarehouseContext.get();
 
         String format = resolveFormat(granularity);
 

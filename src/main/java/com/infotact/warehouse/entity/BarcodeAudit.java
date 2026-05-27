@@ -1,12 +1,13 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.BaseEntity;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.AuditAction;
 import com.infotact.warehouse.entity.enums.AuditStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
+
 import java.time.LocalDateTime;
 
 /**
@@ -17,20 +18,15 @@ import java.time.LocalDateTime;
 @Table(name = "barcode_audit_logs")
 @Getter
 @Setter
-@Builder
+@SuperBuilder
 @NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode(callSuper = true) // Important for entities extending a base class
-public class BarcodeAudit extends TenantAwareEntity {
+@EqualsAndHashCode(callSuper = true)
+public class BarcodeAudit extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Schema(description = "Internal unique identifier (UUID)")
-    private String id; // Fixed: Added the missing primary key identifier
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
+    private String id;
 
     @Column(nullable = false)
     private String userId; // The Operator who performed the scan

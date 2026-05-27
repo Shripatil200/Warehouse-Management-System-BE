@@ -29,7 +29,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private final PurchaseOrderRepository    poRepository;
     private final ProductRepository          productRepository;
-    private final SupplierProductRepository  supplierProductRepository;
     private final SupplierRepository         supplierRepository;
     private final UserService                userService;
 
@@ -58,19 +57,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Product SKU '" + itemRequest.sku() + "' not found in your facility."));
 
-            // Optionally resolve SupplierProduct for the pricing snapshot
-            SupplierProduct supplierProduct = null;
-            if (product.getProductMaster() != null) {
-                supplierProduct = supplierProductRepository
-                        .findByProductMasterIdAndSupplierId(
-                                product.getProductMaster().getId(), supplier.getId())
-                        .orElse(null);
-            }
-
             PurchaseOrderItem item = new PurchaseOrderItem();
             item.setPurchaseOrder(po);
             item.setProduct(product);
-            item.setSupplierProduct(supplierProduct);
             item.setQuantity(itemRequest.quantity());
             item.setUnitCost(itemRequest.unitCost());
             return item;

@@ -9,7 +9,7 @@ import org.springframework.data.domain.Pageable;
  * Service interface for managing the product category lifecycle.
  * <p>
  * This service manages the organizational hierarchy used for cataloging products.
- * It ensures data integrity within the category tree and enforces multi-tenant
+ * It ensures data integrity within the category tree and enforces warehouse-scoped
  * isolation at the warehouse level.
  * </p>
  */
@@ -40,7 +40,7 @@ public interface CategoryService {
     /**
      * Retrieves a paginated list of categories filtered by facility and status.
      * <p>
-     * <b>Multi-tenancy:</b> This list is strictly filtered by the logged-in user's warehouse ID.
+     * <b>Warehouse scope:</b> This list is strictly filtered by the logged-in user's warehouse ID.
      * </p>
      * @param pageable Pagination and sorting parameters.
      * @param includeInactive If true, includes "Soft-Deleted" categories.

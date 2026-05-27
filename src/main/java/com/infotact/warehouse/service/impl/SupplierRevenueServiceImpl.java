@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.response.SupplierRevenueResponse;
 import com.infotact.warehouse.entity.Supplier;
 import com.infotact.warehouse.exception.EntityNotFoundException;
@@ -30,11 +30,12 @@ public class SupplierRevenueServiceImpl implements SupplierRevenueService {
     private final SupplierRevenueRepository supplierRevenueRepository;
     private final BinRentalPaymentRepository binRentalPaymentRepository;
     private final SupplierRepository supplierRepository;
+    private final WarehouseContext warehouseContext;
 
     @Override
     @Transactional(readOnly = true)
     public List<SupplierRevenueResponse> getSupplierRevenue(LocalDate from, LocalDate to) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         LocalDateTime fromDt = from.atStartOfDay();
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
@@ -87,7 +88,7 @@ public class SupplierRevenueServiceImpl implements SupplierRevenueService {
     @Override
     @Transactional(readOnly = true)
     public SupplierRevenueResponse getSupplierRevenueById(String supplierId, LocalDate from, LocalDate to) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
 
         Supplier supplier = supplierRepository.findById(supplierId)
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found: " + supplierId));

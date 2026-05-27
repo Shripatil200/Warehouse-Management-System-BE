@@ -25,7 +25,7 @@ import java.util.List;
 @AllArgsConstructor
 @Schema(
         name = "ProductCategoryResponse",
-        description = "Hierarchical category model featuring multi-tenant isolation and UI metadata"
+        description = "Hierarchical category model featuring warehouse-scoped isolation and UI metadata"
 )
 public class ProductCategoryResponse implements Serializable {
 

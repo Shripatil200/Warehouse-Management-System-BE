@@ -5,35 +5,26 @@ import com.infotact.warehouse.dto.v1.request.WarehouseRequest;
 import com.infotact.warehouse.dto.v1.response.WarehouseResponse;
 import jakarta.validation.Valid;
 
-import java.util.List;
-
 /**
- * Service interface for Warehouse lifecycle and tenant-scoped operations.
+ * Service interface for the single-warehouse lifecycle.
  *
- * <p>
- * This interface enforces strict single-tenant isolation:
- * Each authenticated user operates only within their assigned warehouse.
- * </p>
+ * <p>This system supports exactly one warehouse. All authenticated users operate
+ * within that warehouse; the warehouse ID is resolved from the JWT and stored in
+ * {@link com.infotact.warehouse.config.WarehouseContext} for the duration of each
+ * request. No operation accepts a warehouseId as an external parameter.</p>
  */
 public interface WarehouseService {
 
     /**
      * Retrieves the warehouse associated with the currently authenticated user.
      *
-     * <p>
-     * This replaces "get by ID" to enforce tenant isolation.
-     * </p>
-     *
-     * @return The current tenant warehouse details.
+     * @return The warehouse details.
      */
     WarehouseResponse getCurrentWarehouse();
 
     /**
-     * Updates the current tenant warehouse metadata.
-     *
-     * <p>
-     * Only ADMIN users are allowed to perform this operation.
-     * </p>
+     * Updates the warehouse name and location.
+     * Only ADMIN users are permitted to call this.
      *
      * @param request Updated warehouse attributes.
      * @return Updated warehouse response.
@@ -41,34 +32,35 @@ public interface WarehouseService {
     WarehouseResponse updateWarehouse(@Valid WarehouseRequest request);
 
     /**
-     * Activates the current tenant warehouse.
-     *
-     * <p>
-     * Restores operational capability for the facility.
-     * </p>
+     * Activates the warehouse, restoring operational capability.
      */
     void activateWarehouse();
 
     /**
-     * Deactivates the current tenant warehouse.
-     *
-     * <p>
-     * Suspends all operations while preserving historical data.
-     * </p>
+     * Deactivates the warehouse, suspending all operations while preserving
+     * historical data.
      */
     void deactivateWarehouse();
 
     /**
-     * Creates a new warehouse along with its primary admin user.
+     * Public bootstrap endpoint — creates the warehouse and its primary admin
+     * user during first-time system setup.
      *
-     * <p>
-     * This is a public onboarding operation and does not require authentication.
-     * </p>
+     * <p>Guarded by a single-warehouse check: if a warehouse already exists
+     * an {@link com.infotact.warehouse.exception.AlreadyExistsException} is thrown.</p>
      *
-     * @param request Warehouse and admin details.
+     * @param request Warehouse and admin details, including OTP verification tokens.
      * @return Created warehouse details.
      */
     WarehouseResponse createWarehouse(@Valid CreateWarehouseRequest request);
 
-    List<String> getAllWarehouseIds();
+    /**
+     * Returns the ID of the single active warehouse.
+     * Used internally by scheduled jobs that need to set the warehouse context
+     * without an HTTP request / JWT present.
+     *
+     * @return Warehouse UUID.
+     * @throws IllegalStateException if no warehouse has been set up yet.
+     */
+    String getSingleWarehouseId();
 }

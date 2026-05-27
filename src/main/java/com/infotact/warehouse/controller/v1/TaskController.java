@@ -207,7 +207,7 @@ public class TaskController {
             @AuthenticationPrincipal UserPrincipal principal) {
 
         // Resolve the Warehouse entity — the engine needs the full entity for
-        // TenantAwareEntity. Inject WarehouseRepository for a production impl;
+        // Inject WarehouseRepository for a production impl;
         // shown inline here for completeness.
         com.infotact.warehouse.entity.Warehouse warehouse = new com.infotact.warehouse.entity.Warehouse();
         warehouse.setId(principal.getWarehouseId());   // minimal proxy; replace with repo lookup

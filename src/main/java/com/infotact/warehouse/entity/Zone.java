@@ -2,7 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.ZoneType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -28,8 +28,8 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "zones")
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class Zone extends TenantAwareEntity {
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
+public class Zone extends WarehouseScopedEntity {
 
     @Id
     @EqualsAndHashCode.Include
@@ -59,14 +59,6 @@ public class Zone extends TenantAwareEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "zone_type", nullable = false, length = 20)
     private ZoneType zoneType = ZoneType.PICKING;
-
-    /**
-     * The parent warehouse facility containing this zone.
-     */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    @JsonIgnore
-    private Warehouse warehouse;
 
     /**
      * The set of physical aisles (rows) located within this zone.

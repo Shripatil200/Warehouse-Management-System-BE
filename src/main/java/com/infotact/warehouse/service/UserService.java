@@ -15,8 +15,8 @@ import java.util.List;
 /**
  * Service interface for Identity Management and Staff Orchestration.
  * <p>
- * This service manages the staff lifecycle within strict multi-tenant boundaries.
- * It enforces a "Silo" architecture where users are isolated by their assigned warehouse facility.
+ * This service manages the staff lifecycle within strict warehouse-scoped boundaries.
+ * It ensures all user operations are scoped to the warehouse the user belongs to.
  * </p>
  */
 public interface UserService {
@@ -28,7 +28,7 @@ public interface UserService {
      * <ul>
      * <li><b>Fuzzy Search:</b> Matches 'query' against name or email.</li>
      * <li><b>Dynamic Filtering:</b> Combine role, status, and search query in one call.</li>
-     * <li><b>Silo Enforcement:</b> Automatically scopes results to the requester's warehouse.</li>
+     * <li><b>Warehouse Scoping:</b> Automatically scopes results to the requester's warehouse.</li>
      * <li><b>Performance:</b> Returns a paginated result to ensure high performance.</li>
      * </ul>
      * </p>
@@ -46,7 +46,7 @@ public interface UserService {
      * <b>Onboarding Logic:</b>
      * <ul>
      * <li><b>Hierarchy Check:</b> Managers can only create {@link Role#EMPLOYEE} accounts.</li>
-     * <li><b>Security Boundary:</b> Binds the user to the requester's warehouse facility.</li>
+     * <li><b>Warehouse Binding:</b> Automatically assigns the user to the requester's warehouse.</li>
      * <li><b>Credentialing:</b> Generates a deterministic temporary password.</li>
      * </ul>
      * </p>

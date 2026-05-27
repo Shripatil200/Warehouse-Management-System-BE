@@ -2,7 +2,6 @@ package com.infotact.warehouse.service.impl;
 
 import com.infotact.warehouse.dto.v1.request.ProductRequest;
 import com.infotact.warehouse.dto.v1.response.ProductResponse;
-import com.infotact.warehouse.dto.v1.response.ProductSupplierResponse;
 import com.infotact.warehouse.entity.Product;
 import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.entity.User;
@@ -11,7 +10,7 @@ import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.ProductCategoryRepository;
 import com.infotact.warehouse.repository.ProductRepository;
-import com.infotact.warehouse.repository.SupplierProductRepository;
+
 import com.infotact.warehouse.service.ProductService;
 import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +34,6 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository         productRepository;
     private final ProductCategoryRepository categoryRepository;
-    private final SupplierProductRepository supplierProductRepository;
     private final UserService               userService;
 
     @Override
@@ -207,22 +205,7 @@ public class ProductServiceImpl implements ProductService {
                 .updatedAt(entity.getUpdatedAt())
                 .build();
 
-        // Supplier sourcing options — resolved via ProductMaster → SupplierProduct chain
-        List<ProductSupplierResponse> sourcingOptions;
-        if (entity.getProductMaster() != null) {
-            sourcingOptions = supplierProductRepository
-                    .findByProductMasterIdAndActiveTrue(entity.getProductMaster().getId())
-                    .stream()
-                    .map(sp -> ProductSupplierResponse.builder()
-                            .supplierName(sp.getSupplier().getCompanyName())
-                            .supplyPrice(sp.getSupplyPrice())
-                            .leadTimeDays(sp.getLeadTimeDays())
-                            .build())
-                    .collect(Collectors.toList());
-        } else {
-            sourcingOptions = List.of();
-        }
-        response.setSourcingOptions(sourcingOptions);
+        response.setSourcingOptions(List.of());
 
         return response;
     }

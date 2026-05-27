@@ -34,8 +34,6 @@ import java.util.UUID;
 
 /**
  * Authentication service for warehouse staff (users table).
- * Supplier authentication is handled separately by SupplierServiceImpl
- * using the supplierAuthenticationManager bean.
  */
 @Slf4j
 @Service
@@ -101,7 +99,6 @@ public class AuthServiceImpl implements AuthService {
                         .email(user.getEmail())
                         .role(user.getRole().name())
                         .warehouseId(principal.getWarehouseId())
-                        .supplierId(null)
                         .build();
             }
         } catch (AuthenticationException ex) {

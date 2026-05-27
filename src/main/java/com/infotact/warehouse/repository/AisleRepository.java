@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 /**
- * Tenant-aware Aisle repository.
+ * Aisle repository.
  */
 @Repository
 public interface AisleRepository extends JpaRepository<Aisle, String> {

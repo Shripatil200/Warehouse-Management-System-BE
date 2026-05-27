@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -9,11 +9,11 @@ import org.hibernate.annotations.DynamicUpdate;
 import java.math.BigDecimal;
 
 /**
- * Persistence entity representing a specific product line item in a Purchase SellingOrder.
+ * Persistence entity representing a single product line in a Purchase Order.
  * <p>
- * This entity defines the quantity of a product expected from a supplier.
- * During the receiving process, these records are used as a checklist to
- * verify physical shipment accuracy before updating inventory levels.
+ * Extends {@link BaseEntity} directly — warehouse scoping is inherited through
+ * the parent {@link PurchaseOrder} relationship, so a redundant warehouse_id FK
+ * is not needed here.
  * </p>
  */
 @Getter
@@ -24,63 +24,28 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Entity
 @Table(name = "purchase_order_items")
-public class PurchaseOrderItem extends TenantAwareEntity {
+public class PurchaseOrderItem extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    /**
-     * The parent Purchase SellingOrder this line item is associated with.
-     * <p>
-     * Logic: Standard many-to-one relationship. Inbound stock logic
-     * aggregates these items to determine total pending inventory.
-     * </p>
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "purchase_order_id", nullable = false)
     private PurchaseOrder purchaseOrder;
 
-    /**
-     * The product being procured.
-     * <p>
-     * Linkage: Connects the inbound shipment to the master catalog,
-     * ensuring the correct SKU is updated upon receipt.
-     * </p>
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    /**
-     * The total count of units requested from the supplier.
-     * <p>
-     * Usage: This value is compared against the 'received quantity'
-     * during the inbound verification process to identify short-shipments.
-     * </p>
-     */
+    /** Total units requested from the supplier. */
     @Column(nullable = false)
     private Integer quantity;
 
     /**
-     * The purchase price per unit for this specific order.
-     * <p>
-     * Logic: Captures the "Agreed" cost. This value is transferred to the
-     * purchasePrice field in InventoryItem upon successful receipt.
-     * </p>
+     * Agreed purchase price per unit.
+     * Transferred to InventoryItem.purchasePrice on receipt.
      */
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal unitCost;
-
-    /**
-     * The specific supplier offering this PO line item was raised against.
-     * <p>
-     * Captures the agreed price and lead time at the time the PO was created,
-     * via {@link SupplierProduct#getSupplyPrice()}. Nullable for legacy PO items
-     * created before the SupplierProduct system was introduced.
-     * </p>
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "supplier_product_id")
-    private SupplierProduct supplierProduct;
 }

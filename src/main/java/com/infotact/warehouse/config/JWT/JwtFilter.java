@@ -18,14 +18,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * JWT authentication filter.
- * <p>
- * Resolves the principal by checking the {@code users} table first via
- * {@link UsersDetailsService}. If the email is not found there, it falls back
- * to {@link SupplierDetailsService} which checks the {@code suppliers} table.
- * This keeps the two authentication domains (warehouse staff vs suppliers)
- * completely separate while sharing a single JWT format.
- * </p>
+ * JWT authentication filter for warehouse staff.
+ *
+ * <p>Validates the token type claim ("USER") so that any future token types
+ * (e.g. service-to-service, refresh) are rejected at the boundary.</p>
  */
 @Slf4j
 @Component
@@ -34,8 +30,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil               jwtUtil;
     private final UsersDetailsService   usersDetailsService;
-    private final SupplierDetailsService supplierDetailsService;
-    private final TokenBlacklistService  tokenBlacklistService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -61,6 +56,14 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (token != null) {
             try {
+                // Validate token type — only USER tokens are accepted here
+                String type = jwtUtil.extractClaims(token,
+                        claims -> claims.get("type", String.class));
+                if (!"USER".equals(type)) {
+                    log.warn("Rejected non-USER token type '{}' for path {}", type, path);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 username = jwtUtil.extractUsername(token);
             } catch (Exception e) {
                 log.error("JWT parse error: {}", e.getMessage());
@@ -70,55 +73,26 @@ public class JwtFilter extends OncePerRequestFilter {
         // Reject explicitly revoked tokens (logout / forced re-auth)
         if (token != null && tokenBlacklistService.isBlacklisted(token)) {
             log.warn("Rejected blacklisted token for request to {}", path);
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been revoked. Please log in again.");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+                    "Token has been revoked. Please log in again.");
             return;
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            String userType = null;
             try {
-                userType = jwtUtil.extractClaims(token, claims -> claims.get("type", String.class));
-            } catch (Exception e) {
-                log.debug("No type claim found in JWT: {}", e.getMessage());
-            }
-
-            UserDetails userDetails = resolveUserDetails(username, userType);
-
-            if (userDetails != null && jwtUtil.validateToken(token, userDetails.getUsername())) {
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                UserDetails userDetails = usersDetailsService.loadUserByUsername(username);
+                if (jwtUtil.validateToken(token, userDetails.getUsername())) {
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            } catch (UsernameNotFoundException ex) {
+                log.warn("No user found for email: {}", username);
             }
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    /**
-     * Tries loading from corresponding UserDetailsService based on token type.
-     * Defaults to warehouse users first, then falls back to suppliers.
-     */
-    private UserDetails resolveUserDetails(String email, String userType) {
-        if ("SUPPLIER".equals(userType)) {
-            try {
-                return supplierDetailsService.loadUserByUsername(email);
-            } catch (UsernameNotFoundException ex) {
-                log.warn("Supplier user not found for email: {}", email);
-                return null;
-            }
-        }
-
-        try {
-            return usersDetailsService.loadUserByUsername(email);
-        } catch (UsernameNotFoundException ex) {
-            // Not a warehouse user — try supplier table
-        }
-        try {
-            return supplierDetailsService.loadUserByUsername(email);
-        } catch (UsernameNotFoundException ex) {
-            log.warn("No user or supplier found for email: {}", email);
-            return null;
-        }
     }
 }

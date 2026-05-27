@@ -1,14 +1,12 @@
 package com.infotact.warehouse.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.infotact.warehouse.entity.base.BaseEntity;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -27,8 +25,8 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "aisles")
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class Aisle extends TenantAwareEntity {
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
+public class Aisle extends WarehouseScopedEntity {
 
     @Id
     @EqualsAndHashCode.Include
@@ -46,10 +44,6 @@ public class Aisle extends TenantAwareEntity {
 
     /**
      * Maintenance Status: Indicates if this specific row is operational.
-     * <p>
-     * Logic: Used to temporarily block access to a specific row due to shelf
-     * repairs or physical auditing.
-     * </p>
      */
     private boolean active = true;
 
@@ -60,10 +54,6 @@ public class Aisle extends TenantAwareEntity {
     @JoinColumn(name = "zone_id")
     @JsonIgnore
     private Zone zone;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JsonIgnore
-    private Warehouse warehouse;
 
     /**
      * The collection of physical storage slots (bins) assigned to this aisle.
@@ -82,5 +72,4 @@ public class Aisle extends TenantAwareEntity {
      */
     @Transient
     private Integer currentOccupancy;
-
 }

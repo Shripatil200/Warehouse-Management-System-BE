@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.TransactionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -29,7 +29,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Table(name = "inventory_transactions")
 @EntityListeners(AuditingEntityListener.class)
-public class InventoryTransaction extends TenantAwareEntity {
+public class InventoryTransaction extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -109,7 +109,4 @@ public class InventoryTransaction extends TenantAwareEntity {
     @Column(precision = 19, scale = 4)
     private BigDecimal unitPrice;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 }

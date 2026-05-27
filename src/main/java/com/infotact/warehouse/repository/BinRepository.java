@@ -21,14 +21,14 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Repository for StorageBin with strict tenant isolation and
+ * Repository for StorageBin with warehouse-level data isolation and
  * warehouse-grade putaway intelligence.
  */
 @Repository
 public interface BinRepository extends JpaRepository<StorageBin, String> {
 
     // ============================================================
-    // PAGINATION (TENANT SAFE)
+    // PAGINATION
     // ============================================================
 
     @Query(value = """
@@ -49,7 +49,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // UNIQUENESS (TENANT SAFE)
+    // UNIQUENESS
     // ============================================================
 
     boolean existsByBinCodeAndWarehouseId(String binCode, String warehouseId);
@@ -126,7 +126,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // LOOKUPS (TENANT SAFE)
+    // LOOKUPS
     // ============================================================
 
     Optional<StorageBin> findByBinCodeAndActiveTrueAndWarehouseId(

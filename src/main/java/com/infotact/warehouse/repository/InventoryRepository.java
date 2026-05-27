@@ -20,7 +20,7 @@ import java.util.Optional;
 public interface InventoryRepository extends JpaRepository<InventoryItem, String> {
 
     // ============================================================
-    // CORE LOOKUPS (TENANT SAFE)
+    // CORE LOOKUPS
     // ============================================================
 
     Optional<InventoryItem> findByProductIdAndStorageBinIdAndBatchNumberAndPurchasePriceAndExpiryDateAndStorageBin_Warehouse_Id(
@@ -132,7 +132,7 @@ public interface InventoryRepository extends JpaRepository<InventoryItem, String
     );
 
     // ============================================================
-    // SUMMARY (TENANT SAFE)
+    // SUMMARY
     // ============================================================
 
     @Query("""

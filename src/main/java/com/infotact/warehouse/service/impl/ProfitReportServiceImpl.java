@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.response.ProductProfitResponse;
 import com.infotact.warehouse.dto.v1.response.ProfitPeriodResponse;
 import com.infotact.warehouse.repository.ProfitReportRepository;
@@ -16,6 +16,7 @@ import java.util.List;
 public class ProfitReportServiceImpl implements ProfitReportService {
 
     private final ProfitReportRepository profitReportRepository;
+    private final WarehouseContext warehouseContext;
 
     @Override
     @Transactional(readOnly = true)
@@ -60,9 +61,9 @@ public class ProfitReportServiceImpl implements ProfitReportService {
     }
 
     private String warehouseId() {
-        String id = TenantContext.get();
+        String id = warehouseContext.getWarehouseId();
         if (id == null) {
-            throw new IllegalStateException("Tenant context is missing — cannot resolve warehouse.");
+            throw new IllegalStateException("Warehouse context missing — cannot resolve warehouse.");
         }
         return id;
     }

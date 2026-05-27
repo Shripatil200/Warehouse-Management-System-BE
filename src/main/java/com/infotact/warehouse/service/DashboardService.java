@@ -26,7 +26,7 @@ public interface DashboardService {
      * 4. <b>Procurement Status:</b> Tracks incoming shipments and identifies overdue purchase orders.
      * </p>
      * <p>
-     * <b>Security:</b> This method is strictly multi-tenant; it automatically
+     * <b>Security:</b> This method is strictly warehouse-scoped; it automatically
      * resolves the current user's Warehouse ID from the security context to
      * ensure data isolation.
      * </p>

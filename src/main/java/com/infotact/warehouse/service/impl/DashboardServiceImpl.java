@@ -61,7 +61,6 @@ public class DashboardServiceImpl implements DashboardService {
                 .replenishmentCount(productRepository.countProductsNeedingReplenishment(warehouseId, BinType.PICK_FACE))
                 .outboundOrders(orderRepository.countByWarehouseIdAndStatus(warehouseId, OrderStatus.PENDING))
                 .pendingPurchases(purchaseOrderRepository.countByWarehouseIdAndStatus(warehouseId, PurchaseOrderStatus.PENDING))
-                .totalWarehouses(userRepository.countAssignedWarehouseForUser(currentUser.getEmail()))
                 .userStatusCounts(fetchUserStatusCounts(warehouseId))
                 .utilizationPercentage(calculateUtilization(warehouseId))
                 .totalInventoryValue(calculateStockValue(warehouseId))
@@ -223,7 +222,7 @@ public class DashboardServiceImpl implements DashboardService {
         };
     }
 
-    private String calculateTimeAgo(java.time.LocalDateTime past) {
+    private String calculateTimeAgo(LocalDateTime past) {
         if (past == null) return "Just now";
         Duration duration = Duration.between(past, LocalDateTime.now());
         if (duration.toMinutes() < 60) {

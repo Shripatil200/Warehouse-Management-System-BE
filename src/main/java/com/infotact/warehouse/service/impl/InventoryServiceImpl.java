@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.InventoryAdjustmentRequest;
 import com.infotact.warehouse.dto.v1.request.ReceivingRequest;
 import com.infotact.warehouse.entity.*;
@@ -30,6 +30,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final InventoryTransactionRepository transactionRepository;
     private final BarcodeAuditService auditService;
     private final UserService userService;
+    private final WarehouseContext warehouseContext;
 
     // ============================================================
     // RECEIVE (SMART PUTAWAY - MULTI BIN)
@@ -438,8 +439,8 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     private String getWarehouseId() {
-        String id = TenantContext.get();
-        if (id == null) throw new IllegalStateException("Tenant missing");
+        String id = warehouseContext.getWarehouseId();
+        if (id == null) throw new IllegalStateException("Warehouse context missing");
         return id;
     }
 

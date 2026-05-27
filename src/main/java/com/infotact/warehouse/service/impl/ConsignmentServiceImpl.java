@@ -1,6 +1,6 @@
 package com.infotact.warehouse.service.impl;
 
-import com.infotact.warehouse.config.TenantContext;
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.CreateConsignmentAgreementRequest;
 import com.infotact.warehouse.dto.v1.request.TriggerSettlementRequest;
 import com.infotact.warehouse.dto.v1.request.UpdateSettlementStatusRequest;
@@ -45,10 +45,11 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     private final SupplierRepository              supplierRepository;
     private final ProductRepository               productRepo;
     private final WarehouseRepository             warehouseRepo;
+    private final WarehouseContext warehouseContext;
 
     @Transactional
     public ConsignmentAgreementResponse createAgreement(CreateConsignmentAgreementRequest req) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
 
         Supplier supplier = supplierRepository.findById(req.getSupplierId())
                 .orElseThrow(() -> new EntityNotFoundException(
@@ -90,7 +91,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse approveAgreement(String agreementId) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
         if (agreement.getStatus() != ConsignmentStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Agreement " + agreementId + " is not in PENDING_APPROVAL state");
@@ -110,7 +111,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse rejectAgreement(String agreementId) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
         if (agreement.getStatus() != ConsignmentStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Only PENDING_APPROVAL agreements can be rejected");
@@ -122,7 +123,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentAgreementResponse terminateAgreement(String agreementId, String managerNotes) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentAgreement agreement = findAgreement(agreementId, warehouseId);
         if (agreement.getStatus() != ConsignmentStatus.ACTIVE) {
             throw new IllegalStateException("Only ACTIVE agreements can be terminated");
@@ -140,7 +141,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
     @Transactional(readOnly = true)
     public Page<ConsignmentAgreementResponse> listAgreements(ConsignmentStatus status, Pageable pageable) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         Page<ConsignmentAgreement> agreements = status != null
                 ? agreementRepo.findByStatusAndWarehouseId(status, warehouseId, pageable)
                 : agreementRepo.findAllByWarehouseId(warehouseId, pageable);
@@ -149,7 +150,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
     @Transactional(readOnly = true)
     public ConsignmentAgreementResponse getAgreement(String agreementId) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         return mapToAgreementResponse(findAgreement(agreementId, warehouseId));
     }
 
@@ -188,7 +189,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
     @Transactional
     public ConsignmentSettlementResponse triggerSettlement(TriggerSettlementRequest req) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentAgreement agreement = findAgreement(req.getAgreementId(), warehouseId);
         if (agreement.getStatus() != ConsignmentStatus.ACTIVE) {
             throw new IllegalStateException("Settlement can only be triggered for ACTIVE agreements");
@@ -251,7 +252,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
     @Transactional
     public ConsignmentSettlementResponse approveSettlement(String settlementId, UpdateSettlementStatusRequest req) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);
         if (settlement.getStatus() != ConsignmentSettlementStatus.PENDING) {
             throw new IllegalStateException("Only PENDING settlements can be approved");
@@ -264,7 +265,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ConsignmentSettlementResponse markSettlementPaid(String settlementId, UpdateSettlementStatusRequest req) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         ConsignmentSettlement settlement = findSettlement(settlementId, warehouseId);
         if (settlement.getStatus() != ConsignmentSettlementStatus.APPROVED) {
             throw new IllegalStateException("Only APPROVED settlements can be marked as PAID");
@@ -283,7 +284,7 @@ public class ConsignmentServiceImpl implements ConsignmentService {
 
     @Transactional(readOnly = true)
     public Page<ConsignmentSettlementResponse> listSettlementsByStatus(ConsignmentSettlementStatus status, Pageable pageable) {
-        String warehouseId = TenantContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         Page<ConsignmentSettlement> page = status != null
                 ? settlementRepo.findByStatusAndWarehouseId(status, warehouseId, pageable)
                 : settlementRepo.findAllByWarehouseId(warehouseId, pageable);

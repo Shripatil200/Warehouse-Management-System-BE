@@ -12,9 +12,8 @@ import org.hibernate.annotations.DynamicUpdate;
 /**
  * Persistence entity representing a warehouse staff member.
  * <p>
- * Every User is always scoped to a specific {@link Warehouse} — warehouse_id is
- * non-nullable. Supplier accounts are handled by the separate {@link Supplier} entity
- * so this table stays clean and the warehouse invariant is never violated.
+ * All users belong to the single warehouse. The {@code warehouse_id} column
+ * is non-nullable; supplier contacts are stored separately in the {@link Supplier} entity.
  * </p>
  */
 @Getter

@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.ConsignmentSettlementStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -40,7 +40,7 @@ import java.util.List;
                 @Index(name = "idx_settlement_period",    columnList = "periodFrom, periodTo")
         }
 )
-public class ConsignmentSettlement extends TenantAwareEntity {
+public class ConsignmentSettlement extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

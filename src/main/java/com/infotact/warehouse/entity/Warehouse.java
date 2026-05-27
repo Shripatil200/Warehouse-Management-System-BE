@@ -11,13 +11,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Persistence entity representing a primary warehouse facility.
- * <p>
- * This is the top-level organizational unit of the system. It serves as the
- * parent container for physical infrastructure (Zones) and authorized staff (Users).
- * In this multi-tenant design, the Warehouse ID is the primary key used to
- * partition data across the entire platform.
- * </p>
+ * Persistence entity representing the warehouse facility.
+ *
+ * <p>There is exactly one warehouse in this system. It is the top-level
+ * organizational unit and parent container for all physical infrastructure
+ * (Zones → Aisles → Bins) and authorized staff (Users).</p>
  */
 @Getter
 @Setter
@@ -27,7 +25,7 @@ import java.util.Set;
 @AllArgsConstructor
 @Entity
 @Table(name = "warehouses")
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 public class Warehouse extends BaseEntity {
 
     @Id

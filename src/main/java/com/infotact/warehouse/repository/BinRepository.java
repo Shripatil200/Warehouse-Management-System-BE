@@ -28,7 +28,7 @@ import java.util.Set;
 public interface BinRepository extends JpaRepository<StorageBin, String> {
 
     // ============================================================
-    // PAGINATION (TENANT SAFE)
+    // PAGINATION
     // ============================================================
 
     @Query(value = """
@@ -49,7 +49,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // UNIQUENESS (TENANT SAFE)
+    // UNIQUENESS
     // ============================================================
 
     boolean existsByBinCodeAndWarehouseId(String binCode, String warehouseId);
@@ -126,7 +126,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
     );
 
     // ============================================================
-    // LOOKUPS (TENANT SAFE)
+    // LOOKUPS
     // ============================================================
 
     Optional<StorageBin> findByBinCodeAndActiveTrueAndWarehouseId(

@@ -62,8 +62,6 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
     List<Object[]> countUsersByStatus(@Param("warehouseId") String warehouseId);
 
     @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
-    long countAssignedWarehouseForUser(@Param("email") String email);
-
     /**
      * Finds the first AVAILABLE operator in the given warehouse.
      *

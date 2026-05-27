@@ -20,7 +20,7 @@ import java.util.List;
  *   <li><b>Cost Layering:</b> Each inventory record represents a distinct financial and physical layer.</li>
  *   <li><b>FEFO Picking:</b> Stock is allocated based on earliest expiry to minimize waste.</li>
  *   <li><b>Concurrency Safety:</b> All critical operations use pessimistic locking.</li>
- *   <li><b>Tenant Isolation:</b> All operations are scoped to the current warehouse via WarehouseContext.</li>
+ *   <li><b>Warehouse Isolation:</b> All operations are scoped to the current warehouse via WarehouseContext.</li>
  *   <li><b>Traceability:</b> Every stock movement generates an immutable transaction record.</li>
  * </ul>
  *

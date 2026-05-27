@@ -1,11 +1,11 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.BaseEntity;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.BinStatus;
 import com.infotact.warehouse.entity.enums.BinType;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
@@ -24,16 +24,15 @@ import java.util.List;
 @DynamicInsert
 @DynamicUpdate
 @NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "storage_bins", indexes = {
         @Index(name = "idx_bin_aisle", columnList = "aisle_id"),
         @Index(name = "idx_bin_status", columnList = "status"),
         @Index(name = "idx_bin_warehouse", columnList = "warehouse_id")
 })
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@Builder
-public class StorageBin extends TenantAwareEntity {
+@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
+@SuperBuilder
+public class StorageBin extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -47,37 +46,32 @@ public class StorageBin extends TenantAwareEntity {
     @Column(nullable = false, unique = true)
     private String binCode;
 
-    /** * The engineered volume limit of the bin in cubic centimeters (cm³).
-     */
+    /** The engineered volume limit of the bin in cubic centimeters (cm³). */
     @Column(nullable = false)
     private Double maxVolume;
 
-    /** * Running total of volume currently occupied by products.
-     */
+    /** Running total of volume currently occupied by products. */
     @Builder.Default
     @Column(nullable = false)
     private Double currentVolumeOccupied = 0.0;
 
-    /** * The maximum weight load this bin can support in Kilograms (KG).
-     */
+    /** The maximum weight load this bin can support in Kilograms (KG). */
     @Column(nullable = false)
     private Double maxWeightCapacity;
 
-    /** * Total weight currently resting in the bin.
-     */
+    /** Total weight currently resting in the bin. */
     @Builder.Default
     @Column(nullable = false)
     private Double currentWeightLoad = 0.0;
 
-    /** * State of the bin (AVAILABLE, FULL, BLOCKED, etc.).
-     */
+    /** State of the bin (AVAILABLE, FULL, BLOCKED, etc.). */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BinStatus status;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "bin_type", nullable = false, length = 20)
-    private BinType binType = BinType.PICK_FACE; // Default value
+    private BinType binType;
 
     @Builder.Default
     private boolean active = true;
@@ -85,13 +79,6 @@ public class StorageBin extends TenantAwareEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "aisle_id", nullable = false)
     private Aisle aisle;
-
-    /**
-     * Warehouse-Scoped Isolation: Direct link to the parent Warehouse.
-     */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 
     @OneToMany(mappedBy = "storageBin", cascade = CascadeType.ALL)
     private List<InventoryItem> inventoryItems;
@@ -101,7 +88,8 @@ public class StorageBin extends TenantAwareEntity {
 
     /**
      * Validates if the bin can physically accommodate new stock.
-     * * @param volume Required volume in cm³
+     *
+     * @param volume Required volume in cm³
      * @param weight Required weight in KG
      * @return true if the bin is active, available, and has remaining capacity.
      */

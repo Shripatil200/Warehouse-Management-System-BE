@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping(path = "/api/v1/warehouses")
 @RequiredArgsConstructor
-@Tag(name = "0. Warehouse Management", description = "Tenant-scoped operations for warehouse lifecycle and setup")
+@Tag(name = "0. Warehouse Management", description = "Warehouse lifecycle and setup operations")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
@@ -74,17 +74,17 @@ public class WarehouseController {
     }
 
     // ============================================================
-    // CURRENT TENANT OPERATIONS
+    // WAREHOUSE OPERATIONS
     // ============================================================
 
     /**
      * Retrieves the warehouse associated with the current authenticated user.
      *
-     * @return tenant-specific warehouse details
+     * @return warehouse details for the authenticated user
      */
     @Operation(
             summary = "Get Current Warehouse",
-            description = "Returns the warehouse linked to the authenticated user (tenant-safe)"
+            description = "Returns the warehouse for the authenticated user"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Warehouse fetched successfully"),

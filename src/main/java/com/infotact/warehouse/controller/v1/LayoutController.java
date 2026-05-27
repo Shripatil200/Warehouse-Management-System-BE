@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * REST controller for warehouse physical layout management.
  *
  * <p>
- * Tenant-safe design: All operations are scoped automatically
+ * All operations are scoped automatically to the warehouse
  * to the authenticated warehouse via JWT → WarehouseContext.
  * </p>
  */
@@ -42,11 +42,11 @@ public class LayoutController {
     // ============================================================
 
     /**
-     * Retrieves full warehouse layout for current tenant.
+     * Retrieves full warehouse layout.
      */
     @Operation(
             summary = "Get Warehouse Layout",
-            description = "Returns hierarchical structure (Zones → Aisles → Bins) for current tenant"
+            description = "Returns hierarchical structure (Zones → Aisles → Bins) for this warehouse"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Layout retrieved successfully"),

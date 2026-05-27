@@ -21,7 +21,7 @@ public interface ConsignmentAgreementRepository extends JpaRepository<Consignmen
     /** Filtered list (used internally by scheduler / terminal ops). */
     List<ConsignmentAgreement> findByStatusAndWarehouseId(ConsignmentStatus status, String warehouseId);
 
-    /** Returns all agreements for a warehouse regardless of status — tenant-safe list-all. */
+    /** Returns all agreements for a warehouse regardless of status — warehouse list-all. */
     List<ConsignmentAgreement> findAllByWarehouseId(String warehouseId);
 
     /** Paginated — status-filtered, warehouse-scoped. Default for API responses. */

@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.OrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,7 +30,7 @@ import java.util.List;
         @Index(name = "idx_order_status", columnList = "status"),
         @Index(name = "idx_order_number", columnList = "orderNumber")
 })
-public class SellingOrder extends TenantAwareEntity {
+public class SellingOrder extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -69,18 +69,6 @@ public class SellingOrder extends TenantAwareEntity {
      * </p>
      */
     private LocalDateTime expectedShipDate;
-
-    /**
-     * DENORMALIZATION: Direct link to the source Warehouse.
-     * <p>
-     * Anchoring: Ensures that the order is fulfilled from a specific building.
-     * This avoids expensive multi-join queries when generating warehouse-specific
-     * picking lists.
-     * </p>
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 
     /**
      * List of products and quantities included in this order.

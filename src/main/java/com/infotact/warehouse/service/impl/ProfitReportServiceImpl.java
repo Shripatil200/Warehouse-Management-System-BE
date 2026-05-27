@@ -16,6 +16,7 @@ import java.util.List;
 public class ProfitReportServiceImpl implements ProfitReportService {
 
     private final ProfitReportRepository profitReportRepository;
+    private final WarehouseContext warehouseContext;
 
     @Override
     @Transactional(readOnly = true)
@@ -60,9 +61,9 @@ public class ProfitReportServiceImpl implements ProfitReportService {
     }
 
     private String warehouseId() {
-        String id = WarehouseContext.get();
+        String id = warehouseContext.getWarehouseId();
         if (id == null) {
-            throw new IllegalStateException("Tenant context is missing — cannot resolve warehouse.");
+            throw new IllegalStateException("Warehouse context missing — cannot resolve warehouse.");
         }
         return id;
     }

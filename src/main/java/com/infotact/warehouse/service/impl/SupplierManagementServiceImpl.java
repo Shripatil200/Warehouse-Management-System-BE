@@ -1,12 +1,15 @@
 package com.infotact.warehouse.service.impl;
 
+import com.infotact.warehouse.config.WarehouseContext;
 import com.infotact.warehouse.dto.v1.request.SupplierRequest;
 import com.infotact.warehouse.dto.v1.response.SupplierResponse;
 import com.infotact.warehouse.entity.Supplier;
+import com.infotact.warehouse.entity.Warehouse;
 import com.infotact.warehouse.entity.enums.SupplierStatus;
 import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.SupplierRepository;
+import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.SupplierManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class SupplierManagementServiceImpl implements SupplierManagementService {
 
     private final SupplierRepository supplierRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final WarehouseContext warehouseContext;
 
     @Override
     @Transactional
@@ -34,7 +39,12 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
             throw new AlreadyExistsException("Contact number already registered.");
         }
 
+        String warehouseId = warehouseContext.getWarehouseId();
+        Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found: " + warehouseId));
+
         Supplier supplier = new Supplier();
+        supplier.setWarehouse(warehouse);
         supplier.setName(request.getName());
         supplier.setEmail(request.getEmail());
         supplier.setContactNumber(request.getContactNumber());
@@ -52,7 +62,9 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
     @Override
     @Transactional
     public SupplierResponse updateSupplier(String supplierId, SupplierRequest request) {
+        String warehouseId = warehouseContext.getWarehouseId();
         Supplier supplier = supplierRepository.findById(supplierId)
+                .filter(s -> s.getWarehouse().getId().equals(warehouseId))
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found: " + supplierId));
 
         supplier.setName(request.getName());
@@ -69,13 +81,16 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
     @Override
     @Transactional(readOnly = true)
     public Page<SupplierResponse> getAllSuppliers(Pageable pageable) {
-        return supplierRepository.findAll(pageable).map(SupplierResponse::new);
+        String warehouseId = warehouseContext.getWarehouseId();
+        return supplierRepository.findAllByWarehouseId(warehouseId, pageable).map(SupplierResponse::new);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SupplierResponse getById(String supplierId) {
+        String warehouseId = warehouseContext.getWarehouseId();
         Supplier supplier = supplierRepository.findById(supplierId)
+                .filter(s -> s.getWarehouse().getId().equals(warehouseId))
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found: " + supplierId));
         return new SupplierResponse(supplier);
     }
@@ -83,7 +98,9 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
     @Override
     @Transactional
     public void deactivateSupplier(String supplierId) {
+        String warehouseId = warehouseContext.getWarehouseId();
         Supplier supplier = supplierRepository.findById(supplierId)
+                .filter(s -> s.getWarehouse().getId().equals(warehouseId))
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found: " + supplierId));
         supplier.setStatus(SupplierStatus.INACTIVE);
         supplierRepository.save(supplier);

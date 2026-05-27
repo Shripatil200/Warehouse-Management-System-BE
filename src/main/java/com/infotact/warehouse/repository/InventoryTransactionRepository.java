@@ -47,21 +47,25 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     );
 
     /**
-     * Audit Query: Finds all actions that occurred in a specific bin location.
+     * Audit Query: Finds all actions that occurred in a specific bin location, scoped to the warehouse.
      */
     @Query("SELECT t FROM InventoryTransaction t " +
             "JOIN t.inventoryItem item " +
             "JOIN item.storageBin bin " +
-            "WHERE bin.binCode = :binCode")
-    Page<InventoryTransaction> findByBinCode(@Param("binCode") String binCode, Pageable pageable);
+            "WHERE bin.binCode = :binCode " +
+            "AND bin.warehouse.id = :warehouseId")
+    Page<InventoryTransaction> findByBinCode(@Param("binCode") String binCode,
+                                              @Param("warehouseId") String warehouseId,
+                                              Pageable pageable);
 
     /**
-     * Date-range Query: For generating daily or weekly movement reports.
-     * Updated: Changed 'createdAt' to 'transactionDate' to match entity.
+     * Date-range Query: For generating daily or weekly movement reports, scoped to the warehouse.
      */
     @Query("SELECT t FROM InventoryTransaction t " +
-            "WHERE t.transactionDate BETWEEN :startDate AND :endDate")
+            "WHERE t.warehouse.id = :warehouseId " +
+            "AND t.transactionDate BETWEEN :startDate AND :endDate")
     Page<InventoryTransaction> findByDateRange(
+            @Param("warehouseId") String warehouseId,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate,
             Pageable pageable);

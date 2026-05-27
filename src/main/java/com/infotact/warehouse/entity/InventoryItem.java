@@ -1,14 +1,12 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.InventoryStatus;
 import com.infotact.warehouse.entity.base.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
-import org.hibernate.annotations.FilterDef;
-import org.hibernate.annotations.ParamDef;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -37,11 +35,7 @@ import java.time.LocalDate;
                 @Index(name = "idx_inv_bin", columnList = "storage_bin_id")
         }
 )
-@FilterDef(
-        name = "warehouseFilter",
-        parameters = @ParamDef(name = "warehouseId", type = String.class)
-)
-public class InventoryItem extends TenantAwareEntity {
+public class InventoryItem extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -84,10 +78,6 @@ public class InventoryItem extends TenantAwareEntity {
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal purchasePrice;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 
     /**
      * Helper to calculate pickable stock.

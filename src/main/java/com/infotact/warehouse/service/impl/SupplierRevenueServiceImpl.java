@@ -30,11 +30,12 @@ public class SupplierRevenueServiceImpl implements SupplierRevenueService {
     private final SupplierRevenueRepository supplierRevenueRepository;
     private final BinRentalPaymentRepository binRentalPaymentRepository;
     private final SupplierRepository supplierRepository;
+    private final WarehouseContext warehouseContext;
 
     @Override
     @Transactional(readOnly = true)
     public List<SupplierRevenueResponse> getSupplierRevenue(LocalDate from, LocalDate to) {
-        String warehouseId = WarehouseContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
         LocalDateTime fromDt = from.atStartOfDay();
         LocalDateTime toDt = to.atTime(LocalTime.MAX);
 
@@ -87,7 +88,7 @@ public class SupplierRevenueServiceImpl implements SupplierRevenueService {
     @Override
     @Transactional(readOnly = true)
     public SupplierRevenueResponse getSupplierRevenueById(String supplierId, LocalDate from, LocalDate to) {
-        String warehouseId = WarehouseContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
 
         Supplier supplier = supplierRepository.findById(supplierId)
                 .orElseThrow(() -> new EntityNotFoundException("Supplier not found: " + supplierId));

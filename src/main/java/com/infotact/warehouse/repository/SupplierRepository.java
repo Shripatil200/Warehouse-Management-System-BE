@@ -20,13 +20,16 @@ public interface SupplierRepository extends JpaRepository<Supplier, String> {
 
     boolean existsByContactNumber(String contactNumber);
 
-    Page<Supplier> findByStatus(SupplierStatus status, Pageable pageable);
+    // Warehouse-scoped lookup by status
+    Page<Supplier> findByStatusAndWarehouseId(SupplierStatus status, String warehouseId, Pageable pageable);
 
-    Page<Supplier> findAll(Pageable pageable);
+    // Warehouse-scoped list of all suppliers
+    Page<Supplier> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
-    @Query("SELECT s FROM Supplier s WHERE " +
+    // Warehouse-scoped search by name, company, or email
+    @Query("SELECT s FROM Supplier s WHERE s.warehouse.id = :warehouseId AND (" +
             "LOWER(s.name) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
             "LOWER(s.companyName) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
-            "LOWER(s.email) LIKE LOWER(CONCAT('%', :q, '%'))")
-    Page<Supplier> search(@Param("q") String query, Pageable pageable);
+            "LOWER(s.email) LIKE LOWER(CONCAT('%', :q, '%')))")
+    Page<Supplier> search(@Param("q") String query, @Param("warehouseId") String warehouseId, Pageable pageable);
 }

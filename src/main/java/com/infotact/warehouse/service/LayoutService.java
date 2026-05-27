@@ -18,7 +18,7 @@ import org.springframework.data.domain.Pageable;
  *
  * <p>
  * <b>Warehouse-Scoped Design:</b>
- * All operations are strictly scoped to the authenticated tenant (warehouse)
+ * All operations are strictly scoped to the authenticated warehouse
  * via WarehouseContext. No method accepts a warehouseId externally.
  * </p>
  */
@@ -55,7 +55,7 @@ public interface LayoutService {
      * <b>Operational Logic:</b>
      * <ul>
      *     <li>Naming format: PREFIX-001, PREFIX-002...</li>
-     *     <li>Ensures uniqueness within tenant scope</li>
+     *     <li>Ensures uniqueness within this warehouse</li>
      *     <li>Limits to 999 bins per request</li>
      * </ul>
      * </p>
@@ -65,7 +65,7 @@ public interface LayoutService {
     void bulkCreateBins(@Valid BulkBinRequest request);
 
     /**
-     * Retrieves the full warehouse layout for the current tenant.
+     * Retrieves the full warehouse layout.
      *
      * <p>
      * <b>Usage:</b> Used for frontend visualization (tree/map view).
@@ -93,7 +93,7 @@ public interface LayoutService {
      * Supports pagination for high-density aisles.
      * </p>
      *
-     * @param aisleId Aisle identifier (validated for tenant ownership).
+     * @param aisleId Aisle identifier (validated for warehouse ownership).
      * @param pageable Pagination configuration.
      * @return Paginated bin summaries.
      */

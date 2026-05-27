@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -29,7 +29,7 @@ import java.util.List;
         @Index(name = "idx_po_status",    columnList = "status"),
         @Index(name = "idx_po_expected",  columnList = "expectedDate")
 })
-public class PurchaseOrder extends TenantAwareEntity {
+public class PurchaseOrder extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -42,10 +42,6 @@ public class PurchaseOrder extends TenantAwareEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
     private Supplier supplier;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 
     private LocalDateTime orderDate;
 

@@ -1,5 +1,3 @@
-
-
 services:
 
   postgres:
@@ -7,15 +5,15 @@ services:
     container_name: wms-postgres
     restart: always
     environment:
-      POSTGRES_DB: wms
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-wms}
+      POSTGRES_USER: ${POSTGRES_USER:-wms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wms_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,6 +22,8 @@ services:
     image: redis:7-alpine
     container_name: wms-redis
     restart: always
+    command: >
+      sh -c "[ -n \"$$REDIS_PASSWORD\" ] && redis-server --requirepass $$REDIS_PASSWORD || redis-server"
     ports:
       - "6379:6379"
     volumes:
@@ -47,29 +47,29 @@ services:
         condition: service_healthy
     environment:
       # Database
-      DB_URL: jdbc:postgresql://postgres:5432/wms
-      DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-wms}
+      DB_USERNAME: ${POSTGRES_USER:-wms_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
 
       # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_SSL_ENABLED: "false"
 
       # CORS / Frontend
-      APP_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:5174,http://localhost:5175
-      APP_FRONTEND_URL: http://localhost:5173
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
 
-      # Mail (Gmail SMTP — fill in your credentials)
+      # Mail
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
 
       # SMS
       SMS_API_KEY: ${SMS_API_KEY}
 
-      # JWT (default from application.yml is used if not set)
-      # JWT_SECRET_KEY: your-secret-key
+      # JWT
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
 
 volumes:
   postgres_data:

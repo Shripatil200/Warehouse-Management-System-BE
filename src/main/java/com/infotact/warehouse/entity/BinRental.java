@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -34,7 +34,7 @@ import java.util.List;
                 @Index(name = "idx_bin_rental_dates",     columnList = "start_date, end_date")
         }
 )
-public class BinRental extends TenantAwareEntity {
+public class BinRental extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 public class BarcodeAuditServiceImpl implements BarcodeAuditService {
 
     private final BarcodeAuditRepository auditRepository;
+    private final WarehouseContext warehouseContext;
 
     // ============================================================
     // SUCCESS LOG
@@ -30,10 +31,10 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
                            AuditAction action,
                            String scannedValue) {
 
-        String warehouseId = WarehouseContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
 
         if (warehouseId == null) {
-            throw new IllegalStateException("Tenant missing in context");
+            throw new IllegalStateException("Warehouse context missing");
         }
 
         logSuccessAsync(userId, warehouseId, binId, orderId, action, scannedValue);
@@ -63,10 +64,10 @@ public class BarcodeAuditServiceImpl implements BarcodeAuditService {
                            String scannedValue,
                            String errorReason) {
 
-        String warehouseId = WarehouseContext.get();
+        String warehouseId = warehouseContext.getWarehouseId();
 
         if (warehouseId == null) {
-            throw new IllegalStateException("Tenant missing in context");
+            throw new IllegalStateException("Warehouse context missing");
         }
 
         logFailureAsync(userId, warehouseId, binId, orderId,

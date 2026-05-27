@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.TaskPriority;
 import com.infotact.warehouse.entity.enums.TaskStatus;
 import com.infotact.warehouse.entity.enums.TaskType;
@@ -52,7 +52,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_task_source_po",         columnList = "source_purchase_order_id")
     }
 )
-public class Task extends TenantAwareEntity {
+public class Task extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

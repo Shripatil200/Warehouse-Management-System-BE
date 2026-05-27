@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.BaseEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.SupplierStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,10 +8,12 @@ import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
 /**
- * Persistence entity representing an independent supplier.
+ * Persistence entity representing a supplier linked to this warehouse.
  * <p>
- * Suppliers are managed by warehouse Admins and Managers.
- * They are referenced by Purchase Orders, Consignment Agreements, and Bin Rentals.
+ * Extends {@link WarehouseScopedEntity} so that every supplier record is
+ * anchored to the warehouse that registered them. This prevents cross-deployment
+ * data leakage in case two instances ever share a database (they shouldn't, but
+ * the FK makes the schema self-documenting and safe).
  * </p>
  */
 @Getter
@@ -25,11 +27,12 @@ import org.hibernate.annotations.DynamicUpdate;
 @Table(
         name = "suppliers",
         indexes = {
-                @Index(name = "idx_supplier_email",  columnList = "email"),
-                @Index(name = "idx_supplier_status", columnList = "status")
+                @Index(name = "idx_supplier_email",     columnList = "email"),
+                @Index(name = "idx_supplier_status",    columnList = "status"),
+                @Index(name = "idx_supplier_warehouse", columnList = "warehouse_id")
         }
 )
-public class Supplier extends BaseEntity {
+public class Supplier extends WarehouseScopedEntity {
 
     @Id
     @EqualsAndHashCode.Include

@@ -3,8 +3,8 @@ package com.infotact.warehouse.service.impl;
 import com.infotact.warehouse.entity.ConsignmentAgreement;
 import com.infotact.warehouse.entity.ConsignmentSettlement;
 import com.infotact.warehouse.repository.ConsignmentAgreementRepository;
-import com.infotact.warehouse.repository.WarehouseRepository;
 import com.infotact.warehouse.service.ConsignmentService;
+import com.infotact.warehouse.service.WarehouseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -15,14 +15,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Scheduled job that automatically generates settlement records when a
- * consignment agreement's cycle period has elapsed.
+ * Scheduled job that generates settlement records when a consignment
+ * agreement's cycle period has elapsed, and auto-terminates expired agreements.
  *
- * <p>Runs daily at 01:00 (server time). Uses ShedLock for exactly-once
- * execution in clustered deployments.</p>
- *
- * <p>This is a single-warehouse system — the scheduler processes all
- * agreements in the one warehouse without iterating over tenants.</p>
+ * <p>Runs daily at 01:00. Uses ShedLock for exactly-once execution.</p>
  */
 @Slf4j
 @Component
@@ -31,12 +27,8 @@ public class ConsignmentSettlementScheduler {
 
     private final ConsignmentAgreementRepository agreementRepo;
     private final ConsignmentService             consignmentService;
-    private final WarehouseRepository            warehouseRepo;
+    private final WarehouseService               warehouseService;
 
-    /**
-     * Main settlement job — runs daily at 01:00.
-     * ShedLock ensures exactly-once execution across cluster nodes.
-     */
     @Scheduled(cron = "${consignment.settlement.cron:0 0 1 * * *}")
     @SchedulerLock(
             name          = "consignmentSettlementJob",
@@ -44,56 +36,53 @@ public class ConsignmentSettlementScheduler {
             lockAtMostFor  = "PT30M"
     )
     public void runDailySettlement() {
-        log.info("ConsignmentSettlementScheduler: starting daily settlement run");
+        log.info("ConsignmentSettlementScheduler: starting");
 
-        LocalDate today = LocalDate.now();
-
-        // Single-warehouse system — fetch the warehouse ID once
-        String warehouseId = warehouseRepo.findAll().stream()
-                .filter(w -> w.isActive())
-                .map(w -> w.getId())
-                .findFirst()
-                .orElse(null);
-
-        if (warehouseId == null) {
-            log.info("ConsignmentSettlementScheduler: no active warehouse found, skipping.");
+        String warehouseId;
+        try {
+            warehouseId = warehouseService.getSingleWarehouseId();
+        } catch (IllegalStateException e) {
+            log.info("ConsignmentSettlementScheduler: no warehouse configured yet, skipping.");
             return;
         }
 
+        LocalDate today = LocalDate.now();
+
         try {
-            runForWarehouse(warehouseId, today);
+            autoTerminateExpiredAgreements(today);
+            generateDueSettlements(warehouseId, today);
         } catch (Exception e) {
             log.error("Settlement run failed: {}", e.getMessage(), e);
         }
 
-        log.info("ConsignmentSettlementScheduler: daily settlement run complete");
+        log.info("ConsignmentSettlementScheduler: complete");
     }
 
-    private void runForWarehouse(String warehouseId, LocalDate today) {
-        // 1. Auto-terminate agreements whose effectiveTo has passed
-        agreementRepo.findExpiredAgreements(today).stream()
-                .filter(a -> a.getWarehouse().getId().equals(warehouseId))
-                .forEach(agreement -> {
-                    log.info("Auto-terminating expired agreement {}", agreement.getAgreementCode());
-                    try {
-                        consignmentService.terminateAgreement(
-                                agreement.getId(),
-                                "Auto-terminated: effective-to date reached on " + today
-                        );
-                    } catch (Exception e) {
-                        log.error("Failed to auto-terminate agreement {}: {}",
-                                agreement.getAgreementCode(), e.getMessage());
-                    }
-                });
+    private void autoTerminateExpiredAgreements(LocalDate today) {
+        agreementRepo.findExpiredAgreements(today).forEach(agreement -> {
+            log.info("Auto-terminating expired agreement {}", agreement.getAgreementCode());
+            try {
+                consignmentService.terminateAgreement(
+                        agreement.getId(),
+                        "Auto-terminated: effective-to date reached on " + today
+                );
+            } catch (Exception e) {
+                log.error("Failed to auto-terminate agreement {}: {}",
+                        agreement.getAgreementCode(), e.getMessage());
+            }
+        });
+    }
 
-        // 2. Generate settlements for agreements whose cycle is due
-        List<ConsignmentAgreement> due = agreementRepo.findAgreementsDueForSettlement(warehouseId, today);
+    private void generateDueSettlements(String warehouseId, LocalDate today) {
+        List<ConsignmentAgreement> due =
+                agreementRepo.findAgreementsDueForSettlement(warehouseId, today);
         log.info("Found {} agreements due for settlement", due.size());
 
         for (ConsignmentAgreement agreement : due) {
             try {
                 ConsignmentSettlement settlement =
-                        consignmentService.generateSettlementInternal(agreement, "Auto-generated by scheduler");
+                        consignmentService.generateSettlementInternal(
+                                agreement, "Auto-generated by scheduler");
                 if (settlement != null) {
                     log.info("Auto-settlement {} created for agreement {}",
                             settlement.getSettlementNumber(), agreement.getAgreementCode());

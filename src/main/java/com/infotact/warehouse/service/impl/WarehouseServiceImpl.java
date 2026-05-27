@@ -42,6 +42,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     private final PasswordEncoder      passwordEncoder;
     private final EmailUtils           emailUtils;
     private final VerifiedProofRepository proofRepo;
+    private final WarehouseContext warehouseContext;
 
     // ── Public onboarding ────────────────────────────────────────────────────
 
@@ -185,10 +186,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     // ── Private utilities ────────────────────────────────────────────────────
 
     private Warehouse loadCurrentWarehouse() {
-        String warehouseId = WarehouseContext.get();
-        if (warehouseId == null || warehouseId.isBlank()) {
-            throw new IllegalStateException("No warehouse context present in the current request.");
-        }
+        String warehouseId = warehouseContext.getWarehouseId();
         return warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found."));
     }

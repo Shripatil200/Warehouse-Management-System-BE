@@ -1,6 +1,5 @@
 package com.infotact.warehouse.config.JWT;
 
-import com.infotact.warehouse.config.WarehouseContextFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +22,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Spring Security configuration for stateless JWT authentication.
+ *
+ * <p>All warehouse context is read from the JWT claim via {@link com.infotact.warehouse.config.WarehouseContext}.
+ * No per-request tenant filter is required in this single-warehouse build.</p>
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -30,51 +35,33 @@ public class SecurityConfig {
 
     private final UsersDetailsService usersDetailsService;
     private final JwtFilter jwtFilter;
-    private final WarehouseContextFilter warehouseContextFilter;
 
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
-    public SecurityConfig(
-            UsersDetailsService usersDetailsService,
-            JwtFilter jwtFilter,
-            WarehouseContextFilter warehouseContextFilter
-    ) {
+    public SecurityConfig(UsersDetailsService usersDetailsService, JwtFilter jwtFilter) {
         this.usersDetailsService = usersDetailsService;
         this.jwtFilter = jwtFilter;
-        this.warehouseContextFilter = warehouseContextFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-
-                        // Preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // Public APIs
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
-
                                 "/api/v1/auth/otp/send-email",
                                 "/api/v1/auth/otp/verify-email",
                                 "/api/v1/auth/otp/send-contact",
                                 "/api/v1/auth/otp/verify-contact",
-
                                 "/api/v1/warehouses/setup",
-
-                                // Swagger
                                 "/v3/api-docs/**",
                                 "/v3/api-docs.yaml",
                                 "/swagger-ui/**",
@@ -82,47 +69,27 @@ public class SecurityConfig {
                                 "/swagger-resources/**",
                                 "/webjars/**"
                         ).permitAll()
-
-                        // SSE endpoints
-                        .requestMatchers(
-                                "/api/v1/tasks/stream/**"
-                        ).authenticated()
-
+                        .requestMatchers("/api/v1/tasks/stream/**").authenticated()
                         .anyRequest().authenticated()
                 )
-
-                .addFilterBefore(
-                        jwtFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                )
-
-                .addFilterAfter(
-                        warehouseContextFilter,
-                        JwtFilter.class
-                );
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration configuration = new CorsConfiguration();
-
-        List<String> origins = Arrays.asList(
-                allowedOrigins.split(",")
-        );
-
+        List<String> origins = Arrays.asList(allowedOrigins.split(","));
         configuration.setAllowedOrigins(origins);
-        configuration.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization","Content-Type","Cache-Control","Accept","Origin"));
-        configuration.setExposedHeaders(List.of("Authorization","Content-Type"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Cache-Control", "Accept", "Origin"));
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-
         return source;
     }
 

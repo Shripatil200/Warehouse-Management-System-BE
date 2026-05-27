@@ -19,6 +19,9 @@ import java.io.IOException;
 
 /**
  * JWT authentication filter for warehouse staff.
+ *
+ * <p>Validates the token type claim ("USER") so that any future token types
+ * (e.g. service-to-service, refresh) are rejected at the boundary.</p>
  */
 @Slf4j
 @Component
@@ -27,7 +30,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil               jwtUtil;
     private final UsersDetailsService   usersDetailsService;
-    private final TokenBlacklistService  tokenBlacklistService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -53,6 +56,14 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (token != null) {
             try {
+                // Validate token type — only USER tokens are accepted here
+                String type = jwtUtil.extractClaims(token,
+                        claims -> claims.get("type", String.class));
+                if (!"USER".equals(type)) {
+                    log.warn("Rejected non-USER token type '{}' for path {}", type, path);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 username = jwtUtil.extractUsername(token);
             } catch (Exception e) {
                 log.error("JWT parse error: {}", e.getMessage());
@@ -62,7 +73,8 @@ public class JwtFilter extends OncePerRequestFilter {
         // Reject explicitly revoked tokens (logout / forced re-auth)
         if (token != null && tokenBlacklistService.isBlacklisted(token)) {
             log.warn("Rejected blacklisted token for request to {}", path);
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been revoked. Please log in again.");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+                    "Token has been revoked. Please log in again.");
             return;
         }
 
@@ -71,7 +83,8 @@ public class JwtFilter extends OncePerRequestFilter {
                 UserDetails userDetails = usersDetailsService.loadUserByUsername(username);
                 if (jwtUtil.validateToken(token, userDetails.getUsername())) {
                     UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }

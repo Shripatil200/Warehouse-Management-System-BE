@@ -1,6 +1,6 @@
 package com.infotact.warehouse.entity;
 
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import com.infotact.warehouse.entity.enums.ConsignmentStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -37,7 +37,7 @@ import java.util.List;
                 @Index(name = "idx_consignment_warehouse", columnList = "warehouse_id")
         }
 )
-public class ConsignmentAgreement extends TenantAwareEntity {
+public class ConsignmentAgreement extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -1,7 +1,7 @@
 package com.infotact.warehouse.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -33,7 +33,7 @@ import java.util.List;
         }
 )
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
-public class Product extends TenantAwareEntity {
+public class Product extends WarehouseScopedEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -127,13 +127,6 @@ public class Product extends TenantAwareEntity {
     @JsonIgnore
     private ProductCategory category;
 
-    /**
-     * The warehouse that owns this product record.
-     */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
-
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @ToString.Exclude
     private List<InventoryItem> inventoryItems;
@@ -152,7 +145,7 @@ public class Product extends TenantAwareEntity {
      * <p>When {@code true}:
      * <ul>
      *   <li>The warehouse does NOT record a cost in its own P&L for this product.</li>
-     *   <li>Each sale generates a {@link com.infotact.warehouse.entity.ConsignmentSale}
+     *   <li>Each sale generates a {@link ConsignmentSale}
      *       record splitting revenue between warehouse and supplier.</li>
      *   <li>The product's {@code costPrice} field stores the supplier's declared
      *       cost for insurance/valuation purposes only — not for warehouse COGS.</li>
@@ -166,7 +159,7 @@ public class Product extends TenantAwareEntity {
      * Null for warehouse-owned products (isConsignment = false).
      *
      * <p>This is a convenience denormalization: the canonical source of truth
-     * is {@link com.infotact.warehouse.entity.ConsignmentProduct}, but this
+     * is {@link ConsignmentProduct}, but this
      * FK allows very fast single-table lookups during order processing.
      */
     @ManyToOne(fetch = FetchType.LAZY)

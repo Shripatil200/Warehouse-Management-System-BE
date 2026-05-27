@@ -2,7 +2,7 @@ package com.infotact.warehouse.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.infotact.warehouse.entity.base.BaseEntity;
-import com.infotact.warehouse.entity.base.TenantAwareEntity;
+import com.infotact.warehouse.entity.base.WarehouseScopedEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -37,7 +37,7 @@ import java.util.List;
                 @Index(name = "idx_category_warehouse", columnList = "warehouse_id")
         }
 )
-public class ProductCategory extends TenantAwareEntity {
+public class ProductCategory extends WarehouseScopedEntity {
 
     @Id
     @EqualsAndHashCode.Include
@@ -62,14 +62,6 @@ public class ProductCategory extends TenantAwareEntity {
     @JsonIgnore
     @ToString.Exclude
     private ProductCategory parentCategory;
-
-    /**
-     * Warehouse link.
-     * Every category is owned by the warehouse.
-     */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "warehouse_id", nullable = false)
-    private Warehouse warehouse;
 
     /**
      * UUID of the preferred zone (e.g., "COLD_STORAGE").
@@ -116,8 +108,8 @@ public class ProductCategory extends TenantAwareEntity {
         subCategories.add(subCategory);
         subCategory.setParentCategory(this);
         // Integrity Check: Sub-categories must belong to the same warehouse as the parent
-        if (this.warehouse != null) {
-            subCategory.setWarehouse(this.warehouse);
+        if (this.getWarehouse() != null) {
+            subCategory.setWarehouse(this.getWarehouse());
         }
     }
 

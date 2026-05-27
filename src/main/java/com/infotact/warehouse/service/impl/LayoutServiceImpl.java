@@ -25,7 +25,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Production-grade tenant-safe implementation of {@link LayoutService}.
+ * Production-grade warehouse implementation of {@link LayoutService}.
  *
  * <p>
  * Enforces strict warehouse-scoped isolation:
@@ -46,6 +46,7 @@ public class LayoutServiceImpl implements LayoutService {
     private final AisleRepository aisleRepository;
     private final WarehouseRepository warehouseRepository;
     private final BarcodeService barcodeService;
+    private final WarehouseContext warehouseContext;
 
     // ============================================================
     // READ: FULL LAYOUT
@@ -59,7 +60,7 @@ public class LayoutServiceImpl implements LayoutService {
     )
     public WarehouseLayoutResponse getWarehouseLayout() {
         String warehouseId = getCurrentWarehouseId();
-        log.info("Generating layout for tenant warehouse: {}", warehouseId);
+        log.info("Generating layout for warehouse: {}", warehouseId);
 
         Warehouse warehouse = warehouseRepository.findOptimizedLayout(warehouseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Warehouse not found"));
@@ -127,7 +128,7 @@ public class LayoutServiceImpl implements LayoutService {
         Zone zone = new Zone();
         zone.setName(request.name());
         zone.setZoneType(request.zoneType());
-        zone.setWarehouse(warehouse); // Correctly set tenant link
+        zone.setWarehouse(warehouse); // Set warehouse link
         zone.setActive(true);
 
         zoneRepository.save(zone);
@@ -145,20 +146,20 @@ public class LayoutServiceImpl implements LayoutService {
             key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
     )
     public void addAisleToZone(AisleRequest request) {
-        // Retrieve and validate the zone belongs to this tenant
+        // Validate the zone belongs to this warehouse
         Zone zone = getValidatedZone(request.zoneId());
 
         if (aisleRepository.existsByCodeAndZoneId(request.code(), zone.getId())) {
             throw new AlreadyExistsException("Aisle exists in zone");
         }
 
-        // FIX: Retrieve current warehouse (tenant) to satisfy NOT NULL constraint
+        // Retrieve current warehouse to satisfy NOT NULL constraint
         Warehouse warehouse = getCurrentWarehouse();
 
         Aisle aisle = new Aisle();
         aisle.setCode(request.code());
         aisle.setZone(zone);
-        aisle.setWarehouse(warehouse); // LINKING TO TENANT MANUALLY
+        aisle.setWarehouse(warehouse); // Link to warehouse
         aisle.setActive(true);
 
         aisleRepository.save(aisle);
@@ -199,7 +200,7 @@ public class LayoutServiceImpl implements LayoutService {
                         .currentVolumeOccupied(0.0)
                         .currentWeightLoad(0.0)
                         .aisle(aisle)
-                        .warehouse(warehouse) // Correctly set tenant link
+                        .warehouse(warehouse) // Set warehouse link
                         .status(BinStatus.AVAILABLE)
                         .active(true)
                         .build();
@@ -275,7 +276,7 @@ public class LayoutServiceImpl implements LayoutService {
         Zone zone = zoneRepository.findById(zoneId)
                 .orElseThrow(() -> new ResourceNotFoundException("Zone not found"));
         if (!zone.getWarehouse().getId().equals(getCurrentWarehouseId())) {
-            throw new SecurityException("Cross-tenant zone access denied");
+            throw new SecurityException("Unauthorized zone access");
         }
         return zone;
     }
@@ -284,7 +285,7 @@ public class LayoutServiceImpl implements LayoutService {
         Aisle aisle = aisleRepository.findById(aisleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Aisle not found"));
         if (!aisle.getZone().getWarehouse().getId().equals(getCurrentWarehouseId())) {
-            throw new SecurityException("Cross-tenant aisle access denied");
+            throw new SecurityException("Unauthorized aisle access");
         }
         return aisle;
     }
@@ -293,14 +294,14 @@ public class LayoutServiceImpl implements LayoutService {
         StorageBin bin = binRepository.findById(binId)
                 .orElseThrow(() -> new ResourceNotFoundException("Bin not found"));
         if (!bin.getWarehouse().getId().equals(getCurrentWarehouseId())) {
-            throw new SecurityException("Cross-tenant bin access denied");
+            throw new SecurityException("Unauthorized bin access");
         }
         return bin;
     }
 
     private String getCurrentWarehouseId() {
-        String id = WarehouseContext.get();
-        if (id == null) throw new IllegalStateException("Tenant missing");
+        String id = warehouseContext.getWarehouseId();
+        if (id == null) throw new IllegalStateException("Warehouse context missing");
         return id;
     }
 

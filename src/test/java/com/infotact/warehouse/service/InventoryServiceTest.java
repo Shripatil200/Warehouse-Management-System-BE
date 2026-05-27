@@ -48,8 +48,7 @@ class InventoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        // WarehouseContext is an injected Spring bean — mock the instance method
-        when(warehouseContext.getWarehouseId()).thenReturn(WAREHOUSE_ID);
+        // intentionally empty — stubs are set per-test to avoid unnecessary stubbing errors
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -121,6 +120,7 @@ class InventoryServiceTest {
         StorageBin bin     = buildBin();
         Product    product = buildProduct();
 
+        when(warehouseContext.getWarehouseId()).thenReturn(WAREHOUSE_ID);
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
         when(userService.getAuthenticatedUser()).thenReturn(buildOperator());
         when(binRepository.findPutawayCandidates(any(), any(), any(), any(), any(), any(), any(), any()))
@@ -136,9 +136,6 @@ class InventoryServiceTest {
             item.setId("inv-" + System.nanoTime());
             return item;
         });
-        // syncBinMetrics also locks the bin — return same bin object
-        when(binRepository.findByIdWithLock(eq(BIN_ID), eq(WAREHOUSE_ID)))
-                .thenReturn(Optional.of(bin));
         when(binRepository.save(any(StorageBin.class))).thenAnswer(i -> i.getArgument(0));
         when(transactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -153,6 +150,7 @@ class InventoryServiceTest {
         request.setProductId(PRODUCT_ID);
         request.setQuantity(10);
 
+        when(warehouseContext.getWarehouseId()).thenReturn(WAREHOUSE_ID);
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(buildProduct()));
         when(userService.getAuthenticatedUser()).thenReturn(buildOperator());
         when(binRepository.findPutawayCandidates(any(), any(), any(), any(), any(), any(), any(), any()))

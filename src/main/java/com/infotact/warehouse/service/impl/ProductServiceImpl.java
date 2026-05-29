@@ -157,7 +157,7 @@ public class ProductServiceImpl implements ProductService {
         product.setLength(request.getLength());
         product.setWidth(request.getWidth());
         product.setHeight(request.getHeight());
-        product.setBarcode(request.getBarcode());
+        product.setBarcode(request.getSku().toUpperCase());
         product.setMinThreshold(request.getMinThreshold()           != null ? request.getMinThreshold()           : 10);
         product.setMinReplenishThreshold(request.getMinReplenishThreshold() != null ? request.getMinReplenishThreshold() : 5);
         product.setMaxPickFaceCapacity(request.getMaxPickFaceCapacity()     != null ? request.getMaxPickFaceCapacity()   : 50);

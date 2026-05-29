@@ -7,6 +7,7 @@ import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.*;
 import com.infotact.warehouse.service.PurchaseOrderService;
+import com.infotact.warehouse.service.TaskAssignmentService;
 import com.infotact.warehouse.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final ProductRepository          productRepository;
     private final SupplierRepository         supplierRepository;
     private final UserService                userService;
+    private final TaskAssignmentService      taskEngine;
 
     @Override
     @Transactional
@@ -123,5 +125,27 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 po.getExpectedDate(),
                 itemDetails
         );
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "purchaseOrders", allEntries = true)
+    public void markAsArrived(String id) {
+        User manager      = userService.getAuthenticatedUser();
+        String warehouseId = manager.getWarehouse().getId();
+
+        PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Purchase Order not found or access denied."));
+
+        if (po.getStatus() != PurchaseOrderStatus.PENDING) {
+            throw new com.infotact.warehouse.exception.IllegalOperationException(
+                    "Only PENDING purchase orders can be marked as arrived. Current status: " + po.getStatus());
+        }
+
+        po.setStatus(PurchaseOrderStatus.SHIPPED);
+        poRepository.save(po);
+
+        taskEngine.createPutawayTask(po, "RECEIVING_DOCK", warehouseId);
+        log.info("Purchase Order {} marked as arrived at dock; PUTAWAY task generated.", id);
     }
 }

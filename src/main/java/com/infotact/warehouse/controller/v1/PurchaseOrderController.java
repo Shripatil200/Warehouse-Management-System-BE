@@ -98,4 +98,13 @@ public class PurchaseOrderController {
             @RequestParam(required = false) String status) {
         return ResponseEntity.ok(poService.getAllPurchaseOrders(status));
     }
+
+    @PostMapping("/{id}/arrive")
+    @Operation(summary = "Mark Purchase Order as Arrived", description = "Marks the purchase order status as SHIPPED and spawns a PUTAWAY task for operators.")
+    public ResponseEntity<Void> markAsArrived(
+            @Parameter(description = "The UUID of the purchase order", example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable String id) {
+        poService.markAsArrived(id);
+        return ResponseEntity.ok().build();
+    }
 }

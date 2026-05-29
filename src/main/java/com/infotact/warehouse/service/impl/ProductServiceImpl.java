@@ -113,13 +113,20 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
+    public Page<ProductResponse> getAllProducts(Pageable pageable, String search, Boolean includeInactive) {
         User manager   = userService.getAuthenticatedUser();
         String whId    = manager.getWarehouse().getId();
 
-        Page<Product> products = includeInactive
-                ? productRepository.findAllByWarehouseId(whId, pageable)
-                : productRepository.findAllByWarehouseIdAndActiveTrue(whId, pageable);
+        Page<Product> products;
+        if (search != null && !search.isBlank()) {
+            products = includeInactive
+                    ? productRepository.searchProductsAll(whId, search, pageable)
+                    : productRepository.searchProducts(whId, true, search, pageable);
+        } else {
+            products = includeInactive
+                    ? productRepository.findAllByWarehouseId(whId, pageable)
+                    : productRepository.findAllByWarehouseIdAndActiveTrue(whId, pageable);
+        }
 
         return products.map(this::mapToResponse);
     }

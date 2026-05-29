@@ -84,6 +84,19 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(createErrorBody(HttpStatus.FORBIDDEN, "You do not have permission to perform this action", "Forbidden"), HttpStatus.FORBIDDEN);
     }
 
+    /**
+     * Suppress stack trace logs and JSON error payloads for standard client disconnect events on SSE streams.
+     */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
+    public void handleAsyncRequestNotUsable(org.springframework.web.context.request.async.AsyncRequestNotUsableException ex) {
+        log.debug("Async request not usable (client disconnected): {}", ex.getMessage());
+    }
+
+    @ExceptionHandler(org.apache.catalina.connector.ClientAbortException.class)
+    public void handleClientAbort(org.apache.catalina.connector.ClientAbortException ex) {
+        log.debug("Client connection aborted: {}", ex.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleGlobalException(Exception ex) {
         log.error("Unhandled exception: {}", ex.getMessage(), ex);

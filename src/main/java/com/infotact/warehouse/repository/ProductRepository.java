@@ -34,6 +34,14 @@ public interface ProductRepository extends JpaRepository<Product, String> {
 
     Page<Product> findAllByWarehouseId(String warehouseId, Pageable pageable);
 
+    @Query("SELECT p FROM Product p WHERE p.warehouse.id = :warehouseId AND p.active = :active " +
+            "AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Product> searchProducts(@Param("warehouseId") String warehouseId, @Param("active") boolean active, @Param("search") String search, Pageable pageable);
+
+    @Query("SELECT p FROM Product p WHERE p.warehouse.id = :warehouseId " +
+            "AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Product> searchProductsAll(@Param("warehouseId") String warehouseId, @Param("search") String search, Pageable pageable);
+
     // --- Stock Intelligence & Threshold Monitoring ---
 
     /**

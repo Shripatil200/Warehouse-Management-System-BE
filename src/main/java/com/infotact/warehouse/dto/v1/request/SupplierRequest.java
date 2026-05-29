@@ -40,4 +40,6 @@ public class SupplierRequest {
 
     @Schema(example = "https://kumarenterprises.com")
     private String website;
+
+    private java.util.List<String> categoryIds = new java.util.ArrayList<>();
 }

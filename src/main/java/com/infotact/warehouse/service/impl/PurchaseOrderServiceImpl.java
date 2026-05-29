@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
 public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private final PurchaseOrderRepository    poRepository;
@@ -36,6 +35,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @CacheEvict(value = "purchaseOrders", allEntries = true)
     public PurchaseOrderResponse createPurchaseOrder(PurchaseOrderRequest request) {
         User manager      = userService.getAuthenticatedUser();
@@ -75,6 +75,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'OPERATOR')")
     @Cacheable(value = "purchaseOrders", key = "#id")
     public PurchaseOrderResponse getPurchaseOrder(String id) {
         User manager = userService.getAuthenticatedUser();
@@ -85,6 +86,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'OPERATOR')")
     @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
     public List<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr) {
         User manager       = userService.getAuthenticatedUser();
@@ -129,6 +131,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @CacheEvict(value = "purchaseOrders", allEntries = true)
     public void markAsArrived(String id) {
         User manager      = userService.getAuthenticatedUser();

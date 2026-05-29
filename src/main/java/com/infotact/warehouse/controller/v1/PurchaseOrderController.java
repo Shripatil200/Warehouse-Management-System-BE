@@ -33,7 +33,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/purchase-orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 @Tag(name = "7. Purchase Orders", description = "Management of inbound stock expectations from suppliers")
 public class PurchaseOrderController {
 
@@ -58,6 +57,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "400", description = "Invalid supplier ID or product SKUs"),
             @ApiResponse(responseCode = "403", description = "Forbidden: Access restricted to Managers")
     })
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @PostMapping
     public ResponseEntity<PurchaseOrderResponse> createPurchaseOrder(@Valid @RequestBody PurchaseOrderRequest request) {
         log.info("REST request to create Purchase SellingOrder for supplier: {}", request.supplierId());
@@ -71,6 +71,7 @@ public class PurchaseOrderController {
      * @return Purchase order details including line items and current status.
      */
     @Operation(summary = "Get PO by ID", description = "Retrieves full details of a specific purchase order using its UUID.")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     @GetMapping("/{id}")
     public ResponseEntity<PurchaseOrderResponse> getPurchaseOrder(
             @Parameter(description = "The UUID of the purchase order", example = "550e8400-e29b-41d4-a716-446655440000")
@@ -92,6 +93,7 @@ public class PurchaseOrderController {
             @ApiResponse(responseCode = "200", description = "List retrieved successfully",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = PurchaseOrderResponse.class))))
     })
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     @GetMapping
     public ResponseEntity<List<PurchaseOrderResponse>> getAllPurchaseOrders(
             @Parameter(description = "Optional status filter", example = "PLACED")
@@ -99,6 +101,7 @@ public class PurchaseOrderController {
         return ResponseEntity.ok(poService.getAllPurchaseOrders(status));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @PostMapping("/{id}/arrive")
     @Operation(summary = "Mark Purchase Order as Arrived", description = "Marks the purchase order status as SHIPPED and spawns a PUTAWAY task for operators.")
     public ResponseEntity<Void> markAsArrived(

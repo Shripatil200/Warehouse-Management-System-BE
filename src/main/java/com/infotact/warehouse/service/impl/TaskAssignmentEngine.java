@@ -9,6 +9,7 @@ import com.infotact.warehouse.entity.enums.TaskPriority;
 import com.infotact.warehouse.entity.enums.TaskStatus;
 import com.infotact.warehouse.entity.enums.TaskType;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
+import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.event.TaskAssignedEvent;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.TaskRepository;
@@ -80,10 +81,9 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      */
     @Transactional
     public Task createAndDispatch(Task task, String warehouseId) {
-        // Find the first AVAILABLE operator in this warehouse (any order — engine
-        // will re-balance via the priority queue when they complete tasks).
+        // Find the first AVAILABLE operator in this warehouse
         Optional<User> availableOperator = userRepository
-                .findFirstByWarehouseIdAndOperatorStatus(warehouseId, OperatorStatus.AVAILABLE);
+                .findFirstByWarehouseIdAndRoleAndOperatorStatus(warehouseId, Role.OPERATOR, OperatorStatus.AVAILABLE);
 
         if (availableOperator.isPresent()) {
             User operator = availableOperator.get();

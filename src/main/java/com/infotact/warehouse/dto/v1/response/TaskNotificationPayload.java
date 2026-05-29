@@ -1,6 +1,7 @@
 package com.infotact.warehouse.dto.v1.response;
 
 import com.infotact.warehouse.entity.enums.TaskPriority;
+import com.infotact.warehouse.entity.enums.TaskStatus;
 import com.infotact.warehouse.entity.enums.TaskType;
 
 import java.time.LocalDateTime;
@@ -60,7 +61,10 @@ public record TaskNotificationPayload(
         String sourceOrderId,
 
         /** The supplier purchase order associated with this task. */
-        String sourcePurchaseOrderId
+        String sourcePurchaseOrderId,
+
+        /** The status of the task. */
+        TaskStatus status
 ) {
     /**
      * Factory method — builds the payload directly from a persisted task.
@@ -76,7 +80,8 @@ public record TaskNotificationPayload(
                 task.getNotes(),
                 task.getAssignedAt(),
                 task.getSourceOrder() != null ? task.getSourceOrder().getId() : null,
-                task.getSourcePurchaseOrder() != null ? task.getSourcePurchaseOrder().getId() : null
+                task.getSourcePurchaseOrder() != null ? task.getSourcePurchaseOrder().getId() : null,
+                task.getStatus()
         );
     }
 }

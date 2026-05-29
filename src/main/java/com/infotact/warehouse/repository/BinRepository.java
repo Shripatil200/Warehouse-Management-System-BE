@@ -87,7 +87,7 @@ public interface BinRepository extends JpaRepository<StorageBin, String> {
      * Then sorted by available space (DESC)
      */
     @Query("""
-    SELECT DISTINCT b FROM StorageBin b
+    SELECT b FROM StorageBin b
     JOIN FETCH b.aisle a
     JOIN FETCH a.zone z
     WHERE b.active = true

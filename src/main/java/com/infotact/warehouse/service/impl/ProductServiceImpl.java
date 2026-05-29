@@ -113,13 +113,20 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive) {
+    public Page<ProductResponse> getAllProducts(Pageable pageable, String search, Boolean includeInactive) {
         User manager   = userService.getAuthenticatedUser();
         String whId    = manager.getWarehouse().getId();
 
-        Page<Product> products = includeInactive
-                ? productRepository.findAllByWarehouseId(whId, pageable)
-                : productRepository.findAllByWarehouseIdAndActiveTrue(whId, pageable);
+        Page<Product> products;
+        if (search != null && !search.isBlank()) {
+            products = includeInactive
+                    ? productRepository.searchProductsAll(whId, search, pageable)
+                    : productRepository.searchProducts(whId, true, search, pageable);
+        } else {
+            products = includeInactive
+                    ? productRepository.findAllByWarehouseId(whId, pageable)
+                    : productRepository.findAllByWarehouseIdAndActiveTrue(whId, pageable);
+        }
 
         return products.map(this::mapToResponse);
     }
@@ -157,7 +164,7 @@ public class ProductServiceImpl implements ProductService {
         product.setLength(request.getLength());
         product.setWidth(request.getWidth());
         product.setHeight(request.getHeight());
-        product.setBarcode(request.getBarcode());
+        product.setBarcode(request.getSku().toUpperCase());
         product.setMinThreshold(request.getMinThreshold()           != null ? request.getMinThreshold()           : 10);
         product.setMinReplenishThreshold(request.getMinReplenishThreshold() != null ? request.getMinReplenishThreshold() : 5);
         product.setMaxPickFaceCapacity(request.getMaxPickFaceCapacity()     != null ? request.getMaxPickFaceCapacity()   : 50);

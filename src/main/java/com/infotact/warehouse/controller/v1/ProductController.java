@@ -125,9 +125,10 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<Page<ProductResponse>> getAllProducts(
             @ParameterObject Pageable pageable,
+            @RequestParam(required = false) String search,
             @Parameter(description = "If true, includes deactivated products in the result")
             @RequestParam(defaultValue = "false") boolean includeInactive){
-        return ResponseEntity.ok(productService.getAllProducts(pageable, includeInactive));
+        return ResponseEntity.ok(productService.getAllProducts(pageable, search, includeInactive));
     }
 
     /**

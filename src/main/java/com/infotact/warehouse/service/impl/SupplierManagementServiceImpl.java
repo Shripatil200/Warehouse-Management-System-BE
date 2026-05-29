@@ -10,6 +10,8 @@ import com.infotact.warehouse.exception.AlreadyExistsException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.SupplierRepository;
 import com.infotact.warehouse.repository.WarehouseRepository;
+import com.infotact.warehouse.repository.ProductCategoryRepository;
+import com.infotact.warehouse.entity.ProductCategory;
 import com.infotact.warehouse.service.SupplierManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,7 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
     private final SupplierRepository supplierRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseContext warehouseContext;
+    private final ProductCategoryRepository categoryRepository;
 
     @Override
     @Transactional
@@ -54,6 +57,11 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
         supplier.setWebsite(request.getWebsite());
         supplier.setStatus(SupplierStatus.ACTIVE);
 
+        if (request.getCategoryIds() != null && !request.getCategoryIds().isEmpty()) {
+            java.util.List<ProductCategory> categoryList = categoryRepository.findAllById(request.getCategoryIds());
+            supplier.getCategories().addAll(categoryList);
+        }
+
         supplierRepository.save(supplier);
         log.info("Supplier created: {}", request.getEmail());
         return new SupplierResponse(supplier);
@@ -74,6 +82,14 @@ public class SupplierManagementServiceImpl implements SupplierManagementService 
         supplier.setGstNumber(request.getGstNumber());
         supplier.setAddress(request.getAddress());
         supplier.setWebsite(request.getWebsite());
+
+        if (request.getCategoryIds() != null) {
+            java.util.List<ProductCategory> categoryList = categoryRepository.findAllById(request.getCategoryIds());
+            supplier.getCategories().clear();
+            supplier.getCategories().addAll(categoryList);
+        } else {
+            supplier.getCategories().clear();
+        }
 
         return new SupplierResponse(supplierRepository.save(supplier));
     }

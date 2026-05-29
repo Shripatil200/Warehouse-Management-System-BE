@@ -71,4 +71,12 @@ public class Supplier extends WarehouseScopedEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SupplierStatus status = SupplierStatus.ACTIVE;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "supplier_categories",
+        joinColumns = @JoinColumn(name = "supplier_id"),
+        inverseJoinColumns = @JoinColumn(name = "category_id")
+    )
+    private java.util.List<ProductCategory> categories = new java.util.ArrayList<>();
 }

@@ -66,9 +66,10 @@ public interface ProductService {
      * (Picking/Receiving) but allows 'Inactive' inclusion for administrative audits.
      * </p>
      * @param pageable Pagination and sorting parameters.
+     * @param search Optional query string to filter products by name or SKU.
      * @param includeInactive Toggle to include archived/soft-deleted items.
      */
-    Page<ProductResponse> getAllProducts(Pageable pageable, Boolean includeInactive);
+    Page<ProductResponse> getAllProducts(Pageable pageable, String search, Boolean includeInactive);
 
     /**
      * Archives a product via "Soft-Delete".

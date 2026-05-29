@@ -56,7 +56,7 @@ public class LayoutServiceImpl implements LayoutService {
     @Transactional(readOnly = true)
     @Cacheable(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
+            key = "@warehouseContext.getWarehouseId()"
     )
     public WarehouseLayoutResponse getWarehouseLayout() {
         String warehouseId = getCurrentWarehouseId();
@@ -116,7 +116,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
+            key = "@warehouseContext.getWarehouseId()"
     )
     public void addZoneToWarehouse(ZoneRequest request) {
         Warehouse warehouse = getCurrentWarehouse();
@@ -143,7 +143,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
+            key = "@warehouseContext.getWarehouseId()"
     )
     public void addAisleToZone(AisleRequest request) {
         // Validate the zone belongs to this warehouse
@@ -174,7 +174,7 @@ public class LayoutServiceImpl implements LayoutService {
     @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(
             value = "warehouseLayouts",
-            key = "T(com.infotact.warehouse.config.WarehouseContext).get()"
+            key = "@warehouseContext.getWarehouseId()"
     )
     public void bulkCreateBins(BulkBinRequest request) {
         Aisle aisle = getValidatedAisle(request.aisleId());

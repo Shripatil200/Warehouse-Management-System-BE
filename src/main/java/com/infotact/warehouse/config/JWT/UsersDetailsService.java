@@ -29,6 +29,10 @@ public class UsersDetailsService implements UserDetailsService {
             throw new DisabledException("Login restricted. Account status: " + user.getStatus());
         }
 
+        if (user.getRole() == com.infotact.warehouse.entity.enums.Role.EMPLOYEE) {
+            throw new DisabledException("Your account is put on hold. Please contact Admin.");
+        }
+
         return new UserPrincipal(user);
     }
 }

@@ -86,4 +86,10 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
             Role role,
             OperatorStatus operatorStatus
     );
+
+    List<User> findByWarehouseIdAndRoleAndStatus(
+            String warehouseId,
+            Role role,
+            UserStatus status
+    );
 }

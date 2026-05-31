@@ -11,6 +11,7 @@ import com.infotact.warehouse.entity.enums.TaskType;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
 import com.infotact.warehouse.entity.enums.Role;
 import com.infotact.warehouse.event.TaskAssignedEvent;
+import com.infotact.warehouse.event.TaskCreatedEvent;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.TaskRepository;
 import com.infotact.warehouse.repository.UserRepository;
@@ -87,6 +88,7 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         log.info("[TaskEngine] Task {} ({}/{}) created in WAITING state. Queue depth: {}",
                 saved.getId(), saved.getType(), saved.getPriority(),
                 taskRepository.countWaitingByWarehouse(warehouseId));
+        eventPublisher.publishEvent(new TaskCreatedEvent(this, saved));
         return saved;
     }
 

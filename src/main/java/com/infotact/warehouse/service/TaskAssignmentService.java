@@ -122,4 +122,24 @@ public interface TaskAssignmentService {
      * @return An Optional wrapper containing the active task details if found, empty otherwise.
      */
     Optional<Task> getCurrentTaskForOperator(String operatorId);
+
+    /**
+     * Returns all pending tasks matching the operator's specialty and warehouse.
+     */
+    List<Task> getPendingTasksForOperator(String operatorId, String warehouseId);
+
+    /**
+     * Operator manually claims/picks a task from their pending queue.
+     */
+    Task claimTask(String taskId, String operatorId);
+
+    /**
+     * Operator acknowledges and starts their assigned task.
+     */
+    Task startTask(String taskId, String operatorId);
+
+    /**
+     * Operator puts their active task on hold.
+     */
+    Task holdTask(String taskId, String operatorId);
 }

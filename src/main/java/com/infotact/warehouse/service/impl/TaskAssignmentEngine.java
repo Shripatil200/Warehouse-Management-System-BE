@@ -81,24 +81,10 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      */
     @Transactional
     public Task createAndDispatch(Task task, String warehouseId) {
-        // Find the first AVAILABLE operator in this warehouse
-        Optional<User> availableOperator = userRepository
-                .findFirstByWarehouseIdAndRoleAndOperatorStatus(warehouseId, Role.OPERATOR, OperatorStatus.AVAILABLE);
-
-        if (availableOperator.isPresent()) {
-            User operator = availableOperator.get();
-            assignTaskToOperator(task, operator);
-            Task saved = taskRepository.save(task);
-            log.info("[TaskEngine] Task {} ({}/{}) assigned directly to operator {}",
-                    saved.getId(), saved.getType(), saved.getPriority(), operator.getEmail());
-            publishAssignmentEvent(saved, operator);
-            return saved;
-        }
-
-        // All operators are BUSY — park in queue
+        // All tasks start as WAITING and are claimed manually by specialized operators
         task.setStatus(TaskStatus.WAITING);
         Task saved = taskRepository.save(task);
-        log.info("[TaskEngine] Task {} ({}/{}) queued — all operators BUSY. Queue depth: {}",
+        log.info("[TaskEngine] Task {} ({}/{}) created in WAITING state. Queue depth: {}",
                 saved.getId(), saved.getType(), saved.getPriority(),
                 taskRepository.countWaitingByWarehouse(warehouseId));
         return saved;
@@ -174,9 +160,6 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         // ── d. Free the operator ─────────────────────────────────────────────
         operator.setOperatorStatus(OperatorStatus.AVAILABLE);
         userRepository.save(operator);
-
-        // ── e. Pull next highest-priority waiting task ───────────────────────
-        assignNextTaskToOperator(operator);
     }
 
     /**
@@ -203,7 +186,6 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         if (previousOperator != null) {
             previousOperator.setOperatorStatus(OperatorStatus.AVAILABLE);
             userRepository.save(previousOperator);
-            assignNextTaskToOperator(previousOperator);
         }
     }
 
@@ -338,5 +320,82 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         if (assigned.isPresent()) return assigned;
         return taskRepository.findByAssignedOperatorIdAndStatus(
                 operatorId, TaskStatus.IN_PROGRESS);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Task> getPendingTasksForOperator(String operatorId, String warehouseId) {
+        User operator = userRepository.findById(operatorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Operator not found: " + operatorId));
+        return taskRepository.findPendingTasksByWarehouseAndSpecialty(warehouseId, operator.getSpecialty());
+    }
+
+    @Override
+    @Transactional
+    public Task claimTask(String taskId, String operatorId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: " + taskId));
+
+        if (task.getStatus() != TaskStatus.WAITING && task.getStatus() != TaskStatus.ON_HOLD) {
+            throw new IllegalStateException("Task is not in a claimable state: " + task.getStatus());
+        }
+
+        User operator = userRepository.findById(operatorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Operator not found: " + operatorId));
+
+        if (operator.getOperatorStatus() == OperatorStatus.BUSY) {
+            throw new IllegalStateException("Operator is currently busy with another task.");
+        }
+
+        // Verify specialty matches task type (if operator specialty is specified)
+        if (operator.getSpecialty() != null && operator.getSpecialty() != task.getType()) {
+            throw new IllegalArgumentException("Task type " + task.getType() + " does not match operator specialty " + operator.getSpecialty());
+        }
+
+        assignTaskToOperator(task, operator);
+        Task saved = taskRepository.save(task);
+        log.info("[TaskEngine] Task {} claimed by operator {}", saved.getId(), operator.getEmail());
+        publishAssignmentEvent(saved, operator);
+        return saved;
+    }
+
+    @Override
+    @Transactional
+    public Task holdTask(String taskId, String operatorId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: " + taskId));
+
+        if (task.getAssignedOperator() == null || !task.getAssignedOperator().getId().equals(operatorId)) {
+            throw new IllegalStateException("Task " + taskId + " is not assigned to operator " + operatorId);
+        }
+
+        if (task.getStatus() != TaskStatus.ASSIGNED && task.getStatus() != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Cannot hold task in status: " + task.getStatus());
+        }
+
+        task.setStatus(TaskStatus.ON_HOLD);
+        task.setAssignedOperator(null);
+        task.setAssignedAt(null);
+        Task saved = taskRepository.save(task);
+
+        User operator = userRepository.findById(operatorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Operator not found: " + operatorId));
+        operator.setOperatorStatus(OperatorStatus.AVAILABLE);
+        userRepository.save(operator);
+
+        log.info("[TaskEngine] Task {} put on hold by operator {}", taskId, operator.getEmail());
+        return saved;
+    }
+
+    @Override
+    @Transactional
+    public Task startTask(String taskId, String operatorId) {
+        Task task = getCurrentTaskForOperator(operatorId)
+                .filter(t -> t.getId().equals(taskId))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Task " + taskId + " is not your current assigned task."));
+
+        task.setStatus(TaskStatus.IN_PROGRESS);
+        return taskRepository.save(task);
     }
 }

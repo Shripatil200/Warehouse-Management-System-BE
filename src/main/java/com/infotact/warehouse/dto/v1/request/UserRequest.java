@@ -40,4 +40,9 @@ public class UserRequest {
             example = "OPERATOR",
             allowableValues = {"ADMIN", "MANAGER", "OPERATOR"})
     private String role;
+
+    @Schema(description = "Specialty task type for the operator (only applicable for OPERATOR role)",
+            example = "PICKING",
+            allowableValues = {"PICKING", "PACKING", "PUTAWAY", "RELOCATION"})
+    private com.infotact.warehouse.entity.enums.TaskType specialty;
 }

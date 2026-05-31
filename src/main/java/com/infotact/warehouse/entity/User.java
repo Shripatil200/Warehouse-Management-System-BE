@@ -9,6 +9,8 @@ import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
 import org.hibernate.annotations.DynamicUpdate;
 
+import com.infotact.warehouse.entity.enums.TaskType;
+
 /**
  * Persistence entity representing a warehouse staff member.
  * <p>
@@ -78,4 +80,12 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "operator_status", nullable = false)
     private OperatorStatus operatorStatus = OperatorStatus.AVAILABLE;
+
+    /**
+     * Operator's specialty task type.
+     * If configured, this operator will only be allowed to perform tasks of this type.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "specialty")
+    private TaskType specialty;
 }

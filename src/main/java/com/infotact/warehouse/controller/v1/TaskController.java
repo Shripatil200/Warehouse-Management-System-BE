@@ -113,18 +113,53 @@ public class TaskController {
             @PathVariable String taskId,
             @AuthenticationPrincipal UserPrincipal principal) {
 
-        // Delegate state transition to the engine's repository directly
-        // (minimal: just flip the status)
-        Task task = engine.getCurrentTaskForOperator(principal.getUserId())
-                .filter(t -> t.getId().equals(taskId))
-                .orElseThrow(() -> new com.infotact.warehouse.exception.ResourceNotFoundException(
-                        "Task " + taskId + " is not your current assigned task."));
-
-        task.setStatus(com.infotact.warehouse.entity.enums.TaskStatus.IN_PROGRESS);
-        // TaskRepository is accessed via engine — for a production system inject
-        // TaskRepository directly here for the simple save.
-        // (Shown as a comment to keep the controller thin; wire as needed.)
+        Task task = engine.startTask(taskId, principal.getUserId());
         log.info("[TaskController] Operator {} started task {}", principal.getUserId(), taskId);
+        return ResponseEntity.ok(TaskNotificationPayload.from(task));
+    }
+
+    /**
+     * Retrieves the operator's pending queue of specialized tasks.
+     */
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('OPERATOR')")
+    public ResponseEntity<List<TaskNotificationPayload>> getPendingQueue(
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        List<TaskNotificationPayload> queue = engine
+                .getPendingTasksForOperator(principal.getUserId(), principal.getWarehouseId())
+                .stream()
+                .map(TaskNotificationPayload::from)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(queue);
+    }
+
+    /**
+     * Operator manually claims/picks a task from their pending queue.
+     */
+    @PostMapping("/{taskId}/claim")
+    @PreAuthorize("hasRole('OPERATOR')")
+    public ResponseEntity<TaskNotificationPayload> claimTask(
+            @PathVariable String taskId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        Task task = engine.claimTask(taskId, principal.getUserId());
+        log.info("[TaskController] Operator {} manually claimed task {}", principal.getUserId(), taskId);
+        return ResponseEntity.ok(TaskNotificationPayload.from(task));
+    }
+
+    /**
+     * Operator puts their active task on hold.
+     */
+    @PostMapping("/{taskId}/hold")
+    @PreAuthorize("hasRole('OPERATOR')")
+    public ResponseEntity<TaskNotificationPayload> holdTask(
+            @PathVariable String taskId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        Task task = engine.holdTask(taskId, principal.getUserId());
+        log.info("[TaskController] Operator {} put task {} on hold", principal.getUserId(), taskId);
         return ResponseEntity.ok(TaskNotificationPayload.from(task));
     }
 

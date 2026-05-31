@@ -194,6 +194,9 @@ public class UserServiceImpl implements UserService {
         newUser.setRole(targetRole);
         newUser.setStatus(UserStatus.PENDING);
         newUser.setWarehouse(warehouse);
+        if (targetRole == Role.OPERATOR) {
+            newUser.setSpecialty(request.getSpecialty());
+        }
 
         String tempPassword = generateTempPassword();
         newUser.setPassword(passwordEncoder.encode(tempPassword));
@@ -230,11 +233,20 @@ public class UserServiceImpl implements UserService {
             if (targetUser.getRole() != newRole) {
                 if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Role modifications require Admin clearance.");
                 targetUser.setRole(newRole);
+                if (newRole != Role.OPERATOR) {
+                    targetUser.setSpecialty(null);
+                }
                 // Force re-login of the target user if they are modifying themselves
                 if (currentUser.getId().equals(targetUser.getId())) {
                     blacklistCurrentToken();
                 }
             }
+        }
+
+        if (targetUser.getRole() == Role.OPERATOR) {
+            targetUser.setSpecialty(request.getSpecialty());
+        } else {
+            targetUser.setSpecialty(null);
         }
 
         userRepository.save(targetUser);

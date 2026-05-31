@@ -164,7 +164,7 @@ public class UserServiceImpl implements UserService {
     /**
      * {@inheritDoc}
      * <p>
-     * <b>RBAC:</b> Managers can create EMPLOYEE or OPERATOR. ADMIN can create any role.
+     * <b>RBAC:</b> Managers can create OPERATOR. ADMIN can create any role.
      * </p>
      */
     @Override
@@ -176,7 +176,7 @@ public class UserServiceImpl implements UserService {
         Role targetRole = Role.valueOf(request.getRole().toUpperCase());
 
         // Hierarchy Check
-        boolean isStaffRole = (targetRole == Role.EMPLOYEE || targetRole == Role.OPERATOR);
+        boolean isStaffRole = (targetRole == Role.OPERATOR);
         if (!isStaffRole && !hasRole(ROLE_ADMIN)) {
             throw new UnauthorizedException("Insufficient Privilege: Only Admins can provision management accounts.");
         }
@@ -199,7 +199,7 @@ public class UserServiceImpl implements UserService {
         newUser.setPassword(passwordEncoder.encode(tempPassword));
 
         userRepository.save(newUser);
-        emailUtils.passwordUpdatedEmail(newUser.getEmail(), "Account Provisioned", tempPassword);
+        emailUtils.sendTeamMemberWelcomeEmail(newUser.getEmail(), newUser.getName(), targetRole.name(), tempPassword);
 
         return "User created successfully.";
     }
@@ -226,10 +226,15 @@ public class UserServiceImpl implements UserService {
         if (request.getContactNumber() != null) targetUser.setContactNumber(request.getContactNumber());
 
         if (request.getRole() != null) {
-            if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Role modifications require Admin clearance.");
-            targetUser.setRole(Role.valueOf(request.getRole().toUpperCase()));
-            // Force re-login — the role claim in the existing token would be stale
-            blacklistCurrentToken();
+            Role newRole = Role.valueOf(request.getRole().toUpperCase());
+            if (targetUser.getRole() != newRole) {
+                if (!hasRole(ROLE_ADMIN)) throw new UnauthorizedException("Role modifications require Admin clearance.");
+                targetUser.setRole(newRole);
+                // Force re-login of the target user if they are modifying themselves
+                if (currentUser.getId().equals(targetUser.getId())) {
+                    blacklistCurrentToken();
+                }
+            }
         }
 
         userRepository.save(targetUser);
@@ -319,10 +324,10 @@ public class UserServiceImpl implements UserService {
 
     private void validateHierarchy(User targetUser) {
         if (hasRole(ROLE_MANAGER) && !hasRole(ROLE_ADMIN)) {
-            // Updated Logic: Managers can manage EMPLOYEE and OPERATOR roles.
+            // Updated Logic: Managers can manage OPERATOR roles.
             // Managers are blocked from modifying ADMIN or other MANAGER accounts.
             if (targetUser.getRole() == Role.ADMIN || targetUser.getRole() == Role.MANAGER) {
-                throw new UnauthorizedException("Hierarchy Violation: Managers can only manage Operators and Employees.");
+                throw new UnauthorizedException("Hierarchy Violation: Managers can only manage Operators.");
             }
         }
     }

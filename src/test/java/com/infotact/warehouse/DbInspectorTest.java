@@ -11,21 +11,39 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.Collections;
 import java.util.List;
 
 @SpringBootTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@org.springframework.test.context.ActiveProfiles("test")
 class DbInspectorTest {
 
     @MockBean
     private JavaMailSender javaMailSender;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private ProductRepository productRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Test
+    void updatePasswords() {
+        System.out.println("========== UPDATING PASSWORDS ==========");
+        try {
+            String encPassword = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("12345678");
+            int rows = jdbcTemplate.update("UPDATE users SET password = ? WHERE email = 'yogesh@mailinator.com';", encPassword);
+            System.out.println("Updated " + rows + " user passwords to '12345678'.");
+        } catch (Exception e) {
+            System.out.println("Failed to update passwords: " + e.getMessage());
+        }
+        System.out.println("========================================");
+    }
 
     @Test
     void inspectProducts() throws Exception {

@@ -45,7 +45,7 @@ public interface UserService {
      * <p>
      * <b>Onboarding Logic:</b>
      * <ul>
-     * <li><b>Hierarchy Check:</b> Managers can only create {@link Role#EMPLOYEE} accounts.</li>
+     * <li><b>Hierarchy Check:</b> Managers can only create {@link Role#OPERATOR} accounts.</li>
      * <li><b>Warehouse Binding:</b> Automatically assigns the user to the requester's warehouse.</li>
      * <li><b>Credentialing:</b> Generates a deterministic temporary password.</li>
      * </ul>

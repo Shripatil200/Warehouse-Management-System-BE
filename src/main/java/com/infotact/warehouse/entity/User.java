@@ -49,7 +49,7 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private String password;
 
-    /** ADMIN, MANAGER, OPERATOR, EMPLOYEE — no SUPPLIER here. */
+    /** ADMIN, MANAGER, OPERATOR — no SUPPLIER here. */
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private Role role;
@@ -70,7 +70,7 @@ public class User extends BaseEntity {
      * Real-time floor availability for operators.
      *
      * <p>Only meaningful when {@code role == OPERATOR}.  Other roles (ADMIN,
-     * MANAGER, EMPLOYEE) are ignored by the assignment engine.
+     * MANAGER) are ignored by the assignment engine.
      *
      * <p>Default: {@link OperatorStatus#AVAILABLE} — existing rows get this value
      * via the Flyway migration V2__add_operator_status_to_users.sql (see below).

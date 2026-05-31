@@ -36,7 +36,7 @@ public class UserUpdate {
     @Schema(
             description = "Updated system role. Restricted to ADMIN usage.",
             example = "MANAGER",
-            allowableValues = {"ADMIN", "MANAGER", "EMPLOYEE"}
+            allowableValues = {"ADMIN", "MANAGER", "OPERATOR"}
     )
     private String role;
 

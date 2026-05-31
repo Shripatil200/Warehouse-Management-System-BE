@@ -36,8 +36,8 @@ public class UserRequest {
             requiredMode = Schema.RequiredMode.REQUIRED)
     private String contactNumber;
 
-    @Schema(description = "System role for the user. Defaults to 'EMPLOYEE' if not specified.",
+    @Schema(description = "System role for the user. Defaults to 'OPERATOR' if not specified.",
             example = "OPERATOR",
-            allowableValues = {"ADMIN", "MANAGER", "OPERATOR", "EMPLOYEE"})
+            allowableValues = {"ADMIN", "MANAGER", "OPERATOR"})
     private String role;
 }

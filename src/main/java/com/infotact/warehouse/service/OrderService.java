@@ -76,6 +76,15 @@ public interface OrderService {
                        String scannedSku, String scannedBinCode, int quantity);
 
     /**
+     * Records that an order has reached a shipping staging bin location by verifying the bin
+     * code and logging a STAGING barcode audit.
+     *
+     * @param orderId        The UUID of the order.
+     * @param scannedBinCode The scanned bin code (must belong to a SHIPPING zone).
+     */
+    void recordShippingScan(String orderId, String scannedBinCode);
+
+    /**
      * Transitions an order through its operational lifecycle and triggers associated inventory actions.
      * <p>
      * <b>State Machine & Inventory Integration:</b>

@@ -55,6 +55,10 @@ public class OrderResponse implements Serializable {
             example = "Pune Main Warehouse")
     private String warehouseName;
 
+    @Schema(description = "The current physical location of the order (e.g. shipping bin code)",
+            example = "SHIP-ZONE-01")
+    private String currentLocation;
+
     @Schema(description = "List of specific products and picking directions for the order")
     private List<OrderItemDetail> items;
 

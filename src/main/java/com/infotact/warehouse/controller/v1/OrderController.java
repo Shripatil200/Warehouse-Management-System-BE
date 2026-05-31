@@ -144,10 +144,20 @@ public class OrderController {
      */
     @Operation(summary = "Update order status", description = "Standard status transitions (SHIPPED, CANCELLED).")
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<OrderResponse> updateStatus(
             @Parameter(description = "Order UUID") @PathVariable String id,
             @Parameter(description = "Target status") @RequestParam OrderStatus status) {
         return ResponseEntity.ok(orderService.updateOrderStatus(id, status));
+    }
+
+    @Operation(summary = "Record shipping zone scan", description = "Verifies shipping bin and logs staging audit.")
+    @PostMapping("/{id}/shipping-scan")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<Void> recordShippingScan(
+            @Parameter(description = "Order UUID") @PathVariable String id,
+            @Parameter(description = "Scanned shipping bin code") @RequestParam String scannedBinCode) {
+        orderService.recordShippingScan(id, scannedBinCode);
+        return ResponseEntity.ok().build();
     }
 }

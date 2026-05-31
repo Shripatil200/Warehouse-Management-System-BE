@@ -64,6 +64,7 @@ public class ExpiryProcessor {
         InventoryTransaction tx = new InventoryTransaction();
 
         tx.setInventoryItem(item);
+        tx.setWarehouse(item.getWarehouse());
         tx.setType(TransactionType.ADJUSTMENT);
         tx.setQuantityChange((long) -item.getQuantity());
         tx.setUnitPrice(item.getPurchasePrice());

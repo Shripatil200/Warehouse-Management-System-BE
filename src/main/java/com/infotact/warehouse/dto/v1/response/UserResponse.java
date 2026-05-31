@@ -52,7 +52,7 @@ public class UserResponse implements Serializable {
     private UserStatus status;
 
     @Schema(description = "System-level permissions role",
-            example = "MANAGER", allowableValues = {"ADMIN", "MANAGER", "EMPLOYEE"})
+            example = "MANAGER", allowableValues = {"ADMIN", "MANAGER", "OPERATOR"})
     private Role role;
 
     /**

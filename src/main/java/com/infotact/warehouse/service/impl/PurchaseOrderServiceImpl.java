@@ -33,6 +33,14 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final UserService                userService;
     private final TaskAssignmentService      taskEngine;
 
+    private String getAuthenticatedWarehouseId() {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.infotact.warehouse.config.JWT.UserPrincipal principal) {
+            return principal.getWarehouseId();
+        }
+        return userService.getAuthenticatedUser().getWarehouse().getId();
+    }
+
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
@@ -78,8 +86,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'OPERATOR')")
     @Cacheable(value = "purchaseOrders", key = "#id")
     public PurchaseOrderResponse getPurchaseOrder(String id) {
-        User manager = userService.getAuthenticatedUser();
-        PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, manager.getWarehouse().getId())
+        String warehouseId = getAuthenticatedWarehouseId();
+        PurchaseOrder po = poRepository.findByIdAndWarehouseId(id, warehouseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Purchase Order not found or access denied."));
         return mapToResponse(po);
     }
@@ -89,8 +97,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'OPERATOR')")
     @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
     public List<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr) {
-        User manager       = userService.getAuthenticatedUser();
-        String warehouseId = manager.getWarehouse().getId();
+        String warehouseId = getAuthenticatedWarehouseId();
 
         List<PurchaseOrder> pos;
         if (statusStr != null && !statusStr.isBlank()) {

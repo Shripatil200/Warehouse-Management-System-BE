@@ -36,7 +36,7 @@ public class UserUpdate {
     @Schema(
             description = "Updated system role. Restricted to ADMIN usage.",
             example = "MANAGER",
-            allowableValues = {"ADMIN", "MANAGER", "EMPLOYEE"}
+            allowableValues = {"ADMIN", "MANAGER", "OPERATOR"}
     )
     private String role;
 
@@ -49,4 +49,9 @@ public class UserUpdate {
             example = "b2c3d4e5-f6a7-8901-bcde-f01234567891"
     )
     private String warehouseId;
+
+    @Schema(description = "Updated specialty task type for the operator",
+            example = "PUTAWAY",
+            allowableValues = {"PICKING", "PACKING", "PUTAWAY", "RELOCATION"})
+    private com.infotact.warehouse.entity.enums.TaskType specialty;
 }

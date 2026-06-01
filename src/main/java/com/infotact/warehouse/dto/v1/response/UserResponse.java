@@ -52,8 +52,12 @@ public class UserResponse implements Serializable {
     private UserStatus status;
 
     @Schema(description = "System-level permissions role",
-            example = "MANAGER", allowableValues = {"ADMIN", "MANAGER", "EMPLOYEE"})
+            example = "MANAGER", allowableValues = {"ADMIN", "MANAGER", "OPERATOR"})
     private Role role;
+
+    @Schema(description = "Specialty task type for the operator",
+            example = "PICKING", allowableValues = {"PICKING", "PACKING", "PUTAWAY", "RELOCATION"})
+    private com.infotact.warehouse.entity.enums.TaskType specialty;
 
     /**
      * Convenience constructor for mapping the User JPA Entity to this DTO.
@@ -66,5 +70,6 @@ public class UserResponse implements Serializable {
         this.contactNumber = user.getContactNumber();
         this.status = user.getStatus();
         this.role = user.getRole();
+        this.specialty = user.getSpecialty();
     }
 }

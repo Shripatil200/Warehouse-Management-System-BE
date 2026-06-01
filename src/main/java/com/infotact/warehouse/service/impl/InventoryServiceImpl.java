@@ -61,7 +61,7 @@ public class InventoryServiceImpl implements InventoryService {
                 BinType.BULK_STORAGE,
                 BinStatus.AVAILABLE,
                 warehouseId,
-                ZoneType.RECEIVING
+                ZoneType.BULK
         );
 
         if (bins.isEmpty())
@@ -384,6 +384,7 @@ public class InventoryServiceImpl implements InventoryService {
                     InventoryItem i = new InventoryItem();
                     i.setProduct(product);
                     i.setStorageBin(bin);
+                    i.setWarehouse(bin.getWarehouse());
                     i.setBatchNumber(batch);
                     i.setExpiryDate(expiry);
                     i.setPurchasePrice(cost);
@@ -431,6 +432,7 @@ public class InventoryServiceImpl implements InventoryService {
     private void logTransaction(InventoryItem item, TransactionType type, Long change, String reason) {
         InventoryTransaction tx = new InventoryTransaction();
         tx.setInventoryItem(item);
+        tx.setWarehouse(item.getWarehouse());
         tx.setType(type);
         tx.setQuantityChange(change);
         tx.setUnitPrice(item.getPurchasePrice());

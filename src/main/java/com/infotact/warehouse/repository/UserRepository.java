@@ -61,19 +61,19 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
     @Query("SELECT u.status, COUNT(u) FROM User u WHERE u.warehouse.id = :warehouseId GROUP BY u.status")
     List<Object[]> countUsersByStatus(@Param("warehouseId") String warehouseId);
 
-    @Query("SELECT COUNT(DISTINCT u.warehouse.id) FROM User u WHERE u.email = :email AND u.warehouse IS NOT NULL")
     /**
      * Finds the first AVAILABLE operator in the given warehouse.
      *
      * <p>Spring Data JPA derives the query automatically from the method name:
-     * {@code WHERE warehouse_id = ? AND operator_status = ?}.
+     * {@code WHERE warehouse_id = ? AND role = ? AND operator_status = ?}.
      *
      * <p>The "first" guarantees we always get at most one result even if several
      * operators are AVAILABLE — the engine will assign more tasks as completions
      * trickle in.  No explicit LIMIT needed; Spring Data handles it.
      */
-    Optional<User> findFirstByWarehouseIdAndOperatorStatus(
+    Optional<User> findFirstByWarehouseIdAndRoleAndOperatorStatus(
             String warehouseId,
+            Role role,
             OperatorStatus operatorStatus
     );
 
@@ -81,8 +81,15 @@ public interface UserRepository extends JpaRepository<User, String>, JpaSpecific
      * Returns all operators with AVAILABLE status in a warehouse.
      * Used by the manager dashboard to show operator capacity.
      */
-    List<User> findByWarehouseIdAndOperatorStatus(
+    List<User> findByWarehouseIdAndRoleAndOperatorStatus(
             String warehouseId,
+            Role role,
             OperatorStatus operatorStatus
+    );
+
+    List<User> findByWarehouseIdAndRoleAndStatus(
+            String warehouseId,
+            Role role,
+            UserStatus status
     );
 }

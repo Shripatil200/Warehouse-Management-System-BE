@@ -52,4 +52,12 @@ public interface PurchaseOrderService {
      * @return A list of matching orders belonging to the authenticated warehouse.
      */
     List<PurchaseOrderResponse> getAllPurchaseOrders(String status);
+
+    /**
+     * Marks a purchase order as arrived at the dock, updating its status to SHIPPED
+     * and spawning a PUTAWAY task for the floor operators.
+     *
+     * @param id The internal UUID of the purchase order.
+     */
+    void markAsArrived(String id);
 }

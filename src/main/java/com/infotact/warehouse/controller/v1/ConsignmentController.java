@@ -30,7 +30,7 @@ import java.util.List;
  * <p><b>Role access summary:</b>
  * <ul>
  *   <li>MANAGER — full access (create, approve, reject, settle, mark-paid)</li>
- *   <li>OPERATOR / EMPLOYEE — read-only (list and get)</li>
+ *   <li>OPERATOR — read-only (list and get)</li>
  * </ul>
  */
 @RestController
@@ -62,7 +62,7 @@ public class ConsignmentController {
      * Paginated: use ?page=0&size=20&sort=createdAt,desc
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR')")
     @Operation(summary = "List consignment agreements (paginated)")
     public ResponseEntity<Page<ConsignmentAgreementResponse>> listAgreements(
             @RequestParam(required = false) ConsignmentStatus status,
@@ -74,7 +74,7 @@ public class ConsignmentController {
      * Get a single consignment agreement by ID.
      */
     @GetMapping("/{agreementId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','OPERATOR')")
     @Operation(summary = "Get a consignment agreement by ID")
     public ResponseEntity<ConsignmentAgreementResponse> getAgreement(
             @PathVariable String agreementId) {

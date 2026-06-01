@@ -28,6 +28,7 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
     private static final String PREFIX = "jwt:blacklist:";
 
     private final StringRedisTemplate stringRedisTemplate;
+    private final java.util.Map<String, Long> localBlacklist = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void blacklist(String token, long expiryMs) {
@@ -37,13 +38,41 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
             log.debug("Token already expired; skipping blacklist.");
             return;
         }
-        String key = PREFIX + token;
-        stringRedisTemplate.opsForValue().set(key, "1", Duration.ofMillis(remainingMs));
-        log.info("Token blacklisted for {}ms", remainingMs);
+        try {
+            String key = PREFIX + token;
+            stringRedisTemplate.opsForValue().set(key, "1", Duration.ofMillis(remainingMs));
+            log.info("Token blacklisted in Redis for {}ms", remainingMs);
+            return;
+        } catch (Exception e) {
+            log.warn("Redis is unavailable for blacklisting, falling back to in-memory storage: {}", e.getMessage());
+        }
+
+        localBlacklist.put(token, expiryMs);
+        log.info("Token blacklisted in-memory for {}ms", remainingMs);
+        cleanExpiredLocalTokens();
     }
 
     @Override
     public boolean isBlacklisted(String token) {
-        return Boolean.TRUE.equals(stringRedisTemplate.hasKey(PREFIX + token));
+        try {
+            return Boolean.TRUE.equals(stringRedisTemplate.hasKey(PREFIX + token));
+        } catch (Exception e) {
+            log.warn("Redis is unavailable for blacklist check, falling back to in-memory check: {}", e.getMessage());
+        }
+
+        Long expiry = localBlacklist.get(token);
+        if (expiry == null) {
+            return false;
+        }
+        if (expiry < System.currentTimeMillis()) {
+            localBlacklist.remove(token);
+            return false;
+        }
+        return true;
+    }
+
+    private void cleanExpiredLocalTokens() {
+        long now = System.currentTimeMillis();
+        localBlacklist.entrySet().removeIf(entry -> entry.getValue() < now);
     }
 }

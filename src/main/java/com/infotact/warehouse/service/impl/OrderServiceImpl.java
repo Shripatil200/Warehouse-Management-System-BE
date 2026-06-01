@@ -5,12 +5,15 @@ import com.infotact.warehouse.dto.v1.response.OrderResponse;
 import com.infotact.warehouse.entity.*;
 import com.infotact.warehouse.entity.enums.AuditAction;
 import com.infotact.warehouse.entity.enums.OrderStatus;
+import com.infotact.warehouse.entity.enums.ZoneType;
 import com.infotact.warehouse.exception.IllegalOperationException;
 import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.exception.UnauthorizedException;
 import com.infotact.warehouse.repository.OrderRepository;
 import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.repository.UserRepository;
+import com.infotact.warehouse.repository.BarcodeAuditRepository;
+import com.infotact.warehouse.repository.BinRepository;
 import com.infotact.warehouse.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +30,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import com.infotact.warehouse.entity.enums.AuditStatus;
 
 /**
  * Industry-Grade Order Fulfillment Service.
@@ -52,6 +57,8 @@ public class OrderServiceImpl implements OrderService {
     private final BarcodeAuditService auditService;
     private final ConsignmentService consignmentService;
     private final TaskAssignmentService taskEngine; // Programmed using the interface type
+    private final BarcodeAuditRepository auditRepository;
+    private final BinRepository binRepository;
 
     private User getAuthenticatedUser() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -191,8 +198,8 @@ public class OrderServiceImpl implements OrderService {
         });
 
         if (allPicked) {
-            order.setStatus(OrderStatus.PACKED);
-            log.info("Order {} fully picked — status advanced to PACKED.", order.getOrderNumber());
+            order.setStatus(OrderStatus.PICKED);
+            log.info("Order {} fully picked — status advanced to PICKED.", order.getOrderNumber());
         } else {
             order.setStatus(OrderStatus.PICKING);
             log.info("Order {} partially picked — status set to PICKING.", order.getOrderNumber());
@@ -212,7 +219,12 @@ public class OrderServiceImpl implements OrderService {
 
         switch (nextStatus) {
             case PICKING -> validateTransition(order.getStatus(), OrderStatus.PENDING, nextStatus);
-            case PACKED -> throw new IllegalOperationException("PACKED status requires scanning via /verify-pack endpoint.");
+            case PICKED -> {
+                if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.PICKING) {
+                    throw new IllegalOperationException("State Error: Order must be PENDING or PICKING before moving to PICKED. Current status: " + order.getStatus());
+                }
+            }
+            case PACKED -> validateTransition(order.getStatus(), OrderStatus.PICKED, nextStatus);
             case SHIPPED -> validateTransition(order.getStatus(), OrderStatus.PACKED, nextStatus);
             case CANCELLED -> releaseInventory(order);
             default -> throw new IllegalOperationException("Transition not supported via manual update.");
@@ -259,6 +271,27 @@ public class OrderServiceImpl implements OrderService {
         return orders.map(this::mapToResponse);
     }
 
+    @Override
+    @Transactional
+    public void recordShippingScan(String orderId, String scannedBinCode) {
+        User operator = getAuthenticatedUser();
+        String warehouseId = operator.getWarehouse().getId();
+
+        SellingOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+
+        StorageBin bin = binRepository.findByBinCodeAndActiveTrueAndWarehouseId(scannedBinCode.trim(), warehouseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bin code " + scannedBinCode + " not found or inactive."));
+
+        if (bin.getAisle().getZone().getZoneType() != ZoneType.SHIPPING) {
+            auditService.logFailure(operator.getId(), bin.getId(), orderId, AuditAction.STAGING, scannedBinCode, "Target location is not in the SHIPPING zone.");
+            throw new IllegalOperationException("Target location must be in the SHIPPING zone.");
+        }
+
+        auditService.logSuccess(operator.getId(), bin.getId(), orderId, AuditAction.STAGING, scannedBinCode);
+        log.info("Order {} successfully staged in shipping bin {} by operator {}.", order.getOrderNumber(), scannedBinCode, operator.getEmail());
+    }
+
     private OrderResponse mapToResponse(SellingOrder entity) {
         List<OrderResponse.OrderItemDetail> itemDetails = entity.getItems().stream()
                 .map(item -> {
@@ -285,6 +318,23 @@ public class OrderServiceImpl implements OrderService {
                 })
                 .toList();
 
+        String location;
+        Optional<BarcodeAudit> latestStaging = auditRepository
+                .findFirstByOrderIdAndActionTypeAndStatusOrderByTimestampDesc(
+                        entity.getId(), AuditAction.STAGING, AuditStatus.SUCCESS);
+        if (latestStaging.isPresent()) {
+            location = latestStaging.get().getScannedValue();
+        } else {
+            location = switch (entity.getStatus()) {
+                case PENDING, PICKING -> "In Picking Bins";
+                case PICKED -> "Picked, Awaiting Packing";
+                case PACKED -> "Packed, Awaiting Staging";
+                case SHIPPED -> "SHIPPED";
+                case CANCELLED -> "CANCELLED";
+                default -> "N/A";
+            };
+        }
+
         return OrderResponse.builder()
                 .id(entity.getId())
                 .orderNumber(entity.getOrderNumber())
@@ -294,6 +344,7 @@ public class OrderServiceImpl implements OrderService {
                         .map(OrderResponse.OrderItemDetail::getLineTotal)
                         .reduce(BigDecimal.ZERO, BigDecimal::add))
                 .warehouseName(entity.getWarehouse().getName())
+                .currentLocation(location)
                 .items(itemDetails)
                 .build();
     }

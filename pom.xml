@@ -192,6 +192,17 @@
 							<artifactId>lombok</artifactId>
 						</exclude>
 					</excludes>
+					<systemPropertyVariables>
+						<DB_URL>${DB_URL}</DB_URL>
+						<DB_USERNAME>${DB_USERNAME}</DB_USERNAME>
+						<DB_PASSWORD>${DB_PASSWORD}</DB_PASSWORD>
+						<JWT_SECRET_KEY>${JWT_SECRET_KEY}</JWT_SECRET_KEY>
+						<APP_FRONTEND_URL>${APP_FRONTEND_URL}</APP_FRONTEND_URL>
+						<APP_CORS_ALLOWED_ORIGINS>${APP_CORS_ALLOWED_ORIGINS}</APP_CORS_ALLOWED_ORIGINS>
+						<SMTP_USER>${SMTP_USER}</SMTP_USER>
+						<SMTP_PASS>${SMTP_PASS}</SMTP_PASS>
+						<SMS_API_KEY>${SMS_API_KEY}</SMS_API_KEY>
+					</systemPropertyVariables>
 				</configuration>
 			</plugin>
 		</plugins>

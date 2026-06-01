@@ -92,4 +92,28 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     @Query("SELECT COUNT(t) FROM Task t WHERE t.warehouse.id = :warehouseId AND t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING")
     long countWaitingByWarehouse(@Param("warehouseId") String warehouseId);
 
+    /**
+     * Retrieves all pending tasks (status is WAITING or ON_HOLD) for a warehouse,
+     * filtered by operator specialty task type if specified.
+     */
+    @Query("""
+       SELECT t FROM Task t \
+       WHERE t.warehouse.id = :warehouseId \
+         AND (t.status = com.infotact.warehouse.entity.enums.TaskStatus.WAITING \
+              OR t.status = com.infotact.warehouse.entity.enums.TaskStatus.ON_HOLD) \
+         AND (:specialty IS NULL OR t.type = :specialty) \
+       ORDER BY \
+         CASE t.priority \
+           WHEN com.infotact.warehouse.entity.enums.TaskPriority.URGENT   THEN 300 \
+           WHEN com.infotact.warehouse.entity.enums.TaskPriority.HIGH     THEN 200 \
+           WHEN com.infotact.warehouse.entity.enums.TaskPriority.STANDARD THEN 100 \
+           ELSE 0 \
+         END DESC, \
+         t.createdAt ASC\
+       """)
+    List<Task> findPendingTasksByWarehouseAndSpecialty(
+            @Param("warehouseId") String warehouseId,
+            @Param("specialty") com.infotact.warehouse.entity.enums.TaskType specialty);
+
+    long countByAssignedOperatorIdAndStatus(String operatorId, TaskStatus status);
 }

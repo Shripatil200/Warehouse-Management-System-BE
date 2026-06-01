@@ -9,6 +9,8 @@ import com.infotact.warehouse.exception.ResourceNotFoundException;
 import com.infotact.warehouse.repository.OrderRepository;
 import com.infotact.warehouse.repository.ProductRepository;
 import com.infotact.warehouse.repository.UserRepository;
+import com.infotact.warehouse.repository.BarcodeAuditRepository;
+import com.infotact.warehouse.repository.BinRepository;
 import com.infotact.warehouse.service.impl.OrderServiceImpl;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,7 +43,9 @@ class OrderServiceTest {
     @Mock private LayoutService layoutService;
     @Mock private BarcodeAuditService auditService;
     @Mock private ConsignmentService consignmentService;
-    @Mock private TaskAssignmentService taskEngine; // Safely wired by @InjectMocks
+    @Mock private TaskAssignmentService taskEngine;
+    @Mock private BarcodeAuditRepository auditRepository;
+    @Mock private BinRepository binRepository;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -176,7 +180,7 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.updateOrderStatus(ORDER_ID, OrderStatus.PACKED))
                 .isInstanceOf(IllegalOperationException.class)
-                .hasMessageContaining("verify-pack");
+                .hasMessageContaining("must be PICKED");
     }
 
     @Test
@@ -305,8 +309,8 @@ class OrderServiceTest {
 
         verify(inventoryService).commitPickWithVerification("inv-001", "A-01-001", "SKU-001", 2);
         verify(auditService).logSuccess(any(), any(), any(), any(), any());
-        // Verify the order was saved with PACKED status
-        verify(orderRepository).save(argThat(o -> o.getStatus() == OrderStatus.PACKED));
+        // Verify the order was saved with PICKED status
+        verify(orderRepository).save(argThat(o -> o.getStatus() == OrderStatus.PICKED));
     }
 
     @Test

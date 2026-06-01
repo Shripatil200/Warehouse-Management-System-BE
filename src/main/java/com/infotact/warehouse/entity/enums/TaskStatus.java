@@ -47,6 +47,12 @@ public enum TaskStatus {
     COMPLETED,
 
     /**
+     * Task has been put on hold by the operator.
+     * It resides in the queue until it is claimed again by an operator.
+     */
+    ON_HOLD,
+
+    /**
      * Task was voided — typically by a MANAGER or ADMIN — before execution.
      * The assigned operator (if any) is freed back to AVAILABLE.
      */

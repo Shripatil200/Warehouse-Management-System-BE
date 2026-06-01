@@ -149,6 +149,73 @@ public class EmailUtils {
     }
 
     /**
+     * Dispatches a beautifully designed HTML onboarding email to new team members.
+     */
+    @Async
+    public void sendTeamMemberWelcomeEmail(String to, String userName, String role, String tempPassword) {
+        log.info("Sending onboarding email to team member: {}", to);
+        try {
+            MimeMessage message = emailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            String loginUrl = frontendUrl + "/login";
+
+            String htmlContent =
+                    "<div style='font-family: \"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e1e4e8; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'>" +
+                            // Header Banner
+                            "<div style='background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center; color: white;'>" +
+                            "<h1 style='margin: 0; font-size: 24px; letter-spacing: 1px;'>Welcome to the Team</h1>" +
+                            "</div>" +
+
+                            // Body Content
+                            "<div style='padding: 40px; background-color: white; line-height: 1.6;'>" +
+                            "<h2 style='color: #333;'>Hello, " + userName + "!</h2>" +
+                            "<p style='color: #555; font-size: 16px;'>Your staff account on the <strong>InfoTact Warehouse Management System</strong> has been provisioned and is ready for use.</p>" +
+
+                            // Credentials Card
+                            "<div style='background-color: #f4f7f9; border-radius: 8px; padding: 25px; margin: 25px 0; border: 1px dashed #3b82f6;'>" +
+                            "<h3 style='margin-top: 0; color: #1d4ed8; font-size: 18px;'>Access Credentials</h3>" +
+                            "<p style='margin: 10px 0;'><strong>Login Email:</strong> <br><span style='color: #333; font-family: monospace; font-size: 14px;'>" + to + "</span></p>" +
+                            "<p style='margin: 10px 0;'><strong>Role Assigned:</strong> <br><span style='color: #333; font-weight: bold;'>" + role + "</span></p>" +
+                            "<p style='margin: 10px 0;'><strong>Temporary Password:</strong> <br><span style='background-color: #e0e7ff; color: #4338ca; padding: 6px 12px; border-radius: 4px; font-family: monospace; font-size: 16px; font-weight: bold; letter-spacing: 1px; display: inline-block; margin-top: 5px;'>" + tempPassword + "</span></p>" +
+                            "</div>" +
+
+                            // Instructions / Security Info
+                            "<div style='margin-bottom: 30px;'>" +
+                            "<p style='color: #666;'>For security reasons, we strongly recommend that you update this temporary password immediately after your first login:</p>" +
+                            "<ul style='color: #666; padding-left: 20px;'>" +
+                            "<li>Click the <strong>Access Your Portal</strong> button below.</li>" +
+                            "<li>Enter your email and the temporary password provided above.</li>" +
+                            "<li>Go to your profile settings to configure a new, secure password.</li>" +
+                            "</ul>" +
+                            "</div>" +
+
+                            // CTA Button
+                            "<div style='text-align: center; margin-top: 40px;'>" +
+                            "<a href='" + loginUrl + "' style='background-color: #10b981; color: white; padding: 15px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); display: inline-block;'>Access Your Portal</a>" +
+                            "</div>" +
+                            "</div>" +
+
+                            // Footer
+                            "<div style='background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #eee;'>" +
+                            "<p style='font-size: 12px; color: #999; margin: 0;'>This is a security notification sent to registered employees.</p>" +
+                            "<p style='font-size: 12px; color: #999; margin: 5px 0 0 0;'>© 2026 InfoTact Supply Chain Solutions</p>" +
+                            "</div>" +
+                            "</div>";
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject("Your InfoTact WMS Account: Credentials & Setup");
+            helper.setText(htmlContent, true);
+
+            emailSender.send(message);
+            log.info("Onboarding email successfully sent to team member: {}", to);
+        } catch (MessagingException e) {
+            log.error("Failed to send onboarding email to team member {}: {}", to, e.getMessage());
+        }
+    }
+
+    /**
      * Security notification sent after a successful password change.
      */
     @Async

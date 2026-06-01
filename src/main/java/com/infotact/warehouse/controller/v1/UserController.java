@@ -61,7 +61,7 @@ public class UserController {
     /**
      * Registers a new staff member.
      * <p>
-     * Hierarchy Enforcement: Managers can only create 'EMPLOYEE' roles.
+     * Hierarchy Enforcement: Managers can only create 'OPERATOR' roles.
      * Admins can provision any role. Assignment is locked to the requester's warehouse.
      * </p>
      */
@@ -89,9 +89,9 @@ public class UserController {
     /**
      * Fetches detailed information for a specific user.
      */
-    @Operation(summary = "Get user by ID", description = "Access restricted to warehouse silo. Regular employees can only view their own profile.")
+    @Operation(summary = "Get user by ID", description = "Access restricted to warehouse silo. Regular operators can only view their own profile.")
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<UserResponse> getById(
             @Parameter(description = "UUID of the user", example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable String id) {

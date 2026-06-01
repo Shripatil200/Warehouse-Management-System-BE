@@ -5,5 +5,6 @@ public enum AuditAction {
     RECEIVING,
     PUTAWAY,
     CYCLE_COUNT,
-    STOCK_ADJUSTMENT
+    STOCK_ADJUSTMENT,
+    STAGING
 }

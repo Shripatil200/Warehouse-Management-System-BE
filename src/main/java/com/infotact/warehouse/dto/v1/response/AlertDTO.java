@@ -2,7 +2,9 @@ package com.infotact.warehouse.dto.v1.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -16,6 +18,8 @@ import java.io.Serializable;
  * </p>
  */
 @Data
+@Builder
+@NoArgsConstructor
 @AllArgsConstructor
 @Schema(
         name = "AlertDTO",

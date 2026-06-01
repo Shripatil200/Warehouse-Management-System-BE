@@ -114,4 +114,6 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     List<Task> findPendingTasksByWarehouseAndSpecialty(
             @Param("warehouseId") String warehouseId,
             @Param("specialty") com.infotact.warehouse.entity.enums.TaskType specialty);
+
+    long countByAssignedOperatorIdAndStatus(String operatorId, TaskStatus status);
 }

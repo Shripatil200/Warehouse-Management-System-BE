@@ -153,4 +153,19 @@ public class Task extends WarehouseScopedEntity {
      * Timestamp when the operator called completeTask() on this record.
      */
     private LocalDateTime completedAt;
+
+    public TaskStatus getStatus() {
+        if (this.status == TaskStatus.WAITING && this.assignedOperator != null) {
+            return TaskStatus.ON_HOLD;
+        }
+        return this.status;
+    }
+
+    public void setStatus(TaskStatus status) {
+        if (status == TaskStatus.ON_HOLD) {
+            this.status = TaskStatus.WAITING;
+        } else {
+            this.status = status;
+        }
+    }
 }

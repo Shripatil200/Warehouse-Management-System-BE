@@ -33,19 +33,6 @@ class DbInspectorTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void updatePasswords() {
-        System.out.println("========== UPDATING PASSWORDS ==========");
-        try {
-            String encPassword = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("12345678");
-            int rows = jdbcTemplate.update("UPDATE users SET password = ? WHERE email = 'yogesh@mailinator.com';", encPassword);
-            System.out.println("Updated " + rows + " user passwords to '12345678'.");
-        } catch (Exception e) {
-            System.out.println("Failed to update passwords: " + e.getMessage());
-        }
-        System.out.println("========================================");
-    }
-
-    @Test
     void inspectProducts() throws Exception {
         System.out.println("========== DB INSPECTION ==========");
         List<Product> products = productRepository.findAll();

@@ -327,9 +327,7 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<Task> getPendingTasksForOperator(String operatorId, String warehouseId) {
-        User operator = userRepository.findById(operatorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Operator not found: " + operatorId));
-        return taskRepository.findPendingTasksByWarehouseAndSpecialty(warehouseId, operator.getSpecialty());
+        return taskRepository.findPendingTasksByWarehouseAndSpecialty(warehouseId, null);
     }
 
     @Override
@@ -347,11 +345,6 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
 
         if (operator.getOperatorStatus() == OperatorStatus.BUSY) {
             throw new IllegalStateException("Operator is currently busy with another task.");
-        }
-
-        // Verify specialty matches task type (if operator specialty is specified)
-        if (operator.getSpecialty() != null && operator.getSpecialty() != task.getType()) {
-            throw new IllegalArgumentException("Task type " + task.getType() + " does not match operator specialty " + operator.getSpecialty());
         }
 
         assignTaskToOperator(task, operator);
@@ -375,8 +368,12 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
             throw new IllegalStateException("Cannot hold task in status: " + task.getStatus());
         }
 
+        long heldCount = taskRepository.countByAssignedOperatorIdAndStatus(operatorId, TaskStatus.WAITING);
+        if (heldCount >= 2) {
+            throw new IllegalStateException("You cannot put more than 2 tasks on hold simultaneously.");
+        }
+
         task.setStatus(TaskStatus.ON_HOLD);
-        task.setAssignedOperator(null);
         task.setAssignedAt(null);
         Task saved = taskRepository.save(task);
 
@@ -385,7 +382,8 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         operator.setOperatorStatus(OperatorStatus.AVAILABLE);
         userRepository.save(operator);
 
-        log.info("[TaskEngine] Task {} put on hold by operator {}", taskId, operator.getEmail());
+        log.info("[TaskEngine] Task {} put on hold by operator {}. Operator held tasks count: {}", 
+                taskId, operator.getEmail(), heldCount + 1);
         return saved;
     }
 

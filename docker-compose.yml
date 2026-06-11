@@ -71,6 +71,17 @@ services:
       # JWT
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
 
+  frontend:
+    build:
+      context: ../frontend/warehouse
+      dockerfile: Dockerfilea`
+    container_name: wms-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+
 volumes:
   postgres_data:
   redis_data:

@@ -144,9 +144,9 @@ public class InventoryReportServiceImpl implements InventoryReportService {
         String warehouseId = warehouseContext.getWarehouseId();
 
         return barcodeAuditRepository.findFilteredAudits(
-                        userId,
-                        status,
                         warehouseId,
+                        status,
+                        userId,
                         pageable
                 )
                 .map(audit -> BarcodeAuditResponse.builder()

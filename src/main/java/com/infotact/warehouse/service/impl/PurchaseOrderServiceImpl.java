@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -95,18 +97,19 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Override
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'OPERATOR')")
-    @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr")
-    public List<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr) {
+    @Cacheable(value = "purchaseOrders", key = "'list-' + #statusStr + '-' + #searchStr + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
+    public Page<PurchaseOrderResponse> getAllPurchaseOrders(String statusStr, String searchStr, Pageable pageable) {
         String warehouseId = getAuthenticatedWarehouseId();
 
-        List<PurchaseOrder> pos;
+        PurchaseOrderStatus status = null;
         if (statusStr != null && !statusStr.isBlank()) {
-            PurchaseOrderStatus status = PurchaseOrderStatus.valueOf(statusStr.toUpperCase());
-            pos = poRepository.findAllByStatusAndWarehouseId(status, warehouseId);
-        } else {
-            pos = poRepository.findAllByWarehouseId(warehouseId);
+            status = PurchaseOrderStatus.valueOf(statusStr.toUpperCase());
         }
-        return pos.stream().map(this::mapToResponse).collect(Collectors.toList());
+
+        String search = (searchStr != null && !searchStr.isBlank()) ? searchStr : null;
+
+        Page<PurchaseOrder> pos = poRepository.findAllByWarehouseAndFilters(warehouseId, status, search, pageable);
+        return pos.map(this::mapToResponse);
     }
 
     private PurchaseOrderResponse mapToResponse(PurchaseOrder po) {

@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -95,10 +97,13 @@ public class PurchaseOrderController {
     })
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     @GetMapping
-    public ResponseEntity<List<PurchaseOrderResponse>> getAllPurchaseOrders(
+    public ResponseEntity<Page<PurchaseOrderResponse>> getAllPurchaseOrders(
             @Parameter(description = "Optional status filter", example = "PLACED")
-            @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(poService.getAllPurchaseOrders(status));
+            @RequestParam(required = false) String status,
+            @Parameter(description = "Optional search query to filter by PO ID, supplier name, or supplier company name", example = "Supplier A")
+            @RequestParam(required = false) String search,
+            Pageable pageable) {
+        return ResponseEntity.ok(poService.getAllPurchaseOrders(status, search, pageable));
     }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")

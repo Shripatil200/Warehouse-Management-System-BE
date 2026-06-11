@@ -162,6 +162,9 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         // ── d. Free the operator ─────────────────────────────────────────────
         operator.setOperatorStatus(OperatorStatus.AVAILABLE);
         userRepository.save(operator);
+
+        // ── e. Auto-assign next task ──────────────────────────────────────────
+        assignNextTaskToOperator(operator);
     }
 
     /**
@@ -188,6 +191,7 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
         if (previousOperator != null) {
             previousOperator.setOperatorStatus(OperatorStatus.AVAILABLE);
             userRepository.save(previousOperator);
+            assignNextTaskToOperator(previousOperator);
         }
     }
 
@@ -270,8 +274,9 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
      */
     private void assignNextTaskToOperator(User operator) {
         String warehouseId = operator.getWarehouse().getId();
+        String specialtyStr = operator.getSpecialty() != null ? operator.getSpecialty().name() : null;
 
-        taskRepository.findTopWaitingTask(warehouseId).ifPresentOrElse(
+        taskRepository.findTopWaitingTask(warehouseId, specialtyStr).ifPresentOrElse(
                 nextTask -> {
                     assignTaskToOperator(nextTask, operator);
                     taskRepository.save(nextTask);
@@ -327,7 +332,9 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<Task> getPendingTasksForOperator(String operatorId, String warehouseId) {
-        return taskRepository.findPendingTasksByWarehouseAndSpecialty(warehouseId, null);
+        User operator = userRepository.findById(operatorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Operator not found: " + operatorId));
+        return taskRepository.findPendingTasksByWarehouseAndSpecialty(warehouseId, operator.getSpecialty());
     }
 
     @Override
@@ -345,6 +352,10 @@ public class TaskAssignmentEngine implements TaskAssignmentService {
 
         if (operator.getOperatorStatus() == OperatorStatus.BUSY) {
             throw new IllegalStateException("Operator is currently busy with another task.");
+        }
+
+        if (operator.getSpecialty() != null && task.getType() != operator.getSpecialty()) {
+            throw new IllegalStateException("You are not authorized to perform tasks of type: " + task.getType());
         }
 
         assignTaskToOperator(task, operator);

@@ -42,8 +42,10 @@ public class TaskCreatedEventListener {
                 warehouseId, Role.OPERATOR, UserStatus.ACTIVE);
 
         for (User operator : operators) {
-            log.debug("[Listener] Sending TASK_CREATED to operator {}", operator.getEmail());
-            sseRegistry.sendToOperator(operator.getId(), "TASK_CREATED", payload);
+            if (operator.getSpecialty() == null || operator.getSpecialty() == task.getType()) {
+                log.debug("[Listener] Sending TASK_CREATED to operator {}", operator.getEmail());
+                sseRegistry.sendToOperator(operator.getId(), "TASK_CREATED", payload);
+            }
         }
     }
 }

@@ -2,6 +2,8 @@ package com.infotact.warehouse.repository;
 
 import com.infotact.warehouse.entity.PurchaseOrder;
 import com.infotact.warehouse.entity.enums.PurchaseOrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -74,4 +76,22 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, St
      * </p>
      */
     List<PurchaseOrder> findAllByWarehouseIdAndStatusIn(String warehouseId, List<PurchaseOrderStatus> statuses);
+
+    /**
+     * Filters and searches purchase orders for a warehouse, with pagination.
+     */
+    @Query("""
+       SELECT po FROM PurchaseOrder po \
+       WHERE po.warehouse.id = :warehouseId \
+         AND (:status IS NULL OR po.status = :status) \
+         AND (:search IS NULL OR \
+              LOWER(CAST(po.id AS string)) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR \
+              LOWER(po.supplier.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR \
+              LOWER(po.supplier.companyName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) \
+       """)
+    Page<PurchaseOrder> findAllByWarehouseAndFilters(
+            @Param("warehouseId") String warehouseId,
+            @Param("status") PurchaseOrderStatus status,
+            @Param("search") String search,
+            Pageable pageable);
 }

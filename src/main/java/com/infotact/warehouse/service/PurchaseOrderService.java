@@ -2,6 +2,8 @@ package com.infotact.warehouse.service;
 
 import com.infotact.warehouse.dto.v1.request.PurchaseOrderRequest;
 import com.infotact.warehouse.dto.v1.response.PurchaseOrderResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
@@ -49,9 +51,11 @@ public interface PurchaseOrderService {
      * or to prepare the receiving dock for 'Shipped' orders.
      * </p>
      * @param status Optional filter (e.g., 'PLACED', 'SHIPPED', 'PARTIALLY_RECEIVED', 'CLOSED').
-     * @return A list of matching orders belonging to the authenticated warehouse.
+     * @param search Optional search query to filter by PO ID, supplier name, or supplier company name.
+     * @param pageable Pagination configuration.
+     * @return A page of matching orders belonging to the authenticated warehouse.
      */
-    List<PurchaseOrderResponse> getAllPurchaseOrders(String status);
+    Page<PurchaseOrderResponse> getAllPurchaseOrders(String status, String search, Pageable pageable);
 
     /**
      * Marks a purchase order as arrived at the dock, updating its status to SHIPPED

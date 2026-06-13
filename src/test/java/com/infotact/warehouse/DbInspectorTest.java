@@ -32,6 +32,27 @@ class DbInspectorTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private com.infotact.warehouse.config.JWT.JwtUtil jwtUtil;
+
+    @Test
+    void printAdminToken() {
+        com.infotact.warehouse.entity.User user = new com.infotact.warehouse.entity.User();
+        user.setId("d5a57429-db40-4043-97a6-2a8c34c2da37");
+        user.setEmail("shri@mailinator.com");
+        user.setPassword("dummy");
+        user.setRole(com.infotact.warehouse.entity.enums.Role.ADMIN);
+        com.infotact.warehouse.entity.Warehouse wh = new com.infotact.warehouse.entity.Warehouse();
+        wh.setId("1644ca61-8bb2-4214-8c4f-fe42079c278c");
+        user.setWarehouse(wh);
+
+        com.infotact.warehouse.config.JWT.UserPrincipal principal = new com.infotact.warehouse.config.JWT.UserPrincipal(user);
+        String token = jwtUtil.generateToken(principal);
+        System.out.println("========== ADMIN JWT TOKEN ==========");
+        System.out.println(token);
+        System.out.println("=====================================");
+    }
+
     @Test
     void inspectProducts() throws Exception {
         System.out.println("========== DB INSPECTION ==========");

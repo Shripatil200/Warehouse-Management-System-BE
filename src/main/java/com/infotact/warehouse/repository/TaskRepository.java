@@ -45,6 +45,7 @@ public interface TaskRepository extends JpaRepository<Task, String> {
         SELECT * FROM tasks
         WHERE warehouse_id = :warehouseId
           AND status = 'WAITING'
+          AND (:specialty IS NULL OR type = :specialty)
         ORDER BY
           CASE priority
             WHEN 'URGENT'   THEN 300
@@ -56,7 +57,9 @@ public interface TaskRepository extends JpaRepository<Task, String> {
         LIMIT 1
         FOR UPDATE SKIP LOCKED
         """, nativeQuery = true)
-    Optional<Task> findTopWaitingTask(@Param("warehouseId") String warehouseId);
+    Optional<Task> findTopWaitingTask(
+            @Param("warehouseId") String warehouseId,
+            @Param("specialty") String specialty);
 
     // ── Operator mobile-app queries ───────────────────────────────────────────
 

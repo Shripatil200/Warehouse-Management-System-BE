@@ -73,8 +73,8 @@ services:
 
   frontend:
     build:
-      context: ../frontend/warehouse
-      dockerfile: Dockerfilea`
+      context: ../Warehouse-Management-System-FE
+      dockerfile: Dockerfile
     container_name: wms-frontend
     restart: always
     ports:
